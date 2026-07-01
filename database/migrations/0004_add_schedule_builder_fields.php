@@ -6,28 +6,26 @@ use App\Core\Migration;
 
 return new class extends Migration
 {
-    public string $version = '202607010001';
-    public string $name = 'add_safety_guards';
+    public string $version = '4';
+    public array $legacyVersions = ['202607020001'];
+    public string $name = 'add_schedule_builder_fields';
 
     public function up(PDO $pdo): void
     {
         $this->addColumnIfMissing(
             $pdo,
-            'telegram_accounts',
-            'last_sent_at',
-            'ALTER TABLE telegram_accounts ADD COLUMN last_sent_at DATETIME NULL AFTER last_connected_at'
+            'schedule_jobs',
+            'schedule_type',
+            "ALTER TABLE schedule_jobs
+             ADD COLUMN schedule_type VARCHAR(40) NOT NULL DEFAULT 'advanced' AFTER cron_expression"
         );
+
         $this->addColumnIfMissing(
             $pdo,
-            'telegram_accounts',
-            'cooldown_until',
-            'ALTER TABLE telegram_accounts ADD COLUMN cooldown_until DATETIME NULL AFTER last_sent_at'
-        );
-        $this->addColumnIfMissing(
-            $pdo,
-            'telegram_accounts',
-            'cooldown_reason',
-            'ALTER TABLE telegram_accounts ADD COLUMN cooldown_reason VARCHAR(190) NULL AFTER cooldown_until'
+            'schedule_jobs',
+            'schedule_config_json',
+            "ALTER TABLE schedule_jobs
+             ADD COLUMN schedule_config_json LONGTEXT NULL AFTER schedule_type"
         );
     }
 

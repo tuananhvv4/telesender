@@ -17,15 +17,17 @@ class MigrationService
     public function migrate(?string $targetVersion = null): array
     {
         $this->ensureTable();
-        $executed = $this->executedVersions();
+        $migrations = $this->loadMigrations();
+        $targetVersion = $this->normalizeTargetVersion($targetVersion, $migrations);
+        $executed = $this->executedVersions($migrations);
         $applied = [];
 
-        foreach ($this->loadMigrations() as $migration) {
+        foreach ($migrations as $migration) {
             if (isset($executed[$migration->version])) {
                 continue;
             }
 
-            if ($targetVersion !== null && strcmp($migration->version, $targetVersion) > 0) {
+            if ($targetVersion !== null && $this->compareVersions($migration->version, $targetVersion) > 0) {
                 continue;
             }
 
@@ -56,8 +58,17 @@ class MigrationService
     public function currentVersion(): ?string
     {
         $this->ensureTable();
-        $row = $this->pdo->query('SELECT version FROM migrations ORDER BY version DESC LIMIT 1')->fetch(PDO::FETCH_ASSOC);
-        return $row['version'] ?? null;
+        $migrations = $this->loadMigrations();
+        $executed = $this->executedVersions($migrations);
+        $currentVersion = null;
+
+        foreach ($migrations as $migration) {
+            if (isset($executed[$migration->version])) {
+                $currentVersion = $migration->version;
+            }
+        }
+
+        return $currentVersion;
     }
 
     private function ensureTable(): void
@@ -71,13 +82,28 @@ class MigrationService
         );
     }
 
-    private function executedVersions(): array
+    /**
+     * @param array<int, Migration> $migrations
+     * @return array<string, bool>
+     */
+    private function executedVersions(array $migrations): array
     {
         $rows = $this->pdo->query('SELECT version FROM migrations')->fetchAll(PDO::FETCH_ASSOC);
         $versions = [];
+        $aliases = $this->versionAliases($migrations);
 
         foreach ($rows as $row) {
-            $versions[$row['version']] = true;
+            $rawVersion = (string) ($row['version'] ?? '');
+
+            if ($rawVersion === '') {
+                continue;
+            }
+
+            $versions[$rawVersion] = true;
+
+            if (isset($aliases[$rawVersion])) {
+                $versions[$aliases[$rawVersion]] = true;
+            }
         }
 
         return $versions;
@@ -114,6 +140,53 @@ class MigrationService
             $migrations[] = $migration;
         }
 
+        usort(
+            $migrations,
+            fn (Migration $left, Migration $right): int => $this->compareVersions($left->version, $right->version)
+        );
+
         return $migrations;
+    }
+
+    /**
+     * @param array<int, Migration> $migrations
+     * @return array<string, string>
+     */
+    private function versionAliases(array $migrations): array
+    {
+        $aliases = [];
+
+        foreach ($migrations as $migration) {
+            $aliases[$migration->version] = $migration->version;
+
+            foreach ($migration->legacyVersions as $legacyVersion) {
+                $aliases[(string) $legacyVersion] = $migration->version;
+            }
+        }
+
+        return $aliases;
+    }
+
+    /**
+     * @param array<int, Migration> $migrations
+     */
+    private function normalizeTargetVersion(?string $targetVersion, array $migrations): ?string
+    {
+        if ($targetVersion === null || $targetVersion === '') {
+            return null;
+        }
+
+        $aliases = $this->versionAliases($migrations);
+
+        return $aliases[$targetVersion] ?? $targetVersion;
+    }
+
+    private function compareVersions(string $left, string $right): int
+    {
+        if (ctype_digit($left) && ctype_digit($right)) {
+            return (int) $left <=> (int) $right;
+        }
+
+        return strcmp($left, $right);
     }
 }

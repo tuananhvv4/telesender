@@ -16,6 +16,8 @@ class ScheduleJob extends Model
         'message_template_id',
         'timezone',
         'cron_expression',
+        'schedule_type',
+        'schedule_config_json',
         'next_run_at',
         'last_run_at',
         'last_error',

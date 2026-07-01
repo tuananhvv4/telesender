@@ -5,7 +5,8 @@ declare(strict_types=1);
 use App\Core\Migration;
 return new class extends Migration
 {
-    public string $version = '202606270001';
+    public string $version = '1';
+    public array $legacyVersions = ['202606270001'];
     public string $name = 'initial_schema';
 
     public function up(PDO $pdo): void
@@ -97,7 +98,9 @@ return new class extends Migration
                 telegram_group_id BIGINT UNSIGNED NOT NULL,
                 message_template_id BIGINT UNSIGNED NOT NULL,
                 timezone VARCHAR(80) NOT NULL,
-                cron_expression VARCHAR(120) NOT NULL,
+                cron_expression TEXT NOT NULL,
+                schedule_type VARCHAR(40) NOT NULL DEFAULT \'advanced\',
+                schedule_config_json LONGTEXT NULL,
                 next_run_at DATETIME NULL,
                 last_run_at DATETIME NULL,
                 last_error TEXT NULL,

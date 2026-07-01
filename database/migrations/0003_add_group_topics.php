@@ -6,7 +6,8 @@ use App\Core\Migration;
 
 return new class extends Migration
 {
-    public string $version = '202607010002';
+    public string $version = '3';
+    public array $legacyVersions = ['202607010002'];
     public string $name = 'add_group_topics';
 
     public function up(PDO $pdo): void

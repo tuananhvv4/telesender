@@ -51,6 +51,7 @@ $router->post('/templates/update', [MessageTemplateController::class, 'update'],
 $router->post('/templates/delete', [MessageTemplateController::class, 'delete'], ['auth']);
 
 $router->get('/schedules', [ScheduleController::class, 'index'], ['auth']);
+$router->get('/schedules/preview', [ScheduleController::class, 'preview'], ['auth']);
 $router->post('/schedules', [ScheduleController::class, 'store'], ['auth']);
 $router->post('/schedules/send-now', [ScheduleController::class, 'sendNow'], ['auth']);
 $router->post('/schedules/update', [ScheduleController::class, 'update'], ['auth']);

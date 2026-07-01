@@ -80,7 +80,7 @@ if (!function_exists('asset')) {
 }
 
 if (!function_exists('e')) {
-    function e(?string $value): string
+    function e(mixed $value): string
     {
         return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
     }

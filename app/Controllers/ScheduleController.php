@@ -7,11 +7,13 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Core\CronExpression;
 use App\Core\Request;
+use App\Core\Response;
 use App\Models\MessageTemplate;
 use App\Models\ScheduleJob;
 use App\Models\TelegramAccount;
 use App\Models\TelegramGroup;
 use App\Services\PresetService;
+use App\Services\ScheduleBuilderService;
 use App\Services\SchedulerService;
 use App\Services\TelegramService;
 use DateTimeImmutable;
@@ -34,8 +36,10 @@ class ScheduleController extends Controller
         $editSchedule = null;
         $editId = (int) $request->query('edit', 0);
         $scheduler = new SchedulerService(app()->db(), new TelegramService(), new CronExpression());
+        $builder = new ScheduleBuilderService(new CronExpression());
         $schedules = $this->schedules->listForUser($userId);
         $scheduleAnalyses = [];
+        $scheduleSummaries = [];
 
         if ($editId > 0) {
             $editSchedule = $this->schedules->findForUser($editId, $userId);
@@ -46,6 +50,7 @@ class ScheduleController extends Controller
                 (string) $schedule['cron_expression'],
                 (string) $schedule['timezone']
             );
+            $scheduleSummaries[(int) $schedule['id']] = $builder->summaryFromSchedule($schedule);
         }
 
         $this->render('schedules/index', [
@@ -58,8 +63,38 @@ class ScheduleController extends Controller
             'defaultTimezone' => config('app.timezone', 'Asia/Ho_Chi_Minh'),
             'schedulePresets' => (new PresetService(app()->db()))->schedulePresets(),
             'scheduleAnalyses' => $scheduleAnalyses,
+            'scheduleSummaries' => $scheduleSummaries,
             'safetyRules' => config('safety'),
+            'scheduleModes' => $builder->modeOptions(),
+            'formScheduleState' => $builder->formDataFromSchedule($editSchedule, (string) config('app.timezone', 'Asia/Ho_Chi_Minh')),
         ]);
+    }
+
+    public function preview(Request $request): void
+    {
+        $timezone = trim((string) $request->query('timezone', (string) config('app.timezone', 'Asia/Ho_Chi_Minh')));
+
+        try {
+            new DateTimeZone($timezone);
+
+            $builder = new ScheduleBuilderService(new CronExpression());
+            $preview = $builder->preview($request->all(), $timezone);
+            $risk = (new SchedulerService(app()->db(), new TelegramService(), new CronExpression()))
+                ->analyzeScheduleRisk($preview['cron_expression'], $timezone);
+
+            Response::json([
+                'ok' => true,
+                'cron_expression' => $preview['cron_expression'],
+                'summary' => $preview['summary'],
+                'next_runs' => $preview['next_runs'],
+                'risk' => $risk,
+            ]);
+        } catch (\Throwable $exception) {
+            Response::json([
+                'ok' => false,
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
     }
 
     public function store(Request $request): void
@@ -188,7 +223,6 @@ class ScheduleController extends Controller
         $groupId = (int) $request->input('telegram_group_id');
         $templateId = (int) $request->input('message_template_id');
         $timezone = trim((string) $request->input('timezone'));
-        $cron = trim((string) $request->input('cron_expression'));
 
         if ($this->accounts->findForUser($accountId, $userId) === null) {
             abort404();
@@ -207,19 +241,24 @@ class ScheduleController extends Controller
             $this->redirectWith('/schedules', error: 'Group phải thuộc đúng Telegram account đã chọn.');
         }
 
-        if ($timezone === '' || $cron === '') {
-            $this->redirectWith('/schedules', error: 'Timezone và cron expression là bắt buộc.');
+        if ($timezone === '') {
+            $this->redirectWith('/schedules', error: 'Timezone là bắt buộc.');
         }
 
         try {
             new DateTimeZone($timezone);
-            (new CronExpression())->validate($cron);
         } catch (Exception $exception) {
-            $this->redirectWith('/schedules', error: 'Timezone hoặc cron expression không hợp lệ.');
+            $this->redirectWith('/schedules', error: 'Timezone không hợp lệ.');
+        }
+
+        try {
+            $built = (new ScheduleBuilderService(new CronExpression()))->buildFromPayload($request->all());
+        } catch (Exception $exception) {
+            $this->redirectWith('/schedules', error: $exception->getMessage());
         }
 
         $scheduler ??= new SchedulerService(app()->db(), new TelegramService(), new CronExpression());
-        $analysis = $scheduler->analyzeScheduleRisk($cron, $timezone);
+        $analysis = $scheduler->analyzeScheduleRisk($built['cron_expression'], $timezone);
 
         if ($analysis['risk'] === 'blocked') {
             $this->redirectWith('/schedules', error: $analysis['message']);
@@ -230,7 +269,9 @@ class ScheduleController extends Controller
             'telegram_group_id' => $groupId,
             'message_template_id' => $templateId,
             'timezone' => $timezone,
-            'cron_expression' => $cron,
+            'cron_expression' => $built['cron_expression'],
+            'schedule_type' => $built['schedule_type'],
+            'schedule_config_json' => $built['schedule_config_json'],
         ];
     }
 }

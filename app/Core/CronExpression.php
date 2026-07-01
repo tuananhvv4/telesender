@@ -12,17 +12,39 @@ class CronExpression
 {
     public function isDue(string $expression, DateTimeImmutable $date): bool
     {
-        $parts = $this->parse($expression);
-        return $this->matches($parts, $date);
+        foreach ($this->parseMany($expression) as $parts) {
+            if ($this->matches($parts, $date)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function nextRun(string $expression, DateTimeImmutable $after, string $timezone): DateTimeImmutable
     {
         $tz = new DateTimeZone($timezone);
-        $parts = $this->parse($expression);
-        $candidate = $after->setTimezone($tz)->setTime(
-            (int) $after->setTimezone($tz)->format('H'),
-            (int) $after->setTimezone($tz)->format('i'),
+        $nextRuns = [];
+
+        foreach ($this->parseMany($expression) as $parts) {
+            $nextRuns[] = $this->nextRunForParts($parts, $after, $tz);
+        }
+
+        usort($nextRuns, static fn (DateTimeImmutable $left, DateTimeImmutable $right): int => $left <=> $right);
+
+        return $nextRuns[0] ?? throw new InvalidArgumentException('Không tìm được lần chạy kế tiếp cho cron expression.');
+    }
+
+    public function validate(string $expression): void
+    {
+        $this->parseMany($expression);
+    }
+
+    private function nextRunForParts(array $parts, DateTimeImmutable $after, DateTimeZone $timezone): DateTimeImmutable
+    {
+        $candidate = $after->setTimezone($timezone)->setTime(
+            (int) $after->setTimezone($timezone)->format('H'),
+            (int) $after->setTimezone($timezone)->format('i'),
             0
         )->modify('+1 minute');
 
@@ -37,12 +59,29 @@ class CronExpression
         throw new InvalidArgumentException('Không tìm được lần chạy kế tiếp cho cron expression.');
     }
 
-    public function validate(string $expression): void
+    private function parseMany(string $expression): array
     {
-        $this->parse($expression);
+        $expressions = preg_split('/\s*\|\s*|\R+/', trim($expression)) ?: [];
+        $parsed = [];
+
+        foreach ($expressions as $item) {
+            $item = trim($item);
+
+            if ($item === '') {
+                continue;
+            }
+
+            $parsed[] = $this->parseSingle($item);
+        }
+
+        if ($parsed === []) {
+            throw new InvalidArgumentException('Cron expression không được để trống.');
+        }
+
+        return $parsed;
     }
 
-    private function parse(string $expression): array
+    private function parseSingle(string $expression): array
     {
         $fields = preg_split('/\s+/', trim($expression)) ?: [];
 

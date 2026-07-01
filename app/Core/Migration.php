@@ -10,6 +10,8 @@ abstract class Migration
 {
     public string $version;
     public string $name;
+    /** @var array<int, string> */
+    public array $legacyVersions = [];
 
     abstract public function up(PDO $pdo): void;
 }

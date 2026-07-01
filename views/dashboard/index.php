@@ -39,7 +39,7 @@
         <section class="card hero">
             <h2 class="section-title">Migration Endpoint</h2>
             <p class="section-copy">Sau khi deploy bản mới, chỉ cần gọi endpoint với version mục tiêu để áp dụng migration theo thứ tự.</p>
-            <div class="endpoint mono"><?= e(url('/system/migrate?token=YOUR_MIGRATE_TOKEN&version=202606270001')) ?></div>
+            <div class="endpoint mono"><?= e(url('/system/migrate?token=YOUR_MIGRATE_TOKEN&version=5')) ?></div>
         </section>
     </div>
 
