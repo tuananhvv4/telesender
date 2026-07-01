@@ -1,0 +1,161 @@
+<?php
+
+declare(strict_types=1);
+
+return [
+    'labels' => [
+        [
+            'name' => 'Khuyến mãi',
+            'slug' => 'promo',
+            'color' => '#dc2626',
+        ],
+        [
+            'name' => 'Nhắc lịch',
+            'slug' => 'reminder',
+            'color' => '#2563eb',
+        ],
+        [
+            'name' => 'Báo cáo',
+            'slug' => 'report',
+            'color' => '#0f766e',
+        ],
+        [
+            'name' => 'Chào buổi sáng',
+            'slug' => 'greeting',
+            'color' => '#d97706',
+        ],
+        [
+            'name' => 'Chốt đơn',
+            'slug' => 'follow_up',
+            'color' => '#7c3aed',
+        ],
+    ],
+    'templates' => [
+        [
+            'key' => 'morning_greeting',
+            'name' => 'Chào buổi sáng',
+            'label_slug' => 'greeting',
+            'parse_mode' => 'HTML',
+            'body' => "<b>Chào buổi sáng cả nhà</b>\nHôm nay team mình tiếp tục cập nhật thông tin và hỗ trợ khách trong nhóm này.\nCần tư vấn nhanh, mọi người cứ để lại bình luận hoặc nhắn tin riêng nhé.",
+            'description' => 'Mẫu thông điệp mở đầu ngày cho nhóm cộng đồng hoặc CSKH.',
+        ],
+        [
+            'key' => 'promo_blast',
+            'name' => 'Thông báo khuyến mãi',
+            'label_slug' => 'promo',
+            'parse_mode' => 'HTML',
+            'body' => "<b>Thông báo ưu đãi hôm nay</b>\n- Ưu đãi áp dụng đến 23:59\n- Số lượng có hạn\n- Inbox ngay để được tư vấn chi tiết",
+            'description' => 'Mẫu đăng ưu đãi, sale, flash deal.',
+        ],
+        [
+            'key' => 'payment_reminder',
+            'name' => 'Nhắc lịch thanh toán',
+            'label_slug' => 'reminder',
+            'parse_mode' => 'HTML',
+            'body' => "<b>Thông báo nhắc lịch</b>\nAnh chị vui lòng kiểm tra thông tin thanh toán/lịch hẹn hôm nay.\nNếu cần hỗ trợ thêm, team sẽ phản hồi ngay trong khung giờ làm việc.",
+            'description' => 'Mẫu nhắc lịch thanh toán, họp, deadline.',
+        ],
+        [
+            'key' => 'daily_report',
+            'name' => 'Báo cáo cuối ngày',
+            'label_slug' => 'report',
+            'parse_mode' => 'HTML',
+            'body' => "<b>Cập nhật báo cáo cuối ngày</b>\n- Đơn mới: ...\n- Đơn đang xử lý: ...\n- Vấn đề cần follow: ...\nTeam vui lòng bổ sung số liệu trước 18:00.",
+            'description' => 'Mẫu tổng hợp nhanh cho nhóm nội bộ.',
+        ],
+        [
+            'key' => 'follow_up_lead',
+            'name' => 'Follow up khách quan tâm',
+            'label_slug' => 'follow_up',
+            'parse_mode' => 'HTML',
+            'body' => "<b>Nhắc lại thông tin quan trọng</b>\nNếu anh chị đang quan tâm sản phẩm/dịch vụ, team vẫn đang hỗ trợ ưu đãi trong hôm nay.\nĐể lại số điện thoại hoặc nhắn tin riêng để được liên hệ nhanh.",
+            'description' => 'Mẫu follow-up gọi lại lead từ nhóm.',
+        ],
+    ],
+    'schedules' => [
+        [
+            'key' => 'daily_8am',
+            'name' => 'Mỗi ngày 08:00',
+            'cron_expression' => '0 8 * * *',
+            'timezone' => 'Asia/Ho_Chi_Minh',
+            'description' => 'Gửi đều mỗi sáng lúc 08:00.',
+        ],
+        [
+            'key' => 'every_2_hours',
+            'name' => 'Mỗi 2 giờ 1 lần',
+            'cron_expression' => '0 */2 * * *',
+            'timezone' => 'Asia/Ho_Chi_Minh',
+            'description' => 'Lặp lại vào đầu mỗi 2 giờ: 00:00, 02:00, 04:00...',
+        ],
+        [
+            'key' => 'every_3_hours',
+            'name' => 'Mỗi 3 giờ 1 lần',
+            'cron_expression' => '0 */3 * * *',
+            'timezone' => 'Asia/Ho_Chi_Minh',
+            'description' => 'Lặp lại vào đầu mỗi 3 giờ: 00:00, 03:00, 06:00...',
+        ],
+        [
+            'key' => 'every_4_hours',
+            'name' => 'Mỗi 4 giờ 1 lần',
+            'cron_expression' => '0 */4 * * *',
+            'timezone' => 'Asia/Ho_Chi_Minh',
+            'description' => 'Lặp lại vào đầu mỗi 4 giờ: 00:00, 04:00, 08:00...',
+        ],
+        [
+            'key' => 'every_6_hours',
+            'name' => 'Mỗi 6 giờ 1 lần',
+            'cron_expression' => '0 */6 * * *',
+            'timezone' => 'Asia/Ho_Chi_Minh',
+            'description' => 'Lặp lại vào đầu mỗi 6 giờ: 00:00, 06:00, 12:00, 18:00.',
+        ],
+        [
+            'key' => 'daily_9pm',
+            'name' => 'Mỗi ngày 21:00',
+            'cron_expression' => '0 21 * * *',
+            'timezone' => 'Asia/Ho_Chi_Minh',
+            'description' => 'Gửi thông điệp tổng kết buổi tối.',
+        ],
+        [
+            'key' => 'daily_3_slots',
+            'name' => 'Mỗi ngày lúc 08:00, 12:00, 20:00',
+            'cron_expression' => '0 8,12,20 * * *',
+            'timezone' => 'Asia/Ho_Chi_Minh',
+            'description' => 'Phù hợp với nhắc sáng, trưa và tối.',
+        ],
+        [
+            'key' => 'daily_4_slots',
+            'name' => 'Mỗi ngày lúc 08:00, 11:00, 14:00, 20:00',
+            'cron_expression' => '0 8,11,14,20 * * *',
+            'timezone' => 'Asia/Ho_Chi_Minh',
+            'description' => 'Phân bổ đều 4 khung giờ trong ngày.',
+        ],
+        [
+            'key' => 'workday_9am',
+            'name' => 'Thứ 2 - Thứ 6 lúc 09:00',
+            'cron_expression' => '0 9 * * 1-5',
+            'timezone' => 'Asia/Ho_Chi_Minh',
+            'description' => 'Phù hợp với nhắc việc, CSKH giờ hành chính.',
+        ],
+        [
+            'key' => 'workday_3slots',
+            'name' => 'Thứ 2 - Thứ 6 lúc 09:00, 13:00, 17:00',
+            'cron_expression' => '0 9,13,17 * * 1-5',
+            'timezone' => 'Asia/Ho_Chi_Minh',
+            'description' => 'Nhắc lặp lại 3 khung giờ trong ngày.',
+        ],
+        [
+            'key' => 'workday_4slots',
+            'name' => 'Thứ 2 - Thứ 6 lúc 08:30, 11:30, 14:30, 17:30',
+            'cron_expression' => '30 8,11,14,17 * * 1-5',
+            'timezone' => 'Asia/Ho_Chi_Minh',
+            'description' => 'Các mốc nhắc việc đều nhau trong giờ hành chính.',
+        ],
+        [
+            'key' => 'weekend_10am',
+            'name' => 'Cuối tuần 10:00',
+            'cron_expression' => '0 10 * * 6,0',
+            'timezone' => 'Asia/Ho_Chi_Minh',
+            'description' => 'Thông điệp riêng cho thứ 7, chủ nhật.',
+        ],
+    ],
+];
