@@ -90,6 +90,7 @@ cp .env.example .env
 - `CRON_TOKEN`
 - `MIGRATE_TOKEN`
 - `APP_URL`
+- `APP_ASSET_VERSION` nếu muốn ép version chung cho CSS/JS sau mỗi lần deploy. Để trống thì app tự hash theo nội dung file để tránh cache asset cũ.
 
 ### 3. Cài dependency
 

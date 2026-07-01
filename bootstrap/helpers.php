@@ -75,7 +75,34 @@ if (!function_exists('url')) {
 if (!function_exists('asset')) {
     function asset(string $path): string
     {
-        return url('assets/' . ltrim($path, '/'));
+        $normalizedPath = ltrim($path, '/');
+        $assetUrl = url('assets/' . $normalizedPath);
+        $forcedVersion = trim((string) env('APP_ASSET_VERSION', ''));
+
+        if ($forcedVersion !== '') {
+            return $assetUrl . '?v=' . rawurlencode($forcedVersion);
+        }
+
+        static $versionCache = [];
+
+        if (!array_key_exists($normalizedPath, $versionCache)) {
+            $fullPath = public_path('assets/' . $normalizedPath);
+
+            if (is_file($fullPath)) {
+                $hash = md5_file($fullPath);
+                $versionCache[$normalizedPath] = $hash !== false ? substr($hash, 0, 10) : (string) filemtime($fullPath);
+            } else {
+                $versionCache[$normalizedPath] = null;
+            }
+        }
+
+        $version = $versionCache[$normalizedPath];
+
+        if ($version === null || $version === '') {
+            return $assetUrl;
+        }
+
+        return $assetUrl . '?v=' . rawurlencode((string) $version);
     }
 }
 
