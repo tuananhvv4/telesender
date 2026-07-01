@@ -51,21 +51,21 @@ class SchedulerService
         );
 
         $results = [];
-        $processedAccounts = [];
+        $jobsByAccount = [];
 
         foreach ($jobs as $job) {
-            $accountId = (int) $job['telegram_account_id'];
+            $jobsByAccount[(int) $job['telegram_account_id']][] = $job;
+        }
 
-            if (isset($processedAccounts[$accountId])) {
-                continue;
-            }
+        foreach ($jobsByAccount as $accountJobs) {
+            $accountJobs = $this->normalizeAccountQueue($accountJobs, $now);
+            $job = $accountJobs[0] ?? null;
 
-            if (!$this->lockJob((int) $job['id'])) {
+            if ($job === null || !$this->isDueNow((string) ($job['next_run_at'] ?? ''), $now)) {
                 continue;
             }
 
             $results[] = $this->dispatchOne($job, $now);
-            $processedAccounts[$accountId] = true;
         }
 
         return $results;
@@ -184,6 +184,56 @@ class SchedulerService
         return $statement->rowCount() === 1;
     }
 
+    private function normalizeAccountQueue(array $jobs, DateTimeImmutable $now): array
+    {
+        usort($jobs, function (array $left, array $right): int {
+            $leftRunAt = strtotime((string) ($left['next_run_at'] ?? '')) ?: 0;
+            $rightRunAt = strtotime((string) ($right['next_run_at'] ?? '')) ?: 0;
+
+            return $leftRunAt <=> $rightRunAt ?: ((int) $left['id'] <=> (int) $right['id']);
+        });
+
+        if ($jobs === []) {
+            return $jobs;
+        }
+
+        $guard = $this->determineGuard($jobs[0], $now);
+        $queueStart = $guard['retry_at'] ?? $now;
+        $minGapMinutes = (int) config('safety.account_limits.min_minutes_between_sends', 8);
+
+        foreach ($jobs as $index => &$job) {
+            $slot = $index === 0
+                ? $queueStart
+                : $queueStart->modify('+' . ($minGapMinutes * $index) . ' minutes');
+
+            $slotString = $slot->format('Y-m-d H:i:s');
+            $currentNextRunAt = (string) ($job['next_run_at'] ?? '');
+            $queueNote = null;
+
+            if ($index === 0 && $guard !== null) {
+                $queueNote = 'Queue: ' . $guard['reason'];
+            } elseif ($index > 0) {
+                $queueNote = 'Queue: Schedule này đang chờ tới lượt theo account, dự kiến gửi lúc ' . fmt_datetime($slotString);
+            }
+
+            if (($index === 0 && $guard === null) || ($currentNextRunAt === $slotString && (string) ($job['last_error'] ?? '') === (string) $queueNote)) {
+                continue;
+            }
+
+            $this->db->update('schedule_jobs', [
+                'next_run_at' => $slotString,
+                'last_error' => $queueNote,
+                'updated_at' => $now->format('Y-m-d H:i:s'),
+            ], 'id = :id', ['id' => (int) $job['id']]);
+
+            $job['next_run_at'] = $slotString;
+            $job['last_error'] = $queueNote;
+        }
+        unset($job);
+
+        return $jobs;
+    }
+
     private function dispatchOne(array $job, ?DateTimeImmutable $now = null, bool $manual = false): array
     {
         $now ??= new DateTimeImmutable('now', new DateTimeZone('UTC'));
@@ -283,9 +333,10 @@ class SchedulerService
 
     private function determineGuard(array $job, DateTimeImmutable $now): ?array
     {
+        $guards = [];
         $cooldownUntil = $this->nullableDate((string) ($job['cooldown_until'] ?? ''));
         if ($cooldownUntil !== null && $cooldownUntil > $now) {
-            return [
+            $guards[] = [
                 'retry_at' => $cooldownUntil,
                 'reason' => 'Account đang trong thời gian cooldown an toàn đến ' . fmt_datetime($cooldownUntil->format('Y-m-d H:i:s')),
             ];
@@ -296,7 +347,7 @@ class SchedulerService
         if ($lastSentAt !== null) {
             $nextAllowedAt = $lastSentAt->modify('+' . $minGap . ' minutes');
             if ($nextAllowedAt > $now) {
-                return [
+                $guards[] = [
                     'retry_at' => $nextAllowedAt,
                     'reason' => 'Account vừa gửi gần đây, hệ thống đang giãn cách tối thiểu ' . $minGap . ' phút giữa hai lần gửi.',
                 ];
@@ -306,7 +357,7 @@ class SchedulerService
         $hourlyLimit = (int) config('safety.account_limits.max_success_per_hour', 6);
         $hourly = $this->successWindow((int) $job['telegram_account_id'], '1 HOUR');
         if ($hourly['count'] >= $hourlyLimit && $hourly['oldest_at'] !== null) {
-            return [
+            $guards[] = [
                 'retry_at' => $hourly['oldest_at']->modify('+1 hour'),
                 'reason' => 'Account đã chạm giới hạn an toàn theo giờ. Hệ thống tạm lùi lịch để tránh spam flag.',
             ];
@@ -315,13 +366,19 @@ class SchedulerService
         $dailyLimit = (int) config('safety.account_limits.max_success_per_day', 30);
         $daily = $this->successWindow((int) $job['telegram_account_id'], '1 DAY');
         if ($daily['count'] >= $dailyLimit && $daily['oldest_at'] !== null) {
-            return [
+            $guards[] = [
                 'retry_at' => $daily['oldest_at']->modify('+1 day'),
                 'reason' => 'Account đã chạm giới hạn an toàn theo ngày. Hệ thống tạm lùi lịch để tránh khóa tài khoản.',
             ];
         }
 
-        return null;
+        if ($guards === []) {
+            return null;
+        }
+
+        usort($guards, static fn (array $left, array $right): int => $left['retry_at'] <=> $right['retry_at']);
+
+        return $guards[count($guards) - 1];
     }
 
     private function guardDispatch(array $job, DateTimeImmutable $retryAt, string $reason, DateTimeImmutable $now, bool $manual = false): array
@@ -471,5 +528,12 @@ class SchedulerService
     private function maxDateTimeString(string $left, string $right): string
     {
         return strtotime($left) >= strtotime($right) ? $left : $right;
+    }
+
+    private function isDueNow(string $value, DateTimeImmutable $now): bool
+    {
+        $date = $this->nullableDate($value);
+
+        return $date !== null && $date <= $now;
     }
 }

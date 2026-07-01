@@ -119,6 +119,7 @@
                 <?php foreach ($schedules as $schedule): ?>
                     <?php
                     $analysis = $scheduleAnalyses[(int) $schedule['id']] ?? ['risk' => 'safe', 'message' => '', 'runs_per_day' => 0, 'min_gap_minutes' => null];
+                    $queueNotice = is_string($schedule['last_error'] ?? null) && str_starts_with((string) $schedule['last_error'], 'Queue:');
                     $riskBadgeClass = match ($analysis['risk']) {
                         'safe' => 'success',
                         'medium' => 'info',
@@ -136,7 +137,7 @@
                         <td>
                             <strong><?= e($schedule['template_name']) ?></strong>
                             <?php if (!empty($schedule['last_error'])): ?>
-                                <div class="small" style="color:#b91c1c;"><?= e($schedule['last_error']) ?></div>
+                                <div class="small" style="color:<?= $queueNotice ? '#0f766e' : '#b91c1c' ?>;"><?= e($schedule['last_error']) ?></div>
                             <?php endif; ?>
                         </td>
                         <td>
@@ -161,6 +162,11 @@
                         </td>
                         <td>
                             <span class="badge <?= $schedule['status'] === 'active' ? 'success' : 'warning' ?>"><?= e($schedule['status']) ?></span>
+                            <?php if ($queueNotice): ?>
+                                <div style="margin-top:8px;">
+                                    <span class="badge info">Đang xếp hàng</span>
+                                </div>
+                            <?php endif; ?>
                         </td>
                         <td>
                             <span class="badge <?= e($riskBadgeClass) ?>"><?= e($riskLabel) ?></span>
