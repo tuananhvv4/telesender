@@ -81,11 +81,13 @@
         </section>
 
         <section class="card">
-            <h2 class="section-title">Cách hoạt động</h2>
+            <h2 class="section-title">Chế độ gửi an toàn</h2>
             <div class="list">
-                <div class="list-item">App lưu `next_run_at` ở UTC để cron endpoint kiểm tra nhanh và ổn định.</div>
-                <div class="list-item">Mỗi lần dispatch sẽ ghi log đầy đủ gồm template, group, account, label, payload phản hồi và lỗi.</div>
-                <div class="list-item">Có cơ chế `dispatch_locked_until` để tránh trùng gửi khi endpoint bị gọi đồng thời.</div>
+                <div class="list-item">Tối đa <?= e((string) $safetyRules['account_limits']['max_success_per_hour']) ?> lần gửi thành công mỗi giờ cho một account.</div>
+                <div class="list-item">Tối đa <?= e((string) $safetyRules['account_limits']['max_success_per_day']) ?> lần gửi thành công mỗi ngày cho một account.</div>
+                <div class="list-item">Tự giãn cách tối thiểu <?= e((string) $safetyRules['account_limits']['min_minutes_between_sends']) ?> phút giữa 2 lần gửi của cùng account.</div>
+                <div class="list-item">Nếu Telegram trả tín hiệu spam/rate limit, account sẽ tự cooldown khoảng <?= e((string) $safetyRules['account_limits']['spam_cooldown_minutes']) ?> phút.</div>
+                <div class="list-item">Các lịch dày hơn <?= e((string) $safetyRules['schedule_limits']['block_runs_per_day']) ?> lần/ngày sẽ bị chặn khi lưu.</div>
             </div>
         </section>
     </div>
@@ -102,12 +104,28 @@
                         <th>Account / Group</th>
                         <th>Cron</th>
                         <th>Next Run</th>
-                        <th>Status</th>
+                        <th>Trạng thái</th>
+                        <th>An toàn</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php foreach ($schedules as $schedule): ?>
+                    <?php
+                    $analysis = $scheduleAnalyses[(int) $schedule['id']] ?? ['risk' => 'safe', 'message' => '', 'runs_per_day' => 0, 'min_gap_minutes' => null];
+                    $riskBadgeClass = match ($analysis['risk']) {
+                        'safe' => 'success',
+                        'medium' => 'info',
+                        'high' => 'warning',
+                        default => 'danger',
+                    };
+                    $riskLabel = match ($analysis['risk']) {
+                        'safe' => 'An toàn',
+                        'medium' => 'Cần lưu ý',
+                        'high' => 'Khá dày',
+                        default => 'Quá dày',
+                    };
+                    ?>
                     <tr>
                         <td>
                             <strong><?= e($schedule['template_name']) ?></strong>
@@ -122,12 +140,19 @@
                         <td class="mono">
                             <?= e($schedule['cron_expression']) ?>
                             <div class="small muted"><?= e($schedule['timezone']) ?></div>
+                            <div class="small muted"><?= e((string) $analysis['runs_per_day']) ?> lần/ngày · <?= e($analysis['min_gap_minutes'] !== null ? (string) $analysis['min_gap_minutes'] . ' phút/lần' : 'không xác định') ?></div>
                         </td>
                         <td>
                             <div><?= e(fmt_datetime($schedule['next_run_at'])) ?></div>
                             <div class="small muted">Last: <?= e(fmt_datetime($schedule['last_run_at'])) ?></div>
                         </td>
-                        <td><span class="badge <?= $schedule['status'] === 'active' ? 'success' : 'warning' ?>"><?= e($schedule['status']) ?></span></td>
+                        <td>
+                            <span class="badge <?= $schedule['status'] === 'active' ? 'success' : 'warning' ?>"><?= e($schedule['status']) ?></span>
+                        </td>
+                        <td>
+                            <span class="badge <?= e($riskBadgeClass) ?>"><?= e($riskLabel) ?></span>
+                            <div class="small muted" style="margin-top: 6px;"><?= e($analysis['message']) ?></div>
+                        </td>
                         <td>
                             <div class="inline-actions">
                                 <a class="button secondary" href="<?= e(url('/schedules?edit=' . $schedule['id'])) ?>">Sửa</a>
@@ -146,7 +171,7 @@
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($schedules === []): ?>
-                    <tr><td colspan="6" class="muted">Chưa có schedule nào.</td></tr>
+                    <tr><td colspan="7" class="muted">Chưa có schedule nào.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>

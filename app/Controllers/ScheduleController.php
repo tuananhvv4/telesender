@@ -33,27 +33,40 @@ class ScheduleController extends Controller
         $userId = (int) auth()->id();
         $editSchedule = null;
         $editId = (int) $request->query('edit', 0);
+        $scheduler = new SchedulerService(app()->db(), new TelegramService(), new CronExpression());
+        $schedules = $this->schedules->listForUser($userId);
+        $scheduleAnalyses = [];
 
         if ($editId > 0) {
             $editSchedule = $this->schedules->findForUser($editId, $userId);
         }
 
+        foreach ($schedules as $schedule) {
+            $scheduleAnalyses[(int) $schedule['id']] = $scheduler->analyzeScheduleRisk(
+                (string) $schedule['cron_expression'],
+                (string) $schedule['timezone']
+            );
+        }
+
         $this->render('schedules/index', [
             'title' => 'Schedules',
-            'schedules' => $this->schedules->listForUser($userId),
+            'schedules' => $schedules,
             'accounts' => $this->accounts->listForUser($userId),
             'groups' => $this->groups->listForUser($userId),
             'templates' => $this->templates->listForUser($userId),
             'editSchedule' => $editSchedule,
             'defaultTimezone' => config('app.timezone', 'Asia/Ho_Chi_Minh'),
             'schedulePresets' => (new PresetService(app()->db()))->schedulePresets(),
+            'scheduleAnalyses' => $scheduleAnalyses,
+            'safetyRules' => config('safety'),
         ]);
     }
 
     public function store(Request $request): void
     {
-        $data = $this->validatedData($request);
         $scheduler = new SchedulerService(app()->db(), new TelegramService(), new CronExpression());
+        $data = $this->validatedData($request, $scheduler);
+        $analysis = $scheduler->analyzeScheduleRisk($data['cron_expression'], $data['timezone']);
         $nextRunAt = $scheduler->calculateNextRun(
             $data['cron_expression'],
             $data['timezone'],
@@ -71,7 +84,11 @@ class ScheduleController extends Controller
             'updated_at' => gmdate('Y-m-d H:i:s'),
         ]));
 
-        $this->redirectWith('/schedules', success: 'Đã tạo lịch gửi tin nhắn.');
+        $message = $analysis['risk'] === 'high'
+            ? 'Đã tạo lịch gửi. Lưu ý lịch này khá dày, hệ thống sẽ tự giãn cách và giới hạn theo account.'
+            : 'Đã tạo lịch gửi tin nhắn.';
+
+        $this->redirectWith('/schedules', success: $message);
     }
 
     public function update(Request $request): void
@@ -82,8 +99,9 @@ class ScheduleController extends Controller
             abort404();
         }
 
-        $data = $this->validatedData($request);
         $scheduler = new SchedulerService(app()->db(), new TelegramService(), new CronExpression());
+        $data = $this->validatedData($request, $scheduler);
+        $analysis = $scheduler->analyzeScheduleRisk($data['cron_expression'], $data['timezone']);
         $nextRunAt = $scheduler->calculateNextRun(
             $data['cron_expression'],
             $data['timezone'],
@@ -95,7 +113,11 @@ class ScheduleController extends Controller
             'updated_at' => gmdate('Y-m-d H:i:s'),
         ]));
 
-        $this->redirectWith('/schedules', success: 'Đã cập nhật lịch gửi.');
+        $message = $analysis['risk'] === 'high'
+            ? 'Đã cập nhật lịch gửi. Lưu ý lịch này khá dày, hệ thống sẽ tự giãn cách và giới hạn theo account.'
+            : 'Đã cập nhật lịch gửi.';
+
+        $this->redirectWith('/schedules', success: $message);
     }
 
     public function toggle(Request $request): void
@@ -128,7 +150,7 @@ class ScheduleController extends Controller
         $this->redirectWith('/schedules', success: 'Đã xóa schedule.');
     }
 
-    private function validatedData(Request $request): array
+    private function validatedData(Request $request, ?SchedulerService $scheduler = null): array
     {
         $userId = (int) auth()->id();
         $accountId = (int) $request->input('telegram_account_id');
@@ -163,6 +185,13 @@ class ScheduleController extends Controller
             (new CronExpression())->validate($cron);
         } catch (Exception $exception) {
             $this->redirectWith('/schedules', error: 'Timezone hoặc cron expression không hợp lệ.');
+        }
+
+        $scheduler ??= new SchedulerService(app()->db(), new TelegramService(), new CronExpression());
+        $analysis = $scheduler->analyzeScheduleRisk($cron, $timezone);
+
+        if ($analysis['risk'] === 'blocked') {
+            $this->redirectWith('/schedules', error: $analysis['message']);
         }
 
         return [
