@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use danog\MadelineProto\ParseMode;
 use RuntimeException;
 use danog\MadelineProto\Settings\AppInfo;
 
@@ -51,15 +52,22 @@ class TelegramService
         ];
     }
 
-    public function sendMessage(array $account, string $peer, string $message, string $parseMode = 'HTML'): array
+    public function sendMessage(
+        array $account,
+        string $peer,
+        string $message,
+        string $parseMode = 'HTML',
+        ?int $topicId = null
+    ): array
     {
         $api = $this->client($account);
         $api->start();
 
-        $result = $api->messages->sendMessage(
+        $result = $api->sendMessage(
             peer: $peer,
             message: $message,
-            parse_mode: $parseMode
+            parseMode: $this->parseMode($parseMode),
+            topMsgId: $topicId
         );
 
         return is_array($result) ? $result : ['result' => $result];
@@ -100,5 +108,14 @@ class TelegramService
         if (!class_exists(\danog\MadelineProto\API::class)) {
             throw new RuntimeException('Chưa cài dependency Telegram. Hãy chạy `composer install` trước.');
         }
+    }
+
+    private function parseMode(string $parseMode): ParseMode
+    {
+        return match (strtoupper($parseMode)) {
+            'HTML' => ParseMode::HTML,
+            'MARKDOWN' => ParseMode::MARKDOWN,
+            default => ParseMode::TEXT,
+        };
     }
 }

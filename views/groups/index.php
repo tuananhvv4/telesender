@@ -35,6 +35,14 @@
                     <input class="input mono" id="peer_identifier" type="text" name="peer_identifier" value="<?= e($editGroup['peer_identifier'] ?? '') ?>" placeholder="Ví dụ: -1001234567890" required>
                 </div>
                 <div class="field">
+                    <label for="topic_id">Topic ID / top_msg_id (tùy chọn)</label>
+                    <input class="input mono" id="topic_id" type="text" name="topic_id" value="<?= e(isset($editGroup['topic_id']) && $editGroup['topic_id'] !== null ? (string) $editGroup['topic_id'] : '') ?>" placeholder="Ví dụ: 2780362 hoặc dán link topic">
+                </div>
+                <div class="field">
+                    <label for="topic_title">Tên topic (tùy chọn)</label>
+                    <input class="input" id="topic_title" type="text" name="topic_title" value="<?= e($editGroup['topic_title'] ?? '') ?>" placeholder="Ví dụ: Chợ Mới">
+                </div>
+                <div class="field">
                     <label for="notes">Ghi chú</label>
                     <textarea class="textarea" id="notes" name="notes"><?= e($editGroup['notes'] ?? '') ?></textarea>
                 </div>
@@ -56,7 +64,8 @@
             <div class="list">
                 <div class="list-item">Mỗi group nên gắn với đúng account thực tế đã được add vào nhóm.</div>
                 <div class="list-item">Nếu một account phụ bị giới hạn quyền, schedule gắn với group đó sẽ log lỗi chi tiết.</div>
-                <div class="list-item">Có thể dùng `notes` để ghi owner, mục đích hoặc quy tắc nội dung của từng nhóm.</div>
+                <div class="list-item">Nếu group là forum có nhiều topic, hãy tạo nhiều target cùng `Id Nhóm`, mỗi target dùng một `Topic ID / top_msg_id` khác nhau.</div>
+                <div class="list-item">Bạn có thể dán luôn link topic dạng `t.me/.../2780362`, hệ thống sẽ tự lấy số cuối làm Topic ID.</div>
             </div>
         </section>
     </div>
@@ -72,6 +81,7 @@
                         <th>Title</th>
                         <th>Account</th>
                         <th>Peer</th>
+                        <th>Topic</th>
                         <th>State</th>
                         <th>Actions</th>
                     </tr>
@@ -85,6 +95,14 @@
                         </td>
                         <td><?= e($group['account_name']) ?></td>
                         <td class="mono"><?= e($group['peer_identifier']) ?></td>
+                        <td>
+                            <?php if (!empty($group['topic_id'])): ?>
+                                <div class="mono"><?= e((string) $group['topic_id']) ?></div>
+                                <div class="small muted"><?= e($group['topic_title'] ?: 'Topic cụ thể') ?></div>
+                            <?php else: ?>
+                                <span class="muted">Topic chung / General</span>
+                            <?php endif; ?>
+                        </td>
                         <td><span class="badge <?= (int) $group['is_active'] === 1 ? 'success' : 'warning' ?>"><?= (int) $group['is_active'] === 1 ? 'active' : 'inactive' ?></span></td>
                         <td>
                             <div class="inline-actions">
@@ -99,7 +117,7 @@
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($groups === []): ?>
-                    <tr><td colspan="5" class="muted">Chưa có group nào.</td></tr>
+                    <tr><td colspan="6" class="muted">Chưa có group nào.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>

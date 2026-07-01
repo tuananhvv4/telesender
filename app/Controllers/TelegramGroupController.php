@@ -40,6 +40,8 @@ class TelegramGroupController extends Controller
         $userId = (int) auth()->id();
         $title = trim((string) $request->input('title'));
         $peer = trim((string) $request->input('peer_identifier'));
+        $topicId = $this->normalizeTopicId((string) $request->input('topic_id'));
+        $topicTitle = trim((string) $request->input('topic_title'));
         $accountId = (int) $request->input('telegram_account_id');
 
         if ($title === '' || $peer === '' || $accountId <= 0) {
@@ -53,6 +55,8 @@ class TelegramGroupController extends Controller
             'telegram_account_id' => $accountId,
             'title' => $title,
             'peer_identifier' => $peer,
+            'topic_id' => $topicId,
+            'topic_title' => $topicTitle !== '' ? $topicTitle : null,
             'notes' => trim((string) $request->input('notes')),
             'is_active' => $request->input('is_active') ? 1 : 0,
             'created_at' => gmdate('Y-m-d H:i:s'),
@@ -74,6 +78,8 @@ class TelegramGroupController extends Controller
 
         $title = trim((string) $request->input('title'));
         $peer = trim((string) $request->input('peer_identifier'));
+        $topicId = $this->normalizeTopicId((string) $request->input('topic_id'));
+        $topicTitle = trim((string) $request->input('topic_title'));
 
         $accountId = (int) $request->input('telegram_account_id');
         $this->ensureOwnedAccount($accountId, $userId);
@@ -86,6 +92,8 @@ class TelegramGroupController extends Controller
             'telegram_account_id' => $accountId,
             'title' => $title,
             'peer_identifier' => $peer,
+            'topic_id' => $topicId,
+            'topic_title' => $topicTitle !== '' ? $topicTitle : null,
             'notes' => trim((string) $request->input('notes')),
             'is_active' => $request->input('is_active') ? 1 : 0,
             'updated_at' => gmdate('Y-m-d H:i:s'),
@@ -111,5 +119,20 @@ class TelegramGroupController extends Controller
         if ($this->accounts->findForUser($accountId, $userId) === null) {
             abort404();
         }
+    }
+
+    private function normalizeTopicId(string $raw): ?int
+    {
+        $raw = trim($raw);
+
+        if ($raw === '') {
+            return null;
+        }
+
+        if (preg_match('/(\d+)(?:\/)?$/', $raw, $matches) === 1) {
+            return (int) $matches[1];
+        }
+
+        $this->redirectWith('/groups', error: 'Topic ID không hợp lệ. Bạn có thể nhập số ID hoặc dán link topic.');
     }
 }

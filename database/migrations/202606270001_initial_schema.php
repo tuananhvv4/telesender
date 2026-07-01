@@ -48,6 +48,8 @@ return new class extends Migration
                 telegram_account_id BIGINT UNSIGNED NOT NULL,
                 title VARCHAR(190) NOT NULL,
                 peer_identifier VARCHAR(190) NOT NULL,
+                topic_id BIGINT NULL,
+                topic_title VARCHAR(190) NULL,
                 notes TEXT NULL,
                 is_active TINYINT(1) NOT NULL DEFAULT 1,
                 created_at DATETIME NOT NULL,

@@ -14,6 +14,8 @@ class TelegramGroup extends Model
         'telegram_account_id',
         'title',
         'peer_identifier',
+        'topic_id',
+        'topic_title',
         'notes',
         'is_active',
         'created_at',

@@ -46,7 +46,13 @@
                         <option value="">Chọn group</option>
                         <?php foreach ($groups as $group): ?>
                             <option value="<?= e((string) $group['id']) ?>" <?= (string) ($editSchedule['telegram_group_id'] ?? '') === (string) $group['id'] ? 'selected' : '' ?>>
-                                <?= e($group['title']) ?> (<?= e($group['account_name']) ?>)
+                                <?= e($group['title']) ?>
+                                <?php if (!empty($group['topic_title'])): ?>
+                                    · Topic: <?= e($group['topic_title']) ?>
+                                <?php elseif (!empty($group['topic_id'])): ?>
+                                    · Topic ID: <?= e((string) $group['topic_id']) ?>
+                                <?php endif; ?>
+                                (<?= e($group['account_name']) ?>)
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -135,7 +141,14 @@
                         </td>
                         <td>
                             <div><?= e($schedule['account_name']) ?></div>
-                            <div class="small muted"><?= e($schedule['group_title']) ?></div>
+                            <div class="small muted">
+                                <?= e($schedule['group_title']) ?>
+                                <?php if (!empty($schedule['topic_title'])): ?>
+                                    · Topic: <?= e($schedule['topic_title']) ?>
+                                <?php elseif (!empty($schedule['topic_id'])): ?>
+                                    · Topic ID: <?= e((string) $schedule['topic_id']) ?>
+                                <?php endif; ?>
+                            </div>
                         </td>
                         <td class="mono">
                             <?= e($schedule['cron_expression']) ?>

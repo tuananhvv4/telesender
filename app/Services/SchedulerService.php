@@ -33,7 +33,7 @@ class SchedulerService
         $jobs = $this->db->fetchAll(
             'SELECT sj.*, ta.name AS account_name, ta.phone_number, ta.session_name, ta.session_status,
                     ta.last_sent_at, ta.cooldown_until, ta.cooldown_reason,
-                    tg.title AS group_title, tg.peer_identifier,
+                    tg.title AS group_title, tg.peer_identifier, tg.topic_id, tg.topic_title,
                     mt.name AS template_name, mt.body, mt.parse_mode, mt.label_id
              FROM schedule_jobs sj
              INNER JOIN telegram_accounts ta ON ta.id = sj.telegram_account_id
@@ -166,7 +166,8 @@ class SchedulerService
                 $job,
                 (string) $job['peer_identifier'],
                 (string) $job['body'],
-                (string) $job['parse_mode']
+                (string) $job['parse_mode'],
+                $job['topic_id'] !== null ? (int) $job['topic_id'] : null
             );
 
             $accountUpdates['last_sent_at'] = $now->format('Y-m-d H:i:s');
