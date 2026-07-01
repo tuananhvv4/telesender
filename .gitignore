@@ -4,6 +4,7 @@
 /storage/sessions/*
 /storage/telegram/*
 /storage/cache/*
+/public/MadelineProto.log
 !/storage/logs/.gitkeep
 !/storage/sessions/.gitkeep
 !/storage/telegram/.gitkeep
