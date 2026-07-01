@@ -425,6 +425,18 @@ textarea {
   gap: 10px;
 }
 
+.helper-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.helper-text {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 .button {
   border: 0;
   cursor: pointer;

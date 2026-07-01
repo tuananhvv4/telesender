@@ -35,6 +35,7 @@ $router->post('/accounts/verify-code', [TelegramAccountController::class, 'verif
 $router->post('/accounts/verify-password', [TelegramAccountController::class, 'verifyPassword'], ['auth']);
 
 $router->get('/groups', [TelegramGroupController::class, 'index'], ['auth']);
+$router->get('/groups/topics', [TelegramGroupController::class, 'topics'], ['auth']);
 $router->post('/groups', [TelegramGroupController::class, 'store'], ['auth']);
 $router->post('/groups/update', [TelegramGroupController::class, 'update'], ['auth']);
 $router->post('/groups/delete', [TelegramGroupController::class, 'delete'], ['auth']);
@@ -51,6 +52,7 @@ $router->post('/templates/delete', [MessageTemplateController::class, 'delete'],
 
 $router->get('/schedules', [ScheduleController::class, 'index'], ['auth']);
 $router->post('/schedules', [ScheduleController::class, 'store'], ['auth']);
+$router->post('/schedules/send-now', [ScheduleController::class, 'sendNow'], ['auth']);
 $router->post('/schedules/update', [ScheduleController::class, 'update'], ['auth']);
 $router->post('/schedules/toggle', [ScheduleController::class, 'toggle'], ['auth']);
 $router->post('/schedules/delete', [ScheduleController::class, 'delete'], ['auth']);

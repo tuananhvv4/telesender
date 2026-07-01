@@ -150,6 +150,37 @@ class ScheduleController extends Controller
         $this->redirectWith('/schedules', success: 'Đã xóa schedule.');
     }
 
+    public function sendNow(Request $request): void
+    {
+        $schedule = $this->schedules->findForUser((int) $request->input('id'), (int) auth()->id());
+
+        if ($schedule === null) {
+            abort404();
+        }
+
+        $scheduler = new SchedulerService(app()->db(), new TelegramService(), new CronExpression());
+
+        try {
+            $result = $scheduler->dispatchScheduleNow((int) $schedule['id'], (int) auth()->id());
+        } catch (Exception $exception) {
+            $this->redirectWith('/schedules', error: $exception->getMessage());
+        }
+
+        if (($result['status'] ?? '') === 'success') {
+            $this->redirectWith('/schedules', success: 'Đã gửi ngay schedule này thành công.');
+        }
+
+        if (($result['status'] ?? '') === 'guarded') {
+            $this->redirectWith('/schedules', error: (string) ($result['error'] ?? 'Schedule đang bị chặn tạm thời bởi cơ chế an toàn.'));
+        }
+
+        if (($result['status'] ?? '') === 'locked') {
+            $this->redirectWith('/schedules', error: (string) ($result['error'] ?? 'Schedule đang được xử lý bởi tiến trình khác.'));
+        }
+
+        $this->redirectWith('/schedules', error: (string) ($result['error'] ?? 'Gửi ngay thất bại, vui lòng kiểm tra lại account hoặc Telegram response.'));
+    }
+
     private function validatedData(Request $request, ?SchedulerService $scheduler = null): array
     {
         $userId = (int) auth()->id();

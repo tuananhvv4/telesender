@@ -71,6 +71,52 @@ class SchedulerService
         return $results;
     }
 
+    public function dispatchScheduleNow(int $scheduleId, int $userId): array
+    {
+        $job = $this->db->fetch(
+            'SELECT sj.*, ta.name AS account_name, ta.phone_number, ta.session_name, ta.session_status,
+                    ta.last_sent_at, ta.cooldown_until, ta.cooldown_reason,
+                    tg.title AS group_title, tg.peer_identifier, tg.topic_id, tg.topic_title, tg.is_active AS group_active,
+                    mt.name AS template_name, mt.body, mt.parse_mode, mt.label_id, mt.is_active AS template_active
+             FROM schedule_jobs sj
+             INNER JOIN telegram_accounts ta ON ta.id = sj.telegram_account_id
+             INNER JOIN telegram_groups tg ON tg.id = sj.telegram_group_id
+             INNER JOIN message_templates mt ON mt.id = sj.message_template_id
+             WHERE sj.id = :id
+               AND sj.user_id = :user_id
+             LIMIT 1',
+            [
+                'id' => $scheduleId,
+                'user_id' => $userId,
+            ]
+        );
+
+        if ($job === null) {
+            throw new RuntimeException('Không tìm thấy schedule cần gửi.');
+        }
+
+        if (!(bool) $job['group_active']) {
+            throw new RuntimeException('Nhóm Telegram này đang tắt, chưa thể gửi ngay.');
+        }
+
+        if (!(bool) $job['template_active']) {
+            throw new RuntimeException('Template này đang tắt, chưa thể gửi ngay.');
+        }
+
+        if (!$this->lockJob((int) $job['id'])) {
+            return [
+                'schedule_id' => (int) $job['id'],
+                'group' => $job['group_title'],
+                'account' => $job['account_name'],
+                'status' => 'locked',
+                'next_run_at' => (string) ($job['next_run_at'] ?? ''),
+                'error' => 'Schedule đang được xử lý ở tiến trình khác. Hãy thử lại sau ít phút.',
+            ];
+        }
+
+        return $this->dispatchOne($job, new DateTimeImmutable('now', new DateTimeZone('UTC')), true);
+    }
+
     public function analyzeScheduleRisk(string $expression, string $timezone): array
     {
         $localNow = new DateTimeImmutable('now', new DateTimeZone($timezone));
@@ -138,14 +184,14 @@ class SchedulerService
         return $statement->rowCount() === 1;
     }
 
-    private function dispatchOne(array $job, ?DateTimeImmutable $now = null): array
+    private function dispatchOne(array $job, ?DateTimeImmutable $now = null, bool $manual = false): array
     {
         $now ??= new DateTimeImmutable('now', new DateTimeZone('UTC'));
-        $scheduledAt = new DateTimeImmutable((string) $job['next_run_at'], new DateTimeZone('UTC'));
+        $scheduledAt = $this->nullableDate((string) ($job['next_run_at'] ?? '')) ?? $now;
         $guard = $this->determineGuard($job, $now);
 
         if ($guard !== null) {
-            return $this->guardDispatch($job, $guard['retry_at'], $guard['reason'], $now);
+            return $this->guardDispatch($job, $guard['retry_at'], $guard['reason'], $now, $manual);
         }
 
         $requestId = 'dispatch_' . bin2hex(random_bytes(6));
@@ -186,11 +232,13 @@ class SchedulerService
             }
         }
 
-        $nextRunAt = $this->calculateNextRun(
-            (string) $job['cron_expression'],
-            (string) $job['timezone'],
-            $scheduledAt
-        );
+        $nextRunAt = $manual
+            ? $this->determineManualNextRunAt($job, $scheduledAt, $now)
+            : $this->calculateNextRun(
+                (string) $job['cron_expression'],
+                (string) $job['timezone'],
+                $scheduledAt
+            );
         if ($retryAt !== null) {
             $nextRunAt = $this->maxDateTimeString($nextRunAt, $retryAt->format('Y-m-d H:i:s'));
         }
@@ -276,10 +324,17 @@ class SchedulerService
         return null;
     }
 
-    private function guardDispatch(array $job, DateTimeImmutable $retryAt, string $reason, DateTimeImmutable $now): array
+    private function guardDispatch(array $job, DateTimeImmutable $retryAt, string $reason, DateTimeImmutable $now, bool $manual = false): array
     {
         $requestId = 'guard_' . bin2hex(random_bytes(6));
         $nextRunAt = $retryAt->format('Y-m-d H:i:s');
+
+        if ($manual) {
+            $currentNextRunAt = $this->nullableDate((string) ($job['next_run_at'] ?? ''));
+            if ($currentNextRunAt !== null) {
+                $nextRunAt = $this->maxDateTimeString($currentNextRunAt->format('Y-m-d H:i:s'), $nextRunAt);
+            }
+        }
 
         $this->db->transaction(function (Database $db) use ($job, $requestId, $reason, $now, $nextRunAt): void {
             $db->insert('dispatch_logs', [
@@ -344,6 +399,19 @@ class SchedulerService
             'retry_at' => $retryAt,
             'reason' => 'Telegram đang giới hạn account này do tín hiệu spam/rate limit. Hệ thống đã tự cooldown để giảm rủi ro.',
         ];
+    }
+
+    private function determineManualNextRunAt(array $job, DateTimeImmutable $scheduledAt, DateTimeImmutable $now): string
+    {
+        if ($scheduledAt > $now) {
+            return $scheduledAt->format('Y-m-d H:i:s');
+        }
+
+        return $this->calculateNextRun(
+            (string) $job['cron_expression'],
+            (string) $job['timezone'],
+            $now
+        );
     }
 
     private function successWindow(int $accountId, string $intervalSql): array

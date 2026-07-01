@@ -34,6 +34,7 @@
                         <td>
                             <div><?= e($log['account_name'] ?? 'N/A') ?></div>
                             <div class="small muted"><?= e($log['group_title'] ?? 'N/A') ?></div>
+                            <div class="small muted">Topic đích: <?= e($log['target_topic_label'] ?? 'General') ?></div>
                         </td>
                         <td>
                             <div><?= e(fmt_datetime($log['sent_at'])) ?></div>
@@ -43,6 +44,11 @@
                         <td>
                             <?php if (!empty($log['error_message'])): ?>
                                 <div class="small" style="color:#b91c1c;"><?= e($log['error_message']) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($log['actual_topic_label'])): ?>
+                                <div class="small" style="margin-bottom:6px;color:<?= !empty($log['topic_mismatch']) ? '#b91c1c' : '#0f766e' ?>;">
+                                    Vào topic thực tế: <?= e($log['actual_topic_label']) ?>
+                                </div>
                             <?php endif; ?>
                             <?php if (!empty($log['response_payload'])): ?>
                                 <div class="small mono"><?= e(mb_substr($log['response_payload'], 0, 240)) ?></div>

@@ -6,8 +6,10 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Core\Request;
+use App\Core\Response;
 use App\Models\TelegramAccount;
 use App\Models\TelegramGroup;
+use App\Services\TelegramService;
 
 class TelegramGroupController extends Controller
 {
@@ -112,6 +114,38 @@ class TelegramGroupController extends Controller
 
         $this->groups->deleteById((int) $group['id']);
         $this->redirectWith('/groups', success: 'Đã xóa nhóm Telegram.');
+    }
+
+    public function topics(Request $request): void
+    {
+        $userId = (int) auth()->id();
+        $accountId = (int) $request->query('account_id');
+        $peer = trim((string) $request->query('peer_identifier'));
+
+        if ($accountId <= 0 || $peer === '') {
+            Response::json([
+                'ok' => false,
+                'message' => 'Bạn cần chọn account và nhập ID nhóm trước khi tải topic.',
+            ], 422);
+        }
+
+        $account = $this->accounts->findForUser($accountId, $userId);
+        if ($account === null) {
+            abort404();
+        }
+
+        try {
+            $topics = (new TelegramService())->getForumTopics($account, $peer);
+            Response::json([
+                'ok' => true,
+                'topics' => $topics,
+            ]);
+        } catch (\Throwable $exception) {
+            Response::json([
+                'ok' => false,
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
     }
 
     private function ensureOwnedAccount(int $accountId, int $userId): void

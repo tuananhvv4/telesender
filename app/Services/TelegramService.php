@@ -63,14 +63,54 @@ class TelegramService
         $api = $this->client($account);
         $api->start();
 
+        $replyToTopicId = $topicId !== null && $topicId > 1 ? $topicId : null;
+
         $result = $api->sendMessage(
             peer: $peer,
             message: $message,
             parseMode: $this->parseMode($parseMode),
-            topMsgId: $topicId
+            replyToMsgId: $replyToTopicId,
+            topMsgId: $replyToTopicId
         );
 
         return is_array($result) ? $result : ['result' => $result];
+    }
+
+    public function getForumTopics(array $account, string $peer): array
+    {
+        $api = $this->client($account);
+        $api->start();
+
+        $result = $api->messages->getForumTopics(
+            peer: $peer,
+            offset_date: 0,
+            offset_id: 0,
+            offset_topic: 0,
+            limit: 100
+        );
+
+        $topics = [];
+        foreach ((array) ($result['topics'] ?? []) as $topic) {
+            $internalId = isset($topic['id']) ? (int) $topic['id'] : null;
+            if ($internalId === 1) {
+                continue;
+            }
+
+            $topicId = $internalId;
+
+            if ($topicId === null) {
+                continue;
+            }
+
+            $topics[] = [
+                'id' => $topicId,
+                'internal_id' => $internalId,
+                'top_message' => isset($topic['top_message']) ? (int) $topic['top_message'] : null,
+                'title' => (string) ($topic['title'] ?? ('Topic #' . $topicId)),
+            ];
+        }
+
+        return $topics;
     }
 
     public function getSessionFile(array $account): string

@@ -35,8 +35,25 @@
                     <input class="input mono" id="peer_identifier" type="text" name="peer_identifier" value="<?= e($editGroup['peer_identifier'] ?? '') ?>" placeholder="Ví dụ: -1001234567890" required>
                 </div>
                 <div class="field">
-                    <label for="topic_id">Topic ID / top_msg_id (tùy chọn)</label>
-                    <input class="input mono" id="topic_id" type="text" name="topic_id" value="<?= e(isset($editGroup['topic_id']) && $editGroup['topic_id'] !== null ? (string) $editGroup['topic_id'] : '') ?>" placeholder="Ví dụ: 2780362 hoặc dán link topic">
+                    <label for="topic_selector">Chọn topic (tùy chọn)</label>
+                    <div class="helper-row">
+                        <button class="button secondary" id="load_topics_button" type="button">Tải topic từ Telegram</button>
+                        <span class="helper-text">Chọn account + nhập ID nhóm trước, rồi bấm tải danh sách topic thật. Hệ thống sẽ lưu đúng mã `top message` để gửi vào đúng topic.</span>
+                    </div>
+                    <select
+                        class="select"
+                        id="topic_selector"
+                        data-current-topic-id="<?= e(isset($editGroup['topic_id']) && $editGroup['topic_id'] !== null ? (string) $editGroup['topic_id'] : '') ?>"
+                        data-current-topic-title="<?= e($editGroup['topic_title'] ?? '') ?>"
+                    >
+                        <option value="">Topic chung / General</option>
+                        <?php if (!empty($editGroup['topic_id'])): ?>
+                            <option value="<?= e((string) $editGroup['topic_id']) ?>" selected>
+                                <?= e($editGroup['topic_title'] ?: ('Topic #' . $editGroup['topic_id'])) ?>
+                            </option>
+                        <?php endif; ?>
+                    </select>
+                    <input type="hidden" id="topic_id" name="topic_id" value="<?= e(isset($editGroup['topic_id']) && $editGroup['topic_id'] !== null ? (string) $editGroup['topic_id'] : '') ?>">
                 </div>
                 <div class="field">
                     <label for="topic_title">Tên topic (tùy chọn)</label>
@@ -124,3 +141,94 @@
         </div>
     </section>
 </section>
+<script>
+const accountField = document.getElementById('telegram_account_id');
+const peerField = document.getElementById('peer_identifier');
+const topicButton = document.getElementById('load_topics_button');
+const topicSelector = document.getElementById('topic_selector');
+const topicIdField = document.getElementById('topic_id');
+const topicTitleField = document.getElementById('topic_title');
+
+function syncTopicFields() {
+    const selected = topicSelector.options[topicSelector.selectedIndex];
+    topicIdField.value = topicSelector.value;
+    topicTitleField.value = topicSelector.value === '' ? '' : selected.text.replace(/^Topic:\s*/, '').trim();
+}
+
+function normalizeTopicTitle(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+topicSelector?.addEventListener('change', syncTopicFields);
+
+topicButton?.addEventListener('click', async () => {
+    const accountId = accountField.value;
+    const peerIdentifier = peerField.value.trim();
+
+    if (!accountId || !peerIdentifier) {
+        alert('Hãy chọn account và nhập ID nhóm trước khi tải topic.');
+        return;
+    }
+
+    topicButton.disabled = true;
+    topicButton.textContent = 'Đang tải...';
+
+    try {
+        const url = new URL('<?= e(url('/groups/topics')) ?>');
+        url.searchParams.set('account_id', accountId);
+        url.searchParams.set('peer_identifier', peerIdentifier);
+
+        const response = await fetch(url.toString(), {
+            headers: {
+                'Accept': 'application/json',
+            },
+        });
+        const payload = await response.json();
+
+        if (!response.ok || !payload.ok) {
+            throw new Error(payload.message || 'Không tải được danh sách topic.');
+        }
+
+        const currentTopicId = topicSelector.dataset.currentTopicId || topicIdField.value;
+        const currentTopicTitle = topicSelector.dataset.currentTopicTitle || topicTitleField.value;
+        const currentGeneral = topicSelector.value === '';
+        topicSelector.innerHTML = '';
+
+        const generalOption = document.createElement('option');
+        generalOption.value = '';
+        generalOption.textContent = 'Topic chung / General';
+        topicSelector.appendChild(generalOption);
+
+        for (const topic of payload.topics) {
+            const option = document.createElement('option');
+            option.value = String(topic.id);
+            option.textContent = topic.title;
+            if (String(topic.id) === String(currentTopicId)) {
+                option.selected = true;
+            }
+            topicSelector.appendChild(option);
+        }
+
+        if (topicSelector.value === '' && currentTopicTitle) {
+            const matchedByTitle = Array.from(topicSelector.options).find((option) => {
+                return normalizeTopicTitle(option.textContent) === normalizeTopicTitle(currentTopicTitle);
+            });
+
+            if (matchedByTitle) {
+                topicSelector.value = matchedByTitle.value;
+            }
+        }
+
+        if (currentGeneral) {
+            topicSelector.value = '';
+        }
+
+        syncTopicFields();
+    } catch (error) {
+        alert(error.message || 'Không tải được danh sách topic.');
+    } finally {
+        topicButton.disabled = false;
+        topicButton.textContent = 'Tải topic từ Telegram';
+    }
+});
+</script>

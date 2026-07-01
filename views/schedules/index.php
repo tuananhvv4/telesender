@@ -169,6 +169,11 @@
                         <td>
                             <div class="inline-actions">
                                 <a class="button secondary" href="<?= e(url('/schedules?edit=' . $schedule['id'])) ?>">Sửa</a>
+                                <form method="post" action="<?= e(url('/schedules/send-now')) ?>">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="id" value="<?= e((string) $schedule['id']) ?>">
+                                    <button class="button secondary" type="submit">Gửi ngay</button>
+                                </form>
                                 <form method="post" action="<?= e(url('/schedules/toggle')) ?>">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= e((string) $schedule['id']) ?>">
