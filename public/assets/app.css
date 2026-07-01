@@ -515,6 +515,20 @@ textarea {
   gap: 10px;
 }
 
+.account-health-card {
+  gap: 14px;
+}
+
+.account-health-grid {
+  gap: 12px;
+}
+
+.account-health-grid .hint-box strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 1rem;
+}
+
 .helper-row {
   display: flex;
   flex-wrap: wrap;

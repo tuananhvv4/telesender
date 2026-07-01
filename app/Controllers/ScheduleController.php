@@ -40,6 +40,7 @@ class ScheduleController extends Controller
         $schedules = $this->schedules->listForUser($userId);
         $scheduleAnalyses = [];
         $scheduleSummaries = [];
+        $accountScheduleAnalyses = [];
 
         if ($editId > 0) {
             $editSchedule = $this->schedules->findForUser($editId, $userId);
@@ -51,6 +52,23 @@ class ScheduleController extends Controller
                 (string) $schedule['timezone']
             );
             $scheduleSummaries[(int) $schedule['id']] = $builder->summaryFromSchedule($schedule);
+            $accountId = (int) ($schedule['telegram_account_id'] ?? 0);
+
+            if ($accountId > 0) {
+                $accountScheduleAnalyses[$accountId]['account_id'] = $accountId;
+                $accountScheduleAnalyses[$accountId]['account_name'] = (string) ($schedule['account_name'] ?? ('Account #' . $accountId));
+                $accountScheduleAnalyses[$accountId]['schedules'][] = $schedule;
+            }
+        }
+
+        foreach ($accountScheduleAnalyses as $accountId => $accountData) {
+            $accountScheduleAnalyses[$accountId] = array_merge(
+                [
+                    'account_id' => $accountId,
+                    'account_name' => (string) ($accountData['account_name'] ?? ('Account #' . $accountId)),
+                ],
+                $scheduler->analyzeAccountScheduleRisk((array) ($accountData['schedules'] ?? []))
+            );
         }
 
         $this->render('schedules/index', [
@@ -64,6 +82,7 @@ class ScheduleController extends Controller
             'schedulePresets' => (new PresetService(app()->db()))->schedulePresets(),
             'scheduleAnalyses' => $scheduleAnalyses,
             'scheduleSummaries' => $scheduleSummaries,
+            'accountScheduleAnalyses' => array_values($accountScheduleAnalyses),
             'safetyRules' => config('safety'),
             'scheduleModes' => $builder->modeOptions(),
             'formScheduleState' => $builder->formDataFromSchedule($editSchedule, (string) config('app.timezone', 'Asia/Ho_Chi_Minh')),

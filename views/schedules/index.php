@@ -364,6 +364,90 @@ $weekdayOptions = [
             </table>
         </div>
     </section>
+
+    <?php if (!empty($accountScheduleAnalyses)): ?>
+        <section class="panel">
+            <div class="panel-header">
+                <h2 class="panel-title">Đánh giá tổng theo account</h2>
+                <p class="panel-copy">Phần này cộng dồn tất cả schedule active của từng account để dự đoán nguy cơ bị queue hoặc bị guard dời lịch.</p>
+            </div>
+            <div class="panel-body">
+                <div class="grid grid-auto">
+                    <?php foreach ($accountScheduleAnalyses as $accountAnalysis): ?>
+                        <?php
+                        $accountRiskBadgeClass = match ($accountAnalysis['risk'] ?? 'safe') {
+                            'safe' => 'success',
+                            'medium' => 'warning',
+                            default => 'danger',
+                        };
+                        $accountRiskLabel = match ($accountAnalysis['risk'] ?? 'safe') {
+                            'safe' => 'Ổn định',
+                            'medium' => 'Có thể queue',
+                            default => 'Nguy cơ dời lịch',
+                        };
+                        ?>
+                        <article class="card stat-card account-health-card">
+                            <div class="inline-actions" style="justify-content: space-between; align-items: flex-start;">
+                                <div>
+                                    <strong><?= e((string) ($accountAnalysis['account_name'] ?? '')) ?></strong>
+                                    <div class="small muted">
+                                        <?= e((string) ($accountAnalysis['active_schedule_count'] ?? 0)) ?> lịch đang chạy
+                                        <?php if ((int) ($accountAnalysis['paused_schedule_count'] ?? 0) > 0): ?>
+                                            · <?= e((string) $accountAnalysis['paused_schedule_count']) ?> lịch tạm dừng
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <span class="badge <?= e($accountRiskBadgeClass) ?>"><?= e($accountRiskLabel) ?></span>
+                            </div>
+
+                            <div class="grid grid-2 account-health-grid">
+                                <div class="hint-box">
+                                    <div class="small muted">24h tới</div>
+                                    <strong><?= e((string) ($accountAnalysis['runs_per_day'] ?? 0)) ?> lần chạy</strong>
+                                </div>
+                                <div class="hint-box">
+                                    <div class="small muted">Khoảng cách ngắn nhất</div>
+                                    <strong><?= e(($accountAnalysis['min_gap_minutes'] ?? null) !== null ? (string) $accountAnalysis['min_gap_minutes'] . ' phút' : '-') ?></strong>
+                                </div>
+                                <div class="hint-box">
+                                    <div class="small muted">Đỉnh tải 1 giờ</div>
+                                    <strong><?= e((string) ($accountAnalysis['max_runs_per_hour'] ?? 0)) ?> lần/giờ</strong>
+                                </div>
+                                <div class="hint-box">
+                                    <div class="small muted">Cặp mốc quá sát</div>
+                                    <strong><?= e((string) ($accountAnalysis['conflict_pairs'] ?? 0)) ?></strong>
+                                </div>
+                            </div>
+
+                            <div class="small muted"><?= e((string) ($accountAnalysis['message'] ?? '')) ?></div>
+
+                            <div class="small muted">
+                                <?php if (!empty($accountAnalysis['queue_likely'])): ?>
+                                    Account này có khả năng bị xếp hàng hoặc dời lịch khi cron chạy thực tế.
+                                <?php else: ?>
+                                    Các mốc hiện tại đang khớp tốt với giới hạn an toàn theo account.
+                                <?php endif; ?>
+                            </div>
+
+                            <?php if (!empty($accountAnalysis['next_occurrences'])): ?>
+                                <div class="small muted">Các lượt gần nhất:
+                                    <?php
+                                    $previewParts = [];
+                                    foreach ((array) $accountAnalysis['next_occurrences'] as $occurrence) {
+                                        $previewParts[] = (string) ($occurrence['label'] ?? '')
+                                            . ' · '
+                                            . (string) ($occurrence['group_title'] ?? '');
+                                    }
+                                    ?>
+                                    <?= e(implode(' | ', $previewParts)) ?>
+                                </div>
+                            <?php endif; ?>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        </section>
+    <?php endif; ?>
 </section>
 
 <script>

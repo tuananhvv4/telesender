@@ -171,6 +171,106 @@ class SchedulerService
         ];
     }
 
+    public function analyzeAccountScheduleRisk(array $schedules): array
+    {
+        $activeSchedules = array_values(array_filter(
+            $schedules,
+            static fn (array $schedule): bool => (string) ($schedule['status'] ?? 'active') === 'active'
+        ));
+
+        $pausedCount = count($schedules) - count($activeSchedules);
+        $minGapLimit = (int) config('safety.account_limits.min_minutes_between_sends', 8);
+        $hourlyLimit = (int) config('safety.account_limits.max_success_per_hour', 6);
+        $dailyLimit = (int) config('safety.account_limits.max_success_per_day', 30);
+
+        if ($activeSchedules === []) {
+            return [
+                'risk' => 'safe',
+                'message' => 'Chưa có schedule active nào trên account này.',
+                'active_schedule_count' => 0,
+                'paused_schedule_count' => $pausedCount,
+                'runs_per_day' => 0,
+                'min_gap_minutes' => null,
+                'max_runs_per_hour' => 0,
+                'conflict_pairs' => 0,
+                'same_minute_pairs' => 0,
+                'queue_likely' => false,
+                'next_occurrences' => [],
+            ];
+        }
+
+        $occurrences = $this->collectAccountOccurrences($activeSchedules);
+        $runsPerDay = count($occurrences);
+        $minGapMinutes = null;
+        $conflictPairs = 0;
+        $sameMinutePairs = 0;
+
+        for ($i = 1, $length = count($occurrences); $i < $length; $i++) {
+            $gap = (int) floor(($occurrences[$i]['utc']->getTimestamp() - $occurrences[$i - 1]['utc']->getTimestamp()) / 60);
+            $minGapMinutes = $minGapMinutes === null ? $gap : min($minGapMinutes, $gap);
+
+            if ($gap < $minGapLimit) {
+                $conflictPairs++;
+            }
+
+            if ($gap === 0) {
+                $sameMinutePairs++;
+            }
+        }
+
+        $maxRunsPerHour = 0;
+        $windowStart = 0;
+        $countOccurrences = count($occurrences);
+
+        for ($windowEnd = 0; $windowEnd < $countOccurrences; $windowEnd++) {
+            while (
+                $windowStart < $windowEnd &&
+                ($occurrences[$windowEnd]['utc']->getTimestamp() - $occurrences[$windowStart]['utc']->getTimestamp()) >= 3600
+            ) {
+                $windowStart++;
+            }
+
+            $maxRunsPerHour = max($maxRunsPerHour, $windowEnd - $windowStart + 1);
+        }
+
+        $queueLikely = ($minGapMinutes !== null && $minGapMinutes < $minGapLimit)
+            || $maxRunsPerHour > $hourlyLimit
+            || $runsPerDay > $dailyLimit;
+
+        $risk = 'safe';
+        $message = 'Tổng lịch của account này đang nằm trong giới hạn an toàn.';
+
+        if ($sameMinutePairs > 0 || $maxRunsPerHour > $hourlyLimit || $runsPerDay > $dailyLimit) {
+            $risk = 'high';
+            $message = 'Có dấu hiệu quá tải theo account. Một số lịch có thể bị dời bởi hàng đợi hoặc guard an toàn.';
+        } elseif ($conflictPairs > 0) {
+            $risk = 'medium';
+            $message = 'Một vài mốc giờ đang quá sát nhau trên cùng account. App sẽ phải xếp hàng để giữ khoảng cách an toàn.';
+        }
+
+        return [
+            'risk' => $risk,
+            'message' => $message,
+            'active_schedule_count' => count($activeSchedules),
+            'paused_schedule_count' => $pausedCount,
+            'runs_per_day' => $runsPerDay,
+            'min_gap_minutes' => $minGapMinutes,
+            'max_runs_per_hour' => $maxRunsPerHour,
+            'conflict_pairs' => $conflictPairs,
+            'same_minute_pairs' => $sameMinutePairs,
+            'queue_likely' => $queueLikely,
+            'next_occurrences' => array_map(
+                static fn (array $occurrence): array => [
+                    'label' => $occurrence['local']->format('d/m H:i'),
+                    'group_title' => (string) ($occurrence['group_title'] ?? ''),
+                    'template_name' => (string) ($occurrence['template_name'] ?? ''),
+                    'timezone' => (string) ($occurrence['timezone'] ?? ''),
+                ],
+                array_slice($occurrences, 0, 6)
+            ),
+        ];
+    }
+
     private function lockJob(int $jobId): bool
     {
         $statement = $this->db->query(
@@ -182,6 +282,50 @@ class SchedulerService
         );
 
         return $statement->rowCount() === 1;
+    }
+
+    private function collectAccountOccurrences(array $schedules): array
+    {
+        $nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $horizonUtc = $nowUtc->modify('+24 hours');
+        $occurrences = [];
+
+        foreach ($schedules as $schedule) {
+            $expression = trim((string) ($schedule['cron_expression'] ?? ''));
+            $timezone = trim((string) ($schedule['timezone'] ?? 'UTC'));
+
+            if ($expression === '' || $timezone === '') {
+                continue;
+            }
+
+            $cursor = $nowUtc;
+
+            for ($i = 0; $i < 120; $i++) {
+                $nextLocal = $this->cron->nextRun($expression, $cursor, $timezone);
+                $nextUtc = $nextLocal->setTimezone(new DateTimeZone('UTC'));
+
+                if ($nextUtc > $horizonUtc) {
+                    break;
+                }
+
+                $occurrences[] = [
+                    'utc' => $nextUtc,
+                    'local' => $nextLocal,
+                    'group_title' => $schedule['group_title'] ?? null,
+                    'template_name' => $schedule['template_name'] ?? null,
+                    'timezone' => $timezone,
+                ];
+
+                $cursor = $nextUtc;
+            }
+        }
+
+        usort(
+            $occurrences,
+            static fn (array $left, array $right): int => $left['utc'] <=> $right['utc']
+        );
+
+        return $occurrences;
     }
 
     private function normalizeAccountQueue(array $jobs, DateTimeImmutable $now): array
