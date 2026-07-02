@@ -546,7 +546,8 @@ class SchedulerService
     private function guardDispatch(array $job, DateTimeImmutable $retryAt, string $reason, DateTimeImmutable $now, bool $manual = false): array
     {
         $requestId = 'guard_' . bin2hex(random_bytes(6));
-        $nextRunAt = $retryAt->format('Y-m-d H:i:s');
+        $accountCooldownUntil = $retryAt->format('Y-m-d H:i:s');
+        $nextRunAt = $accountCooldownUntil;
 
         if ($manual) {
             $currentNextRunAt = $this->nullableDate((string) ($job['next_run_at'] ?? ''));
@@ -555,7 +556,7 @@ class SchedulerService
             }
         }
 
-        $this->db->transaction(function (Database $db) use ($job, $requestId, $reason, $now, $nextRunAt): void {
+        $this->db->transaction(function (Database $db) use ($job, $requestId, $reason, $now, $nextRunAt, $accountCooldownUntil): void {
             $db->insert('dispatch_logs', [
                 'user_id' => (int) $job['user_id'],
                 'schedule_job_id' => (int) $job['id'],
@@ -580,7 +581,7 @@ class SchedulerService
             ], 'id = :id', ['id' => (int) $job['id']]);
 
             $db->update('telegram_accounts', [
-                'cooldown_until' => $nextRunAt,
+                'cooldown_until' => $accountCooldownUntil,
                 'cooldown_reason' => $reason,
                 'updated_at' => $now->format('Y-m-d H:i:s'),
             ], 'id = :id', ['id' => (int) $job['telegram_account_id']]);
