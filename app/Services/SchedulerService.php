@@ -73,7 +73,7 @@ class SchedulerService
         return $results;
     }
 
-    public function dispatchScheduleNow(int $scheduleId, int $userId): array
+    public function dispatchScheduleNow(int $scheduleId, int $userId, bool $force = false): array
     {
         $job = $this->db->fetch(
             'SELECT sj.*, ta.name AS account_name, ta.phone_number, ta.session_name, ta.session_status,
@@ -116,7 +116,7 @@ class SchedulerService
             ];
         }
 
-        return $this->dispatchOne($job, new DateTimeImmutable('now', new DateTimeZone('UTC')), true);
+        return $this->dispatchOne($job, new DateTimeImmutable('now', new DateTimeZone('UTC')), true, $force);
     }
 
     public function analyzeScheduleRisk(string $expression, string $timezone): array
@@ -273,6 +273,13 @@ class SchedulerService
         ];
     }
 
+    public function explainManualDispatchGuard(array $job, ?DateTimeImmutable $now = null): ?array
+    {
+        $now ??= new DateTimeImmutable('now', new DateTimeZone('UTC'));
+
+        return $this->determineGuard($job, $now);
+    }
+
     private function lockJob(int $jobId): bool
     {
         $statement = $this->db->query(
@@ -380,11 +387,11 @@ class SchedulerService
         return $jobs;
     }
 
-    private function dispatchOne(array $job, ?DateTimeImmutable $now = null, bool $manual = false): array
+    private function dispatchOne(array $job, ?DateTimeImmutable $now = null, bool $manual = false, bool $force = false): array
     {
         $now ??= new DateTimeImmutable('now', new DateTimeZone('UTC'));
         $scheduledAt = $this->nullableDate((string) ($job['next_run_at'] ?? '')) ?? $now;
-        $guard = $this->determineGuard($job, $now);
+        $guard = $force ? null : $this->determineGuard($job, $now);
 
         if ($guard !== null) {
             return $this->guardDispatch($job, $guard['retry_at'], $guard['reason'], $now, $manual);

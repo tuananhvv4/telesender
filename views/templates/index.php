@@ -127,87 +127,85 @@
             </form>
         </section>
 
-        <div class="stack template-side-column">
-            <section class="card template-preview-card">
-                <div class="builder-block-head">
-                    <div>
-                        <h2 class="section-title">Xem trước khi gửi</h2>
-                    </div>
+        <section class="card template-preview-card">
+            <div class="builder-block-head">
+                <div>
+                    <h2 class="section-title">Xem trước khi gửi</h2>
                 </div>
+            </div>
 
-                <div class="list template-preview-list">
-                    <div class="list-item" id="template_preview_issues_item" hidden>
-                        <strong>Lưu ý</strong>
-                        <div class="stack" id="template_preview_issues"></div>
-                    </div>
-                    <div class="list-item">
-                        <strong>Xem trước nội dung</strong>
-                        <div class="template-preview-surface" id="template_preview_surface">Nhập nội dung hoặc chèn emoji tùy chỉnh để xem trước.</div>
-                    </div>
-                    <div class="list-item">
-                        <strong>HTML gửi lên Telegram</strong>
-                        <pre class="template-preview-code mono" id="template_preview_compiled">-</pre>
-                    </div>
+            <div class="list template-preview-list">
+                <div class="list-item" id="template_preview_issues_item" hidden>
+                    <strong>Lưu ý</strong>
+                    <div class="stack" id="template_preview_issues"></div>
                 </div>
-            </section>
-
-            <section class="panel template-library-panel">
-                <div class="panel-header">
-                    <div>
-                        <h2 class="panel-title">Danh sách mẫu tin nhắn</h2>
-                    </div>
-                    <form class="toolbar-form" method="get" action="<?= e(url('/templates')) ?>">
-                        <?php if ($editTemplate): ?>
-                            <input type="hidden" name="edit" value="<?= e((string) $editTemplate['id']) ?>">
-                        <?php endif; ?>
-                        <?php if ((int) request()->query('per_page', 0) > 0): ?>
-                            <input type="hidden" name="per_page" value="<?= e((string) request()->query('per_page')) ?>">
-                        <?php endif; ?>
-                        <div class="toolbar-search">
-                            <input class="input" type="text" name="q" value="<?= e($searchQuery ?? '') ?>" placeholder="Tìm theo tên mẫu, nội dung, nhãn, chế độ parse...">
-                            <button class="button secondary" type="submit">Lọc</button>
-                            <?php if (($searchQuery ?? '') !== ''): ?>
-                                <?php $resetUrl = $editTemplate ? url('/templates?edit=' . $editTemplate['id']) : url('/templates'); ?>
-                                <a class="button secondary" href="<?= e($resetUrl) ?>">Xóa lọc</a>
-                            <?php endif; ?>
-                        </div>
-                    </form>
+                <div class="list-item">
+                    <strong>Xem trước nội dung</strong>
+                    <div class="template-preview-surface" id="template_preview_surface">Nhập nội dung hoặc chèn emoji tùy chỉnh để xem trước.</div>
                 </div>
-                <div class="panel-body list">
-                    <?php foreach ($templates as $template): ?>
-                        <article class="list-item template-library-item">
-                            <div class="template-library-head">
-                                <div>
-                                    <strong><?= e($template['name']) ?></strong>
-                                    <div class="small muted mono"><?= e($template['parse_mode']) ?></div>
-                                </div>
-                                <div class="inline-actions">
-                                    <?php if (!empty($template['label_name'])): ?>
-                                        <span class="badge"><?= e($template['label_name']) ?></span>
-                                    <?php endif; ?>
-                                    <span class="badge <?= (int) $template['is_active'] === 1 ? 'success' : 'warning' ?>"><?= (int) $template['is_active'] === 1 ? 'Đang bật' : 'Tạm tắt' ?></span>
-                                </div>
-                            </div>
-                            <p class="template-library-preview"><?= nl2br(e(mb_substr($templatePreviewBodies[(int) $template['id']] ?? $template['body'], 0, 240))) ?></p>
-                            <div class="inline-actions">
-                                <a class="button secondary" href="<?= e(url('/templates?edit=' . $template['id'])) ?>">Sửa</a>
-                                <form method="post" action="<?= e(url('/templates/delete')) ?>">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="id" value="<?= e((string) $template['id']) ?>">
-                                    <button class="button danger" type="submit">Xóa</button>
-                                </form>
-                            </div>
-                        </article>
-                    <?php endforeach; ?>
-                    <?php if ($templates === []): ?>
-                        <div class="muted">Chưa có mẫu tin nhắn nào.</div>
-                    <?php endif; ?>
-                    <?php $perPageOptions = [10, 15, 20, 30, 50]; ?>
-                    <?php require base_path('views/partials/pagination.php'); ?>
+                <div class="list-item">
+                    <strong>HTML gửi lên Telegram</strong>
+                    <pre class="template-preview-code mono" id="template_preview_compiled">-</pre>
                 </div>
-            </section>
-        </div>
+            </div>
+        </section>
     </div>
+
+    <section class="panel template-library-panel">
+        <div class="panel-header">
+            <div>
+                <h2 class="panel-title">Danh sách mẫu tin nhắn</h2>
+            </div>
+            <form class="toolbar-form" method="get" action="<?= e(url('/templates')) ?>">
+                <?php if ($editTemplate): ?>
+                    <input type="hidden" name="edit" value="<?= e((string) $editTemplate['id']) ?>">
+                <?php endif; ?>
+                <?php if ((int) request()->query('per_page', 0) > 0): ?>
+                    <input type="hidden" name="per_page" value="<?= e((string) request()->query('per_page')) ?>">
+                <?php endif; ?>
+                <div class="toolbar-search">
+                    <input class="input" type="text" name="q" value="<?= e($searchQuery ?? '') ?>" placeholder="Tìm theo tên mẫu, nội dung, nhãn, chế độ parse...">
+                    <button class="button secondary" type="submit">Lọc</button>
+                    <?php if (($searchQuery ?? '') !== ''): ?>
+                        <?php $resetUrl = $editTemplate ? url('/templates?edit=' . $editTemplate['id']) : url('/templates'); ?>
+                        <a class="button secondary" href="<?= e($resetUrl) ?>">Xóa lọc</a>
+                    <?php endif; ?>
+                </div>
+            </form>
+        </div>
+        <div class="panel-body list">
+            <?php foreach ($templates as $template): ?>
+                <article class="list-item template-library-item">
+                    <div class="template-library-head">
+                        <div>
+                            <strong><?= e($template['name']) ?></strong>
+                            <div class="small muted mono"><?= e($template['parse_mode']) ?></div>
+                        </div>
+                        <div class="inline-actions">
+                            <?php if (!empty($template['label_name'])): ?>
+                                <span class="badge"><?= e($template['label_name']) ?></span>
+                            <?php endif; ?>
+                            <span class="badge <?= (int) $template['is_active'] === 1 ? 'success' : 'warning' ?>"><?= (int) $template['is_active'] === 1 ? 'Đang bật' : 'Tạm tắt' ?></span>
+                        </div>
+                    </div>
+                    <p class="template-library-preview"><?= nl2br(e(mb_substr($templatePreviewBodies[(int) $template['id']] ?? $template['body'], 0, 240))) ?></p>
+                    <div class="inline-actions">
+                        <a class="button secondary" href="<?= e(url('/templates?edit=' . $template['id'])) ?>">Sửa</a>
+                        <form method="post" action="<?= e(url('/templates/delete')) ?>">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="id" value="<?= e((string) $template['id']) ?>">
+                            <button class="button danger" type="submit">Xóa</button>
+                        </form>
+                    </div>
+                </article>
+            <?php endforeach; ?>
+            <?php if ($templates === []): ?>
+                <div class="muted">Chưa có mẫu tin nhắn nào.</div>
+            <?php endif; ?>
+            <?php $perPageOptions = [10, 15, 20, 30, 50]; ?>
+            <?php require base_path('views/partials/pagination.php'); ?>
+        </div>
+    </section>
 </section>
 <script>
 const templatePresets = <?= json_encode($templatePresets, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;

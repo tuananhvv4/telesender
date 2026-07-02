@@ -113,6 +113,25 @@ $userInitial = $userName !== '' ? mb_strtoupper(mb_substr($userName, 0, 1)) : 'U
         </main>
     </div>
 
+    <div class="app-modal" id="app_modal" hidden aria-hidden="true">
+        <div class="app-modal-backdrop" data-app-modal-close></div>
+        <div class="app-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="app_modal_title">
+            <div class="app-modal-head">
+                <div>
+                    <h2 class="app-modal-title" id="app_modal_title">Xác nhận</h2>
+                </div>
+                <button class="app-modal-dismiss" type="button" data-app-modal-close aria-label="Đóng popup">
+                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="app-modal-body" id="app_modal_body"></div>
+            <div class="app-modal-actions">
+                <button class="button secondary" type="button" id="app_modal_cancel">Hủy</button>
+                <button class="button danger" type="button" id="app_modal_confirm">Xác nhận</button>
+            </div>
+        </div>
+    </div>
+
     <script>
     (function () {
         const body = document.body;
@@ -194,6 +213,106 @@ $userInitial = $userName !== '' ? mb_strtoupper(mb_substr($userName, 0, 1)) : 'U
 
         applyStoredDesktopState();
         syncToggleState();
+    })();
+
+    (function () {
+        const body = document.body;
+        const modalRoot = document.getElementById('app_modal');
+        const modalTitle = document.getElementById('app_modal_title');
+        const modalBody = document.getElementById('app_modal_body');
+        const cancelButton = document.getElementById('app_modal_cancel');
+        const confirmButton = document.getElementById('app_modal_confirm');
+        const closeButtons = document.querySelectorAll('[data-app-modal-close]');
+        let resolver = null;
+        let responseEventName = null;
+        let activeMode = 'confirm';
+
+        if (!modalRoot || !modalTitle || !modalBody || !cancelButton || !confirmButton) {
+            return;
+        }
+
+        function cleanup(result) {
+            modalRoot.hidden = true;
+            modalRoot.setAttribute('aria-hidden', 'true');
+            body.classList.remove('modal-open');
+
+            if (responseEventName) {
+                document.dispatchEvent(new CustomEvent(responseEventName, {
+                    detail: {
+                        confirmed: result === true,
+                        result: result,
+                    },
+                }));
+                responseEventName = null;
+            }
+
+            if (resolver) {
+                const resolve = resolver;
+                resolver = null;
+                resolve(result);
+            }
+        }
+
+        function openModal(options, mode) {
+            activeMode = mode;
+            responseEventName = options.responseEvent || null;
+            modalTitle.textContent = options.title || (mode === 'alert' ? 'Thông báo' : 'Xác nhận');
+            modalBody.textContent = options.message || '';
+
+            cancelButton.hidden = mode === 'alert';
+            cancelButton.textContent = options.cancelText || 'Hủy';
+
+            confirmButton.textContent = options.confirmText || (mode === 'alert' ? 'Đã hiểu' : 'Xác nhận');
+            confirmButton.className = `button ${options.confirmClass || (mode === 'alert' ? 'primary' : 'danger')}`;
+
+            modalRoot.hidden = false;
+            modalRoot.setAttribute('aria-hidden', 'false');
+            body.classList.add('modal-open');
+
+            setTimeout(() => {
+                confirmButton.focus();
+            }, 10);
+
+            return new Promise((resolve) => {
+                resolver = resolve;
+            });
+        }
+
+        document.addEventListener('app:modal:open', (event) => {
+            const detail = event.detail || {};
+            const options = detail.options || {};
+            options.responseEvent = detail.responseEvent || null;
+            openModal(options, detail.mode === 'alert' ? 'alert' : 'confirm');
+        });
+
+        cancelButton.addEventListener('click', () => {
+            cleanup(false);
+        });
+
+        confirmButton.addEventListener('click', () => {
+            cleanup(true);
+        });
+
+        closeButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                cleanup(false);
+            });
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (modalRoot.hidden) {
+                return;
+            }
+
+            if (event.key === 'Escape') {
+                cleanup(false);
+            }
+
+            if (event.key === 'Enter' && activeMode === 'alert') {
+                cleanup(true);
+            }
+        });
+
     })();
     </script>
 </body>

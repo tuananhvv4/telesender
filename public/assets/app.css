@@ -41,6 +41,10 @@ body {
   color: var(--foreground);
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -339,6 +343,79 @@ body.sidebar-collapsed .sidebar-logout {
   display: block;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.app-modal[hidden] {
+  display: none;
+}
+
+.app-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.app-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(3px);
+}
+
+.app-modal-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 460px);
+  padding: 20px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+}
+
+.app-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.app-modal-title {
+  margin: 0;
+  font-size: 1.18rem;
+  line-height: 1.35;
+}
+
+.app-modal-dismiss {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: white;
+  color: var(--foreground);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.app-modal-body {
+  color: var(--muted);
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
+.app-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
 }
 
 .topbar {
@@ -865,6 +942,7 @@ body.sidebar-collapsed .sidebar-logout {
 }
 
 .template-workspace {
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
   align-items: start;
 }
 
@@ -995,11 +1073,8 @@ body.sidebar-collapsed .sidebar-logout {
   font-weight: 700;
 }
 
-.template-side-column {
-  gap: 20px;
-}
-
 .template-preview-card {
+  align-self: start;
   position: sticky;
   top: 24px;
 }
@@ -1010,6 +1085,10 @@ body.sidebar-collapsed .sidebar-logout {
 
 .template-library-panel .panel-body {
   padding-top: 18px;
+}
+
+.template-library-panel {
+  margin-top: 20px;
 }
 
 .template-library-item {
@@ -1654,5 +1733,14 @@ td {
   .mobile-topbar {
     margin-bottom: 14px;
     padding: 12px 14px;
+  }
+
+  .app-modal {
+    padding: 16px;
+  }
+
+  .app-modal-dialog {
+    padding: 18px;
+    border-radius: 18px;
   }
 }

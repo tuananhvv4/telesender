@@ -42,6 +42,7 @@ class ScheduleController extends Controller
         $schedules = $pageResult['items'];
         $scheduleAnalyses = [];
         $scheduleSummaries = [];
+        $scheduleManualGuards = [];
         $accountScheduleAnalyses = [];
 
         if ($editId > 0) {
@@ -54,6 +55,7 @@ class ScheduleController extends Controller
                 (string) $schedule['timezone']
             );
             $scheduleSummaries[(int) $schedule['id']] = $builder->summaryFromSchedule($schedule);
+            $scheduleManualGuards[(int) $schedule['id']] = $scheduler->explainManualDispatchGuard($schedule);
         }
 
         foreach ($allSchedules as $schedule) {
@@ -87,6 +89,7 @@ class ScheduleController extends Controller
             'schedulePresets' => (new PresetService(app()->db()))->schedulePresets(),
             'scheduleAnalyses' => $scheduleAnalyses,
             'scheduleSummaries' => $scheduleSummaries,
+            'scheduleManualGuards' => $scheduleManualGuards,
             'accountScheduleAnalyses' => array_values($accountScheduleAnalyses),
             'safetyRules' => config('safety'),
             'scheduleModes' => $builder->modeOptions(),
@@ -213,6 +216,7 @@ class ScheduleController extends Controller
     public function sendNow(Request $request): void
     {
         $schedule = $this->schedules->findForUser((int) $request->input('id'), (int) auth()->id());
+        $forceSend = in_array((string) $request->input('force_send', '0'), ['1', 'true', 'on'], true);
 
         if ($schedule === null) {
             abort404();
@@ -221,17 +225,22 @@ class ScheduleController extends Controller
         $scheduler = new SchedulerService(app()->db(), new TelegramService(), new CronExpression());
 
         try {
-            $result = $scheduler->dispatchScheduleNow((int) $schedule['id'], (int) auth()->id());
+            $result = $scheduler->dispatchScheduleNow((int) $schedule['id'], (int) auth()->id(), $forceSend);
         } catch (Exception $exception) {
             $this->redirectWith('/schedules', error: $exception->getMessage());
         }
 
         if (($result['status'] ?? '') === 'success') {
-            $this->redirectWith('/schedules', success: 'Đã gửi ngay schedule này thành công.');
+            $message = $forceSend
+                ? 'Đã ép gửi ngay schedule này thành công. Hãy theo dõi rủi ro cooldown / spam ở các lần gửi tiếp theo.'
+                : 'Đã gửi ngay schedule này thành công.';
+            $this->redirectWith('/schedules', success: $message);
         }
 
         if (($result['status'] ?? '') === 'guarded') {
-            $this->redirectWith('/schedules', error: (string) ($result['error'] ?? 'Schedule đang bị chặn tạm thời bởi cơ chế an toàn.'));
+            $message = (string) ($result['error'] ?? 'Schedule đang bị chặn tạm thời bởi cơ chế an toàn.');
+            $message .= ' Hãy bấm lại "Gửi ngay" và xác nhận rủi ro nếu bạn muốn ép gửi.';
+            $this->redirectWith('/schedules', error: $message);
         }
 
         if (($result['status'] ?? '') === 'locked') {

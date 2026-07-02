@@ -149,6 +149,25 @@
     </div>
 </section>
 <script>
+function requestAppModal(mode, options = {}) {
+    return new Promise((resolve) => {
+        const responseEvent = `app:modal:response:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+        const handleResponse = (event) => {
+            document.removeEventListener(responseEvent, handleResponse);
+            resolve(Boolean(event.detail?.confirmed));
+        };
+
+        document.addEventListener(responseEvent, handleResponse, { once: true });
+        document.dispatchEvent(new CustomEvent('app:modal:open', {
+            detail: {
+                mode,
+                options,
+                responseEvent,
+            },
+        }));
+    });
+}
+
 const accountField = document.getElementById('telegram_account_id');
 const peerField = document.getElementById('peer_identifier');
 const topicButton = document.getElementById('load_topics_button');
@@ -173,7 +192,12 @@ topicButton?.addEventListener('click', async () => {
     const peerIdentifier = peerField.value.trim();
 
     if (!accountId || !peerIdentifier) {
-        alert('Hãy chọn tài khoản và nhập ID nhóm trước khi tải topic.');
+        await requestAppModal('alert', {
+            title: 'Thiếu thông tin',
+            message: 'Hãy chọn tài khoản và nhập ID nhóm trước khi tải topic.',
+            confirmText: 'Đã hiểu',
+            confirmClass: 'primary',
+        });
         return;
     }
 
@@ -232,7 +256,12 @@ topicButton?.addEventListener('click', async () => {
 
         syncTopicFields();
     } catch (error) {
-        alert(error.message || 'Không tải được danh sách topic.');
+        await requestAppModal('alert', {
+            title: 'Không tải được topic',
+            message: error.message || 'Không tải được danh sách topic.',
+            confirmText: 'Đã hiểu',
+            confirmClass: 'primary',
+        });
     } finally {
         topicButton.disabled = false;
         topicButton.textContent = 'Tải topic từ Telegram';

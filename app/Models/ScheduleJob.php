@@ -30,7 +30,8 @@ class ScheduleJob extends Model
     public function listForUser(int $userId): array
     {
         return $this->db()->fetchAll(
-            'SELECT sj.*, ta.name AS account_name, tg.title AS group_title, tg.topic_id, tg.topic_title, mt.name AS template_name
+            'SELECT sj.*, ta.name AS account_name, ta.last_sent_at, ta.cooldown_until, ta.cooldown_reason,
+                    tg.title AS group_title, tg.topic_id, tg.topic_title, mt.name AS template_name
              FROM schedule_jobs sj
              INNER JOIN telegram_accounts ta ON ta.id = sj.telegram_account_id
              INNER JOIN telegram_groups tg ON tg.id = sj.telegram_group_id
@@ -47,7 +48,8 @@ class ScheduleJob extends Model
             'SELECT COUNT(*) AS aggregate
              FROM schedule_jobs
              WHERE user_id = :user_id',
-            'SELECT sj.*, ta.name AS account_name, tg.title AS group_title, tg.topic_id, tg.topic_title, mt.name AS template_name
+            'SELECT sj.*, ta.name AS account_name, ta.last_sent_at, ta.cooldown_until, ta.cooldown_reason,
+                    tg.title AS group_title, tg.topic_id, tg.topic_title, mt.name AS template_name
              FROM schedule_jobs sj
              INNER JOIN telegram_accounts ta ON ta.id = sj.telegram_account_id
              INNER JOIN telegram_groups tg ON tg.id = sj.telegram_group_id

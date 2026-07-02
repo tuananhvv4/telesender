@@ -260,6 +260,7 @@ $weekdayOptions = [
                 <?php foreach ($schedules as $schedule): ?>
                     <?php
                     $analysis = $scheduleAnalyses[(int) $schedule['id']] ?? ['risk' => 'safe', 'message' => '', 'runs_per_day' => 0, 'min_gap_minutes' => null];
+                    $manualGuard = $scheduleManualGuards[(int) $schedule['id']] ?? null;
                     $summary = $scheduleSummaries[(int) $schedule['id']] ?? ('Cron tùy chỉnh: ' . (string) $schedule['cron_expression']);
                     $queueNotice = is_string($schedule['last_error'] ?? null) && str_starts_with((string) $schedule['last_error'], 'Queue:');
                     $riskBadgeClass = match ($analysis['risk']) {
@@ -321,9 +322,15 @@ $weekdayOptions = [
                         <td>
                             <div class="inline-actions">
                                 <a class="button secondary" href="<?= e(url('/schedules?edit=' . $schedule['id'])) ?>">Sửa</a>
-                                <form method="post" action="<?= e(url('/schedules/send-now')) ?>">
+                                <form
+                                    method="post"
+                                    action="<?= e(url('/schedules/send-now')) ?>"
+                                    data-send-now-form
+                                    <?= $manualGuard !== null ? 'data-risk-message="' . e((string) ($manualGuard['reason'] ?? 'Tài khoản đang trong vùng rủi ro an toàn.')) . '"' : '' ?>
+                                >
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= e((string) $schedule['id']) ?>">
+                                    <input type="hidden" name="force_send" value="0" data-force-send-input>
                                     <button class="button secondary" type="submit">Gửi ngay</button>
                                 </form>
                                 <form method="post" action="<?= e(url('/schedules/toggle')) ?>">
@@ -417,6 +424,25 @@ $weekdayOptions = [
 </section>
 
 <script>
+function requestAppModal(mode, options = {}) {
+    return new Promise((resolve) => {
+        const responseEvent = `app:modal:response:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+        const handleResponse = (event) => {
+            document.removeEventListener(responseEvent, handleResponse);
+            resolve(Boolean(event.detail?.confirmed));
+        };
+
+        document.addEventListener(responseEvent, handleResponse, { once: true });
+        document.dispatchEvent(new CustomEvent('app:modal:open', {
+            detail: {
+                mode,
+                options,
+                responseEvent,
+            },
+        }));
+    });
+}
+
 const schedulePresets = <?= json_encode($schedulePresets, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 const scheduleForm = document.getElementById('schedule_form');
 const schedulePresetSelect = document.getElementById('schedule_preset');
@@ -623,5 +649,39 @@ copyPreviewCronButton?.addEventListener('click', async () => {
             copyPreviewCronButton.textContent = 'Sao chép cron';
         }, 1200);
     }
+});
+
+document.querySelectorAll('[data-send-now-form]').forEach((form) => {
+    form.addEventListener('submit', async (event) => {
+        const message = form.getAttribute('data-risk-message') || '';
+        const forceInput = form.querySelector('[data-force-send-input]');
+
+        if (!forceInput) {
+            return;
+        }
+
+        if (message === '') {
+            forceInput.value = '0';
+            return;
+        }
+
+        event.preventDefault();
+
+        const confirmed = await requestAppModal('confirm', {
+            title: 'Xác nhận gửi ngay',
+            message: message + '\n\nNếu tiếp tục, hệ thống sẽ ép gửi ngay và bỏ qua cooldown / giãn cách an toàn ở lần bấm này.',
+            confirmText: 'Vẫn gửi ngay',
+            cancelText: 'Hủy',
+            confirmClass: 'danger',
+        });
+
+        if (!confirmed) {
+            forceInput.value = '0';
+            return;
+        }
+
+        forceInput.value = '1';
+        form.submit();
+    });
 });
 </script>
