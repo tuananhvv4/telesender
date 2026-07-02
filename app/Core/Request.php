@@ -53,6 +53,11 @@ class Request
         return $this->get[$key] ?? $default;
     }
 
+    public function queryParams(): array
+    {
+        return $this->get;
+    }
+
     public function server(string $key, mixed $default = null): mixed
     {
         return $this->server[$key] ?? $default;

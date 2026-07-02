@@ -44,6 +44,53 @@ class DispatchLog extends Model
         return array_map(fn (array $log): array => $this->decorateTopicMeta($log), $logs);
     }
 
+    public function paginateForUser(int $userId, int $page = 1, int $perPage = 50, string $query = ''): array
+    {
+        $bindings = ['user_id' => $userId];
+        $searchSql = '';
+        $query = trim($query);
+
+        if ($query !== '') {
+            $bindings['search'] = '%' . $query . '%';
+            $searchSql = ' AND (
+                dl.status LIKE :search
+                OR dl.request_id LIKE :search
+                OR dl.message_preview LIKE :search
+                OR dl.error_message LIKE :search
+                OR ta.name LIKE :search
+                OR tg.title LIKE :search
+                OR mt.name LIKE :search
+                OR ml.name LIKE :search
+            )';
+        }
+
+        $result = $this->paginateQuery(
+            'SELECT COUNT(*) AS aggregate
+             FROM dispatch_logs dl
+             LEFT JOIN telegram_accounts ta ON ta.id = dl.telegram_account_id
+             LEFT JOIN telegram_groups tg ON tg.id = dl.telegram_group_id
+             LEFT JOIN message_templates mt ON mt.id = dl.message_template_id
+             LEFT JOIN message_labels ml ON ml.id = dl.label_id
+             WHERE dl.user_id = :user_id' . $searchSql,
+            "SELECT dl.*, ta.name AS account_name, tg.title AS group_title, mt.name AS template_name, ml.name AS label_name
+                    , tg.topic_id AS target_topic_id, tg.topic_title AS target_topic_title
+             FROM dispatch_logs dl
+             LEFT JOIN telegram_accounts ta ON ta.id = dl.telegram_account_id
+             LEFT JOIN telegram_groups tg ON tg.id = dl.telegram_group_id
+             LEFT JOIN message_templates mt ON mt.id = dl.message_template_id
+             LEFT JOIN message_labels ml ON ml.id = dl.label_id
+             WHERE dl.user_id = :user_id" . $searchSql . "
+             ORDER BY dl.id DESC",
+            $bindings,
+            $page,
+            $perPage
+        );
+
+        $result['items'] = array_map(fn (array $log): array => $this->decorateTopicMeta($log), $result['items']);
+
+        return $result;
+    }
+
     private function decorateTopicMeta(array $log): array
     {
         $targetTopicId = isset($log['target_topic_id']) && $log['target_topic_id'] !== null

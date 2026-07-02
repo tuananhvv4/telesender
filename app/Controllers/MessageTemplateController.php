@@ -6,15 +6,18 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Core\Request;
+use App\Core\Response;
 use App\Models\MessageLabel;
 use App\Models\MessageTemplate;
+use App\Services\CustomEmojiService;
 use App\Services\PresetService;
 
 class MessageTemplateController extends Controller
 {
     public function __construct(
         private readonly MessageTemplate $templates = new MessageTemplate(),
-        private readonly MessageLabel $labels = new MessageLabel()
+        private readonly MessageLabel $labels = new MessageLabel(),
+        private readonly CustomEmojiService $customEmojiService = new CustomEmojiService()
     ) {
     }
 
@@ -23,6 +26,10 @@ class MessageTemplateController extends Controller
         $userId = (int) auth()->id();
         $editTemplate = null;
         $editId = (int) $request->query('edit', 0);
+        $searchQuery = trim((string) $request->query('q', ''));
+        $perPage = pagination_per_page(15, [10, 15, 20, 30, 50]);
+        $result = $this->templates->paginateForUser($userId, (int) $request->query('page', 1), $perPage, $searchQuery);
+        $templates = $result['items'];
 
         if ($editId > 0) {
             $editTemplate = $this->templates->findForUser($editId, $userId);
@@ -30,10 +37,14 @@ class MessageTemplateController extends Controller
 
         $this->render('templates/index', [
             'title' => 'Message Templates',
-            'templates' => $this->templates->listForUser($userId),
+            'templates' => $templates,
             'labels' => $this->labels->allByUser($userId, 'name ASC'),
             'editTemplate' => $editTemplate,
             'templatePresets' => (new PresetService(app()->db()))->templatePresets(),
+            'customEmojis' => $this->customEmojiService->pickerLibrary($userId),
+            'templatePreviewBodies' => $this->previewBodies($templates, $userId),
+            'pagination' => $result['pagination'],
+            'searchQuery' => $searchQuery,
         ]);
     }
 
@@ -46,12 +57,20 @@ class MessageTemplateController extends Controller
             $this->redirectWith('/templates', error: 'Template name và nội dung tin nhắn là bắt buộc.');
         }
 
+        $parseMode = trim((string) $request->input('parse_mode', 'HTML'));
+
+        try {
+            $this->customEmojiService->ensureTemplateIsValid($body, $parseMode, (int) auth()->id());
+        } catch (\Throwable $exception) {
+            $this->redirectWith('/templates', error: $exception->getMessage());
+        }
+
         $this->templates->create([
             'user_id' => (int) auth()->id(),
             'label_id' => $request->input('label_id') ? (int) $request->input('label_id') : null,
             'name' => $name,
             'body' => $body,
-            'parse_mode' => trim((string) $request->input('parse_mode', 'HTML')),
+            'parse_mode' => $parseMode,
             'is_active' => $request->input('is_active') ? 1 : 0,
             'created_at' => gmdate('Y-m-d H:i:s'),
             'updated_at' => gmdate('Y-m-d H:i:s'),
@@ -75,11 +94,19 @@ class MessageTemplateController extends Controller
             $this->redirectWith('/templates?edit=' . $template['id'], error: 'Template name và nội dung là bắt buộc.');
         }
 
+        $parseMode = trim((string) $request->input('parse_mode', 'HTML'));
+
+        try {
+            $this->customEmojiService->ensureTemplateIsValid($body, $parseMode, (int) auth()->id());
+        } catch (\Throwable $exception) {
+            $this->redirectWith('/templates?edit=' . $template['id'], error: $exception->getMessage());
+        }
+
         $this->templates->updateById((int) $template['id'], [
             'label_id' => $request->input('label_id') ? (int) $request->input('label_id') : null,
             'name' => $name,
             'body' => $body,
-            'parse_mode' => trim((string) $request->input('parse_mode', 'HTML')),
+            'parse_mode' => $parseMode,
             'is_active' => $request->input('is_active') ? 1 : 0,
             'updated_at' => gmdate('Y-m-d H:i:s'),
         ]);
@@ -97,5 +124,35 @@ class MessageTemplateController extends Controller
 
         $this->templates->deleteById((int) $template['id']);
         $this->redirectWith('/templates', success: 'Đã xóa message template.');
+    }
+
+    public function preview(Request $request): void
+    {
+        $body = (string) $request->input('body', '');
+        $parseMode = trim((string) $request->input('parse_mode', 'HTML'));
+        $analysis = $this->customEmojiService->analyzeTemplate($body, $parseMode, (int) auth()->id());
+
+        Response::json([
+            'ok' => true,
+            'issues' => $analysis['issues'],
+            'compiled_html' => $analysis['compiled_html'],
+            'fallback_preview' => $analysis['fallback_preview'],
+            'used_emojis' => $analysis['used_emojis'],
+            'requires_html' => $analysis['requires_html'],
+        ]);
+    }
+
+    private function previewBodies(array $templates, int $userId): array
+    {
+        $previews = [];
+
+        foreach ($templates as $template) {
+            $previews[(int) $template['id']] = $this->customEmojiService->replaceTokensWithFallback(
+                (string) ($template['body'] ?? ''),
+                $userId
+            );
+        }
+
+        return $previews;
     }
 }

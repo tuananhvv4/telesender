@@ -173,3 +173,71 @@ if (!function_exists('fmt_datetime')) {
         return $date->setTimezone(new DateTimeZone($timezone))->format('d/m/Y H:i');
     }
 }
+
+if (!function_exists('pagination_url')) {
+    function pagination_url(int $page, array $overrides = []): string
+    {
+        $query = request()->queryParams();
+        unset($query['page']);
+
+        foreach ($overrides as $key => $value) {
+            if ($value === null || $value === '') {
+                unset($query[$key]);
+                continue;
+            }
+
+            $query[$key] = $value;
+        }
+
+        $query['page'] = max(1, $page);
+        $queryString = http_build_query($query);
+        $base = url(request()->path());
+
+        return $queryString === '' ? $base : $base . '?' . $queryString;
+    }
+}
+
+if (!function_exists('pagination_series')) {
+    function pagination_series(array $pagination, int $side = 1): array
+    {
+        $current = (int) ($pagination['page'] ?? 1);
+        $totalPages = max(1, (int) ($pagination['total_pages'] ?? 1));
+
+        if ($totalPages <= 7) {
+            return range(1, $totalPages);
+        }
+
+        $pages = [1];
+        $start = max(2, $current - $side);
+        $end = min($totalPages - 1, $current + $side);
+
+        if ($start > 2) {
+            $pages[] = '...';
+        }
+
+        for ($page = $start; $page <= $end; $page++) {
+            $pages[] = $page;
+        }
+
+        if ($end < $totalPages - 1) {
+            $pages[] = '...';
+        }
+
+        $pages[] = $totalPages;
+
+        return $pages;
+    }
+}
+
+if (!function_exists('pagination_per_page')) {
+    function pagination_per_page(int $default = 20, array $allowed = [10, 15, 20, 30, 50, 100]): int
+    {
+        $requested = (int) request()->query('per_page', $default);
+
+        if (!in_array($requested, $allowed, true)) {
+            return $default;
+        }
+
+        return $requested;
+    }
+}

@@ -24,6 +24,7 @@ class TelegramGroupController extends Controller
         $userId = (int) auth()->id();
         $editGroup = null;
         $editId = (int) $request->query('edit', 0);
+        $result = $this->groups->paginateForUser($userId, (int) $request->query('page', 1), pagination_per_page(20));
 
         if ($editId > 0) {
             $editGroup = $this->groups->findForUser($editId, $userId);
@@ -31,9 +32,10 @@ class TelegramGroupController extends Controller
 
         $this->render('groups/index', [
             'title' => 'Telegram Groups',
-            'groups' => $this->groups->listForUser($userId),
+            'groups' => $result['items'],
             'accounts' => $this->accounts->listForUser($userId),
             'editGroup' => $editGroup,
+            'pagination' => $result['pagination'],
         ]);
     }
 

@@ -13,6 +13,8 @@ use Throwable;
 
 class SchedulerService
 {
+    private ?CustomEmojiService $customEmojiService = null;
+
     public function __construct(
         private readonly Database $db,
         private readonly TelegramService $telegram,
@@ -402,10 +404,15 @@ class SchedulerService
                 throw new RuntimeException('Telegram account chưa ở trạng thái active.');
             }
 
+            $compiledMessage = $this->customEmojis()->compileForTelegram(
+                (string) $job['body'],
+                (int) $job['user_id']
+            );
+
             $payload = $this->telegram->sendMessage(
                 $job,
                 (string) $job['peer_identifier'],
-                (string) $job['body'],
+                $compiledMessage,
                 (string) $job['parse_mode'],
                 $job['topic_id'] !== null ? (int) $job['topic_id'] : null
             );
@@ -447,7 +454,11 @@ class SchedulerService
                 'label_id' => $job['label_id'] ? (int) $job['label_id'] : null,
                 'request_id' => $requestId,
                 'status' => $status,
-                'message_preview' => mb_substr((string) $job['body'], 0, 500),
+                'message_preview' => mb_substr(
+                    $this->customEmojis()->replaceTokensWithFallback((string) $job['body'], (int) $job['user_id']),
+                    0,
+                    500
+                ),
                 'response_payload' => $payload ? json_encode($payload, JSON_UNESCAPED_UNICODE) : null,
                 'error_message' => $error,
                 'sent_at' => $now->format('Y-m-d H:i:s'),
@@ -679,5 +690,10 @@ class SchedulerService
         $date = $this->nullableDate($value);
 
         return $date !== null && $date <= $now;
+    }
+
+    private function customEmojis(): CustomEmojiService
+    {
+        return $this->customEmojiService ??= new CustomEmojiService();
     }
 }

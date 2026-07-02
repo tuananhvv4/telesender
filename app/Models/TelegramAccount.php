@@ -38,4 +38,22 @@ class TelegramAccount extends Model
             ['user_id' => $userId]
         );
     }
+
+    public function paginateForUser(int $userId, int $page = 1, int $perPage = 20): array
+    {
+        return $this->paginateQuery(
+            'SELECT COUNT(*) AS aggregate
+             FROM telegram_accounts
+             WHERE user_id = :user_id',
+            'SELECT *,
+                (SELECT COUNT(*) FROM telegram_groups WHERE telegram_account_id = telegram_accounts.id) AS groups_count,
+                (SELECT COUNT(*) FROM schedule_jobs WHERE telegram_account_id = telegram_accounts.id) AS schedules_count
+             FROM telegram_accounts
+             WHERE user_id = :user_id
+             ORDER BY id DESC',
+            ['user_id' => $userId],
+            $page,
+            $perPage
+        );
+    }
 }

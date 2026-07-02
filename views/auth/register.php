@@ -1,6 +1,5 @@
 <span class="badge info">TeleSender</span>
 <h1 class="auth-heading">Tạo người dùng mới</h1>
-<p class="auth-copy">Mỗi user sẽ sở hữu các account Telegram, templates, labels và schedules riêng.</p>
 
 <?php if ($error = flash('error')): ?>
     <div class="flash error"><?= e($error) ?></div>

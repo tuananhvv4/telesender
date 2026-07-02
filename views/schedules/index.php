@@ -31,20 +31,16 @@ $weekdayOptions = [
 ?>
 <section class="stack">
     <div class="topbar">
-        <div>
-            <h1 class="page-title">Schedules</h1>
-            <p class="page-subtitle">Tạo lịch bằng giao diện trực quan rồi để app tự sinh cron thực thi ở nền. Vẫn có chế độ nâng cao nếu bạn muốn nhập cron thủ công.</p>
-        </div>
-        <span class="badge info">Visual Builder</span>
+        <h1 class="page-title">Lịch gửi</h1>
     </div>
 
-    <div class="grid grid-2">
-        <section class="card">
-            <h2 class="section-title"><?= $editSchedule ? 'Cập nhật schedule' : 'Tạo schedule mới' ?></h2>
+    <div class="schedule-builder-layout">
+        <section class="card schedule-builder-main">
+            <h2 class="section-title"><?= $editSchedule ? 'Cập nhật lịch gửi' : 'Tạo lịch gửi mới' ?></h2>
             <div class="field" style="margin: 16px 0 18px;">
-                <label for="schedule_preset">Preset schedule</label>
+                <label for="schedule_preset">Lịch cài sẵn</label>
                 <select class="select" id="schedule_preset">
-                    <option value="">Chọn preset để điền nhanh lịch</option>
+                    <option value="">Chọn nhanh mẫu lịch gửi hoặc tự thiết kế</option>
                     <?php foreach ($schedulePresets as $preset): ?>
                         <option value="<?= e($preset['key']) ?>"><?= e($preset['name']) ?> · <?= e($preset['description']) ?></option>
                     <?php endforeach; ?>
@@ -66,14 +62,13 @@ $weekdayOptions = [
                     <div class="builder-block-head">
                         <div>
                             <h3 class="builder-block-title">Thông tin nền</h3>
-                            <p class="builder-block-copy">Chọn account, group, template và kiểu lịch trước khi tinh chỉnh giờ chạy.</p>
                         </div>
                     </div>
                     <div class="schedule-core-grid">
                         <div class="field">
-                            <label for="telegram_account_id">Telegram account</label>
+                            <label for="telegram_account_id">Tài khoản Telegram</label>
                             <select class="select" id="telegram_account_id" name="telegram_account_id" required>
-                                <option value="">Chọn account</option>
+                                <option value="">Chọn tài khoản</option>
                                 <?php foreach ($accounts as $account): ?>
                                     <option value="<?= e((string) $account['id']) ?>" <?= (string) ($editSchedule['telegram_account_id'] ?? '') === (string) $account['id'] ? 'selected' : '' ?>>
                                         <?= e($account['name']) ?>
@@ -83,9 +78,9 @@ $weekdayOptions = [
                         </div>
 
                         <div class="field">
-                            <label for="telegram_group_id">Telegram group</label>
+                            <label for="telegram_group_id">Nhóm Telegram</label>
                             <select class="select" id="telegram_group_id" name="telegram_group_id" required>
-                                <option value="">Chọn group</option>
+                                <option value="">Chọn nhóm</option>
                                 <?php foreach ($groups as $group): ?>
                                     <option value="<?= e((string) $group['id']) ?>" <?= (string) ($editSchedule['telegram_group_id'] ?? '') === (string) $group['id'] ? 'selected' : '' ?>>
                                         <?= e($group['title']) ?>
@@ -101,9 +96,9 @@ $weekdayOptions = [
                         </div>
 
                         <div class="field schedule-field-span-2">
-                            <label for="message_template_id">Message template</label>
+                            <label for="message_template_id">Mẫu tin nhắn</label>
                             <select class="select" id="message_template_id" name="message_template_id" required>
-                                <option value="">Chọn template</option>
+                                <option value="">Chọn mẫu tin nhắn</option>
                                 <?php foreach ($templates as $template): ?>
                                     <option value="<?= e((string) $template['id']) ?>" <?= (string) ($editSchedule['message_template_id'] ?? '') === (string) $template['id'] ? 'selected' : '' ?>>
                                         <?= e($template['name']) ?>
@@ -113,7 +108,7 @@ $weekdayOptions = [
                         </div>
 
                         <div class="field">
-                            <label for="timezone">Timezone</label>
+                            <label for="timezone">Múi giờ</label>
                             <input class="input" id="timezone" type="text" name="timezone" value="<?= e($formTimezone) ?>" required>
                         </div>
 
@@ -134,7 +129,6 @@ $weekdayOptions = [
                     <div class="builder-block-head">
                         <div>
                             <h3 class="builder-block-title">Cấu hình lịch</h3>
-                            <p class="builder-block-copy">Tùy theo kiểu lịch, bạn có thể thêm các mốc giờ chạy cụ thể hoặc chuyển sang chế độ nâng cao.</p>
                         </div>
                     </div>
 
@@ -144,7 +138,6 @@ $weekdayOptions = [
                             <input class="input" id="interval_minutes" type="number" name="interval_minutes" min="5" max="59" value="<?= e((string) $intervalMinutes) ?>">
                             <div class="inline-hint">phút / lần</div>
                         </div>
-                        <p class="small muted">Phù hợp với lịch lặp đều theo phút. Hệ thống khuyên từ 5 phút trở lên để an toàn hơn.</p>
                     </div>
 
                     <div class="field" data-schedule-section="interval_hours">
@@ -205,12 +198,11 @@ $weekdayOptions = [
                     <div class="field" data-schedule-section="advanced">
                         <label for="cron_expression">Cron nâng cao</label>
                         <textarea class="textarea mono" id="cron_expression" name="cron_expression" rows="4" placeholder="Ví dụ: 0 8 * * *&#10;hoặc&#10;30 8 * * 1,2,3,4,5 | 0 20 * * *"><?= e($formCronExpression) ?></textarea>
-                        <p class="small muted">Bạn có thể nhập nhiều cron bằng dấu `|` nếu muốn gom nhiều mốc giờ không cùng phút vào một schedule.</p>
                     </div>
                 </section>
 
                 <div class="actions">
-                    <button class="button primary" type="submit"><?= $editSchedule ? 'Cập nhật schedule' : 'Tạo schedule' ?></button>
+                    <button class="button primary" type="submit"><?= $editSchedule ? 'Cập nhật lịch gửi' : 'Tạo lịch gửi' ?></button>
                     <?php if ($editSchedule): ?>
                         <a class="button secondary" href="<?= e(url('/schedules')) ?>">Tạo mới</a>
                     <?php endif; ?>
@@ -218,14 +210,14 @@ $weekdayOptions = [
             </form>
         </section>
 
-        <section class="card">
-            <h2 class="section-title">Preview lịch chạy</h2>
+        <section class="card schedule-builder-side">
+            <h2 class="section-title">Xem trước lịch chạy</h2>
             <div class="list">
                 <div class="list-item">
                     <strong>Cron thực thi</strong>
                     <div class="inline-actions" style="margin-top: 8px;">
                         <div class="small mono" id="schedule_preview_cron" style="flex:1;">-</div>
-                        <button class="button secondary" id="copy_preview_cron" type="button">Copy cron</button>
+                        <button class="button secondary" id="copy_preview_cron" type="button">Sao chép cron</button>
                     </div>
                 </div>
                 <div class="list-item">
@@ -241,36 +233,27 @@ $weekdayOptions = [
                     <div class="inline-actions" style="margin-top: 8px;">
                         <span class="badge info" id="schedule_preview_risk_badge">Đang tính</span>
                     </div>
-                    <div class="small muted" id="schedule_preview_risk_message" style="margin-top: 8px;">App sẽ tự đánh giá rủi ro dựa trên cron sinh ra.</div>
+                    <div class="small muted" id="schedule_preview_risk_message" style="margin-top: 8px; display:none;"></div>
                 </div>
-            </div>
-
-            <h2 class="section-title" style="margin-top: 22px;">Chế độ gửi an toàn</h2>
-            <div class="list">
-                <div class="list-item">Tối đa <?= e((string) $safetyRules['account_limits']['max_success_per_hour']) ?> lần gửi thành công mỗi giờ cho một account.</div>
-                <div class="list-item">Tối đa <?= e((string) $safetyRules['account_limits']['max_success_per_day']) ?> lần gửi thành công mỗi ngày cho một account.</div>
-                <div class="list-item">Tự giãn cách tối thiểu <?= e((string) $safetyRules['account_limits']['min_minutes_between_sends']) ?> phút giữa 2 lần gửi của cùng account.</div>
-                <div class="list-item">Nếu Telegram trả tín hiệu spam/rate limit, account sẽ tự cooldown khoảng <?= e((string) $safetyRules['account_limits']['spam_cooldown_minutes']) ?> phút.</div>
-                <div class="list-item">Builder mới hỗ trợ gom nhiều mốc giờ khác phút vào một lịch bằng multi-cron nội bộ.</div>
             </div>
         </section>
     </div>
 
     <section class="panel">
         <div class="panel-header">
-            <h2 class="panel-title">Danh sách schedules</h2>
+            <h2 class="panel-title">Danh sách lịch gửi</h2>
         </div>
         <div class="panel-body table-wrap">
             <table>
                 <thead>
                     <tr>
-                        <th>Template</th>
-                        <th>Account / Group</th>
+                        <th>Mẫu tin</th>
+                        <th>Tài khoản / Nhóm</th>
                         <th>Lịch chạy</th>
-                        <th>Next Run</th>
+                        <th>Lần chạy tới</th>
                         <th>Trạng thái</th>
                         <th>An toàn</th>
-                        <th>Actions</th>
+                        <th>Hành động</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -321,10 +304,10 @@ $weekdayOptions = [
                         </td>
                         <td>
                             <div><?= e(fmt_datetime($schedule['next_run_at'])) ?></div>
-                            <div class="small muted">Last: <?= e(fmt_datetime($schedule['last_run_at'])) ?></div>
+                            <div class="small muted">Lần chạy gần nhất: <?= e(fmt_datetime($schedule['last_run_at'])) ?></div>
                         </td>
                         <td>
-                            <span class="badge <?= $schedule['status'] === 'active' ? 'success' : 'warning' ?>"><?= e($schedule['status']) ?></span>
+                            <span class="badge <?= $schedule['status'] === 'active' ? 'success' : 'warning' ?>"><?= e($schedule['status'] === 'active' ? 'Đang chạy' : 'Tạm dừng') ?></span>
                             <?php if ($queueNotice): ?>
                                 <div style="margin-top:8px;">
                                     <span class="badge info">Đang xếp hàng</span>
@@ -346,7 +329,7 @@ $weekdayOptions = [
                                 <form method="post" action="<?= e(url('/schedules/toggle')) ?>">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= e((string) $schedule['id']) ?>">
-                                    <button class="button accent" type="submit"><?= $schedule['status'] === 'active' ? 'Pause' : 'Resume' ?></button>
+                                    <button class="button accent" type="submit"><?= $schedule['status'] === 'active' ? 'Tạm dừng' : 'Tiếp tục' ?></button>
                                 </form>
                                 <form method="post" action="<?= e(url('/schedules/delete')) ?>">
                                     <?= csrf_field() ?>
@@ -358,18 +341,21 @@ $weekdayOptions = [
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($schedules === []): ?>
-                    <tr><td colspan="7" class="muted">Chưa có schedule nào.</td></tr>
+                    <tr><td colspan="7" class="muted">Chưa có lịch gửi nào.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
+        </div>
+        <div class="panel-body" style="padding-top: 0;">
+            <?php $perPageOptions = [10, 15, 20, 30, 50]; ?>
+            <?php require base_path('views/partials/pagination.php'); ?>
         </div>
     </section>
 
     <?php if (!empty($accountScheduleAnalyses)): ?>
         <section class="panel">
             <div class="panel-header">
-                <h2 class="panel-title">Đánh giá tổng theo account</h2>
-                <p class="panel-copy">Phần này cộng dồn tất cả schedule active của từng account để dự đoán nguy cơ bị queue hoặc bị guard dời lịch.</p>
+                <h2 class="panel-title">Đánh giá tổng theo tài khoản</h2>
             </div>
             <div class="panel-body">
                 <div class="grid grid-auto">
@@ -382,7 +368,7 @@ $weekdayOptions = [
                         };
                         $accountRiskLabel = match ($accountAnalysis['risk'] ?? 'safe') {
                             'safe' => 'Ổn định',
-                            'medium' => 'Có thể queue',
+                            'medium' => 'Có thể phải xếp hàng',
                             default => 'Nguy cơ dời lịch',
                         };
                         ?>
@@ -419,28 +405,8 @@ $weekdayOptions = [
                                 </div>
                             </div>
 
-                            <div class="small muted"><?= e((string) ($accountAnalysis['message'] ?? '')) ?></div>
-
-                            <div class="small muted">
-                                <?php if (!empty($accountAnalysis['queue_likely'])): ?>
-                                    Account này có khả năng bị xếp hàng hoặc dời lịch khi cron chạy thực tế.
-                                <?php else: ?>
-                                    Các mốc hiện tại đang khớp tốt với giới hạn an toàn theo account.
-                                <?php endif; ?>
-                            </div>
-
-                            <?php if (!empty($accountAnalysis['next_occurrences'])): ?>
-                                <div class="small muted">Các lượt gần nhất:
-                                    <?php
-                                    $previewParts = [];
-                                    foreach ((array) $accountAnalysis['next_occurrences'] as $occurrence) {
-                                        $previewParts[] = (string) ($occurrence['label'] ?? '')
-                                            . ' · '
-                                            . (string) ($occurrence['group_title'] ?? '');
-                                    }
-                                    ?>
-                                    <?= e(implode(' | ', $previewParts)) ?>
-                                </div>
+                            <?php if (!empty($accountAnalysis['message'])): ?>
+                                <div class="small muted"><?= e((string) $accountAnalysis['message']) ?></div>
                             <?php endif; ?>
                         </article>
                     <?php endforeach; ?>
@@ -587,7 +553,8 @@ async function updateSchedulePreview() {
 
         previewRiskBadge.className = `badge ${riskClass}`;
         previewRiskBadge.textContent = riskLabel;
-        previewRiskMessage.textContent = risk.message || 'App sẽ tự đánh giá rủi ro dựa trên cron sinh ra.';
+        previewRiskMessage.textContent = risk.message || '';
+        previewRiskMessage.style.display = risk.message ? '' : 'none';
     } catch (error) {
         previewCron.textContent = '-';
         previewSummary.textContent = error.message || 'Không preview được lịch này.';
@@ -595,6 +562,7 @@ async function updateSchedulePreview() {
         previewRiskBadge.className = 'badge warning';
         previewRiskBadge.textContent = 'Chưa hợp lệ';
         previewRiskMessage.textContent = error.message || 'Vui lòng kiểm tra lại cấu hình lịch.';
+        previewRiskMessage.style.display = '';
     }
 }
 
@@ -645,14 +613,14 @@ copyPreviewCronButton?.addEventListener('click', async () => {
 
     try {
         await navigator.clipboard.writeText(cron);
-        copyPreviewCronButton.textContent = 'Đã copy';
+        copyPreviewCronButton.textContent = 'Đã sao chép';
         setTimeout(() => {
-            copyPreviewCronButton.textContent = 'Copy cron';
+            copyPreviewCronButton.textContent = 'Sao chép cron';
         }, 1200);
     } catch (error) {
-        copyPreviewCronButton.textContent = 'Copy lỗi';
+        copyPreviewCronButton.textContent = 'Lỗi sao chép';
         setTimeout(() => {
-            copyPreviewCronButton.textContent = 'Copy cron';
+            copyPreviewCronButton.textContent = 'Sao chép cron';
         }, 1200);
     }
 });

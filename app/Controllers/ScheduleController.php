@@ -37,7 +37,9 @@ class ScheduleController extends Controller
         $editId = (int) $request->query('edit', 0);
         $scheduler = new SchedulerService(app()->db(), new TelegramService(), new CronExpression());
         $builder = new ScheduleBuilderService(new CronExpression());
-        $schedules = $this->schedules->listForUser($userId);
+        $allSchedules = $this->schedules->listForUser($userId);
+        $pageResult = $this->schedules->paginateForUser($userId, (int) $request->query('page', 1), pagination_per_page(15, [10, 15, 20, 30, 50]));
+        $schedules = $pageResult['items'];
         $scheduleAnalyses = [];
         $scheduleSummaries = [];
         $accountScheduleAnalyses = [];
@@ -52,6 +54,9 @@ class ScheduleController extends Controller
                 (string) $schedule['timezone']
             );
             $scheduleSummaries[(int) $schedule['id']] = $builder->summaryFromSchedule($schedule);
+        }
+
+        foreach ($allSchedules as $schedule) {
             $accountId = (int) ($schedule['telegram_account_id'] ?? 0);
 
             if ($accountId > 0) {
@@ -86,6 +91,7 @@ class ScheduleController extends Controller
             'safetyRules' => config('safety'),
             'scheduleModes' => $builder->modeOptions(),
             'formScheduleState' => $builder->formDataFromSchedule($editSchedule, (string) config('app.timezone', 'Asia/Ho_Chi_Minh')),
+            'pagination' => $pageResult['pagination'],
         ]);
     }
 

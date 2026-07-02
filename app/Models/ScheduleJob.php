@@ -40,4 +40,23 @@ class ScheduleJob extends Model
             ['user_id' => $userId]
         );
     }
+
+    public function paginateForUser(int $userId, int $page = 1, int $perPage = 15): array
+    {
+        return $this->paginateQuery(
+            'SELECT COUNT(*) AS aggregate
+             FROM schedule_jobs
+             WHERE user_id = :user_id',
+            'SELECT sj.*, ta.name AS account_name, tg.title AS group_title, tg.topic_id, tg.topic_title, mt.name AS template_name
+             FROM schedule_jobs sj
+             INNER JOIN telegram_accounts ta ON ta.id = sj.telegram_account_id
+             INNER JOIN telegram_groups tg ON tg.id = sj.telegram_group_id
+             INNER JOIN message_templates mt ON mt.id = sj.message_template_id
+             WHERE sj.user_id = :user_id
+             ORDER BY sj.status = "active" DESC, sj.next_run_at ASC, sj.id DESC',
+            ['user_id' => $userId],
+            $page,
+            $perPage
+        );
+    }
 }

@@ -1,55 +1,37 @@
 <section class="stack">
     <div class="topbar">
-        <div>
-            <h1 class="page-title">Telegram Accounts</h1>
-            <p class="page-subtitle">Mỗi account là một tài khoản Telegram cá nhân riêng. Sau khi thêm, dùng OTP và 2FA để liên kết phiên đăng nhập thật cho việc gửi tin vào group.</p>
-        </div>
-        <span class="badge info">Multi Account</span>
+        <h1 class="page-title">Tài khoản Telegram</h1>
     </div>
 
-    <div class="grid grid-2">
-        <section class="card">
-            <h2 class="section-title">Thêm account mới</h2>
-            <p class="section-copy">Dùng số điện thoại của tài khoản phụ đã tham gia nhóm Telegram.</p>
-            <form class="form-grid" method="post" action="<?= e(url('/accounts')) ?>">
-                <?= csrf_field() ?>
-                <div class="field">
-                    <label for="name">Tên hiển thị</label>
-                    <input class="input" id="name" type="text" name="name" placeholder="Ví dụ: Account Sales #2" required>
-                </div>
-                <div class="field">
-                    <label for="phone_number">Số điện thoại Telegram</label>
-                    <input class="input" id="phone_number" type="text" name="phone_number" placeholder="+8490xxxxxxx" required>
-                </div>
-                <button class="button primary" type="submit">Tạo account</button>
-            </form>
-        </section>
-
-        <section class="card">
-            <h2 class="section-title">Quy trình kết nối</h2>
-            <div class="list">
-                <div class="list-item">1. Tạo account ở form bên trái.</div>
-                <div class="list-item">2. Bấm <strong>Gửi OTP</strong> để Telegram gửi mã xác thực.</div>
-                <div class="list-item">3. Nhập OTP vào form <strong>Xác thực mã</strong>.</div>
-                <div class="list-item">4. Nếu account bật 2FA, nhập thêm mật khẩu Telegram.</div>
+    <section class="card">
+        <h2 class="section-title">Thêm tài khoản mới</h2>
+        <form class="form-grid" method="post" action="<?= e(url('/accounts')) ?>">
+            <?= csrf_field() ?>
+            <div class="field">
+                <label for="name">Tên hiển thị</label>
+                <input class="input" id="name" type="text" name="name" placeholder="Ví dụ: Tài khoản Sale #2" required>
             </div>
-        </section>
-    </div>
+            <div class="field">
+                <label for="phone_number">Số điện thoại Telegram</label>
+                <input class="input" id="phone_number" type="text" name="phone_number" placeholder="+8490xxxxxxx" required>
+            </div>
+            <button class="button primary" type="submit">Tạo tài khoản</button>
+        </form>
+    </section>
 
     <section class="panel">
         <div class="panel-header">
-            <h2 class="panel-title">Danh sách account</h2>
-            <p class="panel-copy">Theo dõi trạng thái từng phiên Telegram và thao tác xác thực ngay trên web.</p>
+            <h2 class="panel-title">Danh sách tài khoản</h2>
         </div>
         <div class="panel-body table-wrap">
             <table>
 	                <thead>
 	                    <tr>
-	                        <th>Account</th>
+	                        <th>Tài khoản</th>
 	                        <th>Số điện thoại</th>
 	                        <th>Trạng thái</th>
-	                        <th>Groups</th>
-	                        <th>Schedules</th>
+	                        <th>Nhóm</th>
+	                        <th>Lịch gửi</th>
 	                        <th>Hành động</th>
 	                    </tr>
 	                </thead>
@@ -89,13 +71,11 @@
                                     <?php if ($status === 'active'): ?>
                                         <div class="status-card success">
                                             <div class="status-title">Đăng nhập thành công</div>
-                                            <p class="status-copy">Tài khoản này đã sẵn sàng để gắn group và chạy schedule.</p>
                                             <div class="small muted">Kết nối gần nhất: <?= e(fmt_datetime($account['last_connected_at'])) ?></div>
                                         </div>
                                     <?php elseif ($status === 'code_sent'): ?>
                                         <div class="status-card info">
                                             <div class="status-title">Nhập mã OTP</div>
-                                            <p class="status-copy">Telegram đã gửi mã xác thực. Nhập mã vừa nhận được để hoàn tất bước đăng nhập.</p>
                                             <form class="status-form" method="post" action="<?= e(url('/accounts/verify-code')) ?>">
                                                 <?= csrf_field() ?>
                                                 <input type="hidden" name="account_id" value="<?= e((string) $account['id']) ?>">
@@ -111,7 +91,6 @@
                                     <?php elseif ($status === 'password_required'): ?>
                                         <div class="status-card warning">
                                             <div class="status-title">Cần mật khẩu 2FA</div>
-                                            <p class="status-copy">Tài khoản này đã qua bước OTP và đang chờ mật khẩu bảo mật 2 lớp của Telegram.</p>
                                             <form class="status-form" method="post" action="<?= e(url('/accounts/verify-password')) ?>">
                                                 <?= csrf_field() ?>
                                                 <input type="hidden" name="account_id" value="<?= e((string) $account['id']) ?>">
@@ -122,7 +101,6 @@
                                     <?php else: ?>
                                         <div class="status-card">
                                             <div class="status-title">Bắt đầu kết nối</div>
-                                            <p class="status-copy">Gửi OTP để Telegram bắt đầu quá trình xác thực cho account này.</p>
                                             <form method="post" action="<?= e(url('/accounts/send-code')) ?>">
                                                 <?= csrf_field() ?>
                                                 <input type="hidden" name="account_id" value="<?= e((string) $account['id']) ?>">
@@ -135,10 +113,14 @@
 	                    </tr>
 	                <?php endforeach; ?>
                 <?php if ($accounts === []): ?>
-                    <tr><td colspan="6" class="muted">Chưa có account nào.</td></tr>
+                    <tr><td colspan="6" class="muted">Chưa có tài khoản nào.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
+        </div>
+        <div class="panel-body" style="padding-top: 0;">
+            <?php $perPageOptions = [10, 15, 20, 30, 50, 100]; ?>
+            <?php require base_path('views/partials/pagination.php'); ?>
         </div>
     </section>
 </section>

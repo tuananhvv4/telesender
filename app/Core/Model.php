@@ -62,4 +62,44 @@ abstract class Model
         $row = $this->db()->fetch("SELECT COUNT(*) AS aggregate FROM {$this->table} WHERE {$where}", $bindings);
         return (int) ($row['aggregate'] ?? 0);
     }
+
+    protected function paginateQuery(
+        string $countSql,
+        string $dataSql,
+        array $bindings,
+        int $page = 1,
+        int $perPage = 20
+    ): array {
+        $page = max(1, $page);
+        $perPage = max(1, $perPage);
+
+        $countRow = $this->db()->fetch($countSql, $bindings);
+        $total = (int) ($countRow['aggregate'] ?? 0);
+        $totalPages = max(1, (int) ceil($total / $perPage));
+
+        if ($total > 0 && $page > $totalPages) {
+            $page = $totalPages;
+        }
+
+        $offset = max(0, ($page - 1) * $perPage);
+        $items = $total === 0
+            ? []
+            : $this->db()->fetchAll($dataSql . ' LIMIT ' . $perPage . ' OFFSET ' . $offset, $bindings);
+
+        return [
+            'items' => $items,
+            'pagination' => [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'total_pages' => $totalPages,
+                'from' => $total === 0 ? 0 : ($offset + 1),
+                'to' => $total === 0 ? 0 : min($total, $offset + count($items)),
+                'has_prev' => $page > 1,
+                'has_next' => $page < $totalPages,
+                'prev_page' => $page > 1 ? $page - 1 : null,
+                'next_page' => $page < $totalPages ? $page + 1 : null,
+            ],
+        ];
+    }
 }

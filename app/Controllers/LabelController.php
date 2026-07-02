@@ -19,6 +19,7 @@ class LabelController extends Controller
         $userId = (int) auth()->id();
         $editLabel = null;
         $editId = (int) $request->query('edit', 0);
+        $result = $this->labels->paginateForUser($userId, (int) $request->query('page', 1), pagination_per_page(20));
 
         if ($editId > 0) {
             $editLabel = $this->labels->findForUser($editId, $userId);
@@ -26,8 +27,9 @@ class LabelController extends Controller
 
         $this->render('labels/index', [
             'title' => 'Message Labels',
-            'labels' => $this->labels->allByUser($userId, 'id DESC'),
+            'labels' => $result['items'],
             'editLabel' => $editLabel,
+            'pagination' => $result['pagination'],
         ]);
     }
 

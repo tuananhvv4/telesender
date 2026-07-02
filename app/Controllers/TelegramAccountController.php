@@ -19,9 +19,12 @@ class TelegramAccountController extends Controller
 
     public function index(Request $request): void
     {
+        $result = $this->accounts->paginateForUser((int) auth()->id(), (int) $request->query('page', 1), pagination_per_page(20));
+
         $this->render('accounts/index', [
             'title' => 'Telegram Accounts',
-            'accounts' => $this->accounts->listForUser((int) auth()->id()),
+            'accounts' => $result['items'],
+            'pagination' => $result['pagination'],
         ]);
     }
 

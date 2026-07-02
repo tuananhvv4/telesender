@@ -46,7 +46,7 @@ GET /cron/run?token=YOUR_CRON_TOKEN
 Sau mỗi lần nâng cấp, chỉ cần gọi:
 
 ```text
-GET /system/migrate?token=YOUR_MIGRATE_TOKEN&version=5
+GET /system/migrate?token=YOUR_MIGRATE_TOKEN&version=6
 ```
 
 Hệ thống sẽ áp dụng tất cả migration chưa chạy với version nhỏ hơn hoặc bằng version truyền vào.
@@ -103,7 +103,7 @@ composer install
 Tạo database MySQL trống, sau đó gọi:
 
 ```text
-GET http://localhost:8000/system/migrate?token=YOUR_MIGRATE_TOKEN&version=5
+GET http://localhost:8000/system/migrate?token=YOUR_MIGRATE_TOKEN&version=6
 ```
 
 Các migration hiện được đánh số tuần tự `1, 2, 3...` để dễ quản lý hơn.

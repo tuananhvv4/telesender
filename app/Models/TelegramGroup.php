@@ -33,4 +33,21 @@ class TelegramGroup extends Model
             ['user_id' => $userId]
         );
     }
+
+    public function paginateForUser(int $userId, int $page = 1, int $perPage = 20): array
+    {
+        return $this->paginateQuery(
+            'SELECT COUNT(*) AS aggregate
+             FROM telegram_groups
+             WHERE user_id = :user_id',
+            'SELECT tg.*, ta.name AS account_name
+             FROM telegram_groups tg
+             INNER JOIN telegram_accounts ta ON ta.id = tg.telegram_account_id
+             WHERE tg.user_id = :user_id
+             ORDER BY tg.id DESC',
+            ['user_id' => $userId],
+            $page,
+            $perPage
+        );
+    }
 }

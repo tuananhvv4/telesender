@@ -17,4 +17,20 @@ class MessageLabel extends Model
         'created_at',
         'updated_at',
     ];
+
+    public function paginateForUser(int $userId, int $page = 1, int $perPage = 20): array
+    {
+        return $this->paginateQuery(
+            'SELECT COUNT(*) AS aggregate
+             FROM message_labels
+             WHERE user_id = :user_id',
+            'SELECT *
+             FROM message_labels
+             WHERE user_id = :user_id
+             ORDER BY id DESC',
+            ['user_id' => $userId],
+            $page,
+            $perPage
+        );
+    }
 }

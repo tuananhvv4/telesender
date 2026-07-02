@@ -1,6 +1,5 @@
 <span class="badge info">TeleSender</span>
 <h1 class="auth-heading">Đăng nhập hệ thống</h1>
-<p class="auth-copy">Quản lý nhiều tài khoản Telegram cá nhân, nhiều nhóm và lịch gửi cố định qua endpoint cron.</p>
 
 <?php if ($success = flash('success')): ?>
     <div class="flash success"><?= e($success) ?></div>

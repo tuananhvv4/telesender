@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Controllers\AuthController;
+use App\Controllers\CustomEmojiController;
 use App\Controllers\DashboardController;
 use App\Controllers\LabelController;
 use App\Controllers\LogController;
@@ -46,9 +47,15 @@ $router->post('/labels/update', [LabelController::class, 'update'], ['auth']);
 $router->post('/labels/delete', [LabelController::class, 'delete'], ['auth']);
 
 $router->get('/templates', [MessageTemplateController::class, 'index'], ['auth']);
+$router->post('/templates/preview', [MessageTemplateController::class, 'preview'], ['auth']);
 $router->post('/templates', [MessageTemplateController::class, 'store'], ['auth']);
 $router->post('/templates/update', [MessageTemplateController::class, 'update'], ['auth']);
 $router->post('/templates/delete', [MessageTemplateController::class, 'delete'], ['auth']);
+
+$router->get('/custom-emojis', [CustomEmojiController::class, 'index'], ['auth']);
+$router->post('/custom-emojis', [CustomEmojiController::class, 'store'], ['auth']);
+$router->post('/custom-emojis/update', [CustomEmojiController::class, 'update'], ['auth']);
+$router->post('/custom-emojis/delete', [CustomEmojiController::class, 'delete'], ['auth']);
 
 $router->get('/schedules', [ScheduleController::class, 'index'], ['auth']);
 $router->get('/schedules/preview', [ScheduleController::class, 'preview'], ['auth']);
