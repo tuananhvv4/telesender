@@ -40,13 +40,8 @@
             <section class="card dashboard-system-card">
                 <div class="dashboard-card-head">
                     <h2 class="section-title">Cron hệ thống</h2>
-                    <span class="badge info">Đọc từ `.env`</span>
                 </div>
                 <div class="dashboard-kv-list">
-                    <div class="dashboard-kv-item">
-                        <span class="dashboard-kv-label">Token</span>
-                        <strong class="dashboard-kv-value mono"><?= e((string) ($systemTokens['cron'] ?? '')) ?></strong>
-                    </div>
                     <div class="dashboard-kv-item">
                         <span class="dashboard-kv-label">Endpoint</span>
                         <div class="dashboard-code mono"><?= e((string) ($systemEndpoints['cron'] ?? '')) ?></div>
@@ -57,13 +52,8 @@
             <section class="card dashboard-system-card">
                 <div class="dashboard-card-head">
                     <h2 class="section-title">Migrate hệ thống</h2>
-                    <span class="badge info">v<?= e((string) (($migrationReport['current_version'] ?? null) ?: '-')) ?></span>
                 </div>
                 <div class="dashboard-kv-list">
-                    <div class="dashboard-kv-item">
-                        <span class="dashboard-kv-label">Token</span>
-                        <strong class="dashboard-kv-value mono"><?= e((string) ($systemTokens['migrate'] ?? '')) ?></strong>
-                    </div>
                     <div class="dashboard-kv-item">
                         <span class="dashboard-kv-label">Endpoint base</span>
                         <div class="dashboard-code mono"><?= e((string) ($systemEndpoints['migrate_base'] ?? '')) ?></div>

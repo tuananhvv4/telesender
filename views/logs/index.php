@@ -30,7 +30,7 @@
                         <div class="inline-actions">
                             <span class="badge <?= $log['status'] === 'success' ? 'success' : 'danger' ?>"><?= e($statusLabel) ?></span>
                             <span class="log-meta-pill"><?= e(fmt_datetime($log['sent_at'])) ?></span>
-                            <span class="log-meta-pill mono"><?= e($log['request_id']) ?></span>
+                            <!-- <span class="log-meta-pill mono"><?= e($log['request_id']) ?></span> -->
                         </div>
                         <?php if (!empty($log['label_name'])): ?>
                             <span class="badge info"><?= e($log['label_name']) ?></span>

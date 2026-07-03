@@ -40,7 +40,7 @@ $weekdayOptions = [
             <div class="field" style="margin: 16px 0 18px;">
                 <label for="schedule_preset">Lịch cài sẵn</label>
                 <select class="select" id="schedule_preset">
-                    <option value="">Chọn nhanh mẫu lịch gửi hoặc tự thiết kế</option>
+                    <option value="">Chọn nhanh mẫu lịch gửi hoặc tự tuỳ chỉnh ở dưới</option>
                     <?php foreach ($schedulePresets as $preset): ?>
                         <option value="<?= e($preset['key']) ?>"><?= e($preset['name']) ?> · <?= e($preset['description']) ?></option>
                     <?php endforeach; ?>
@@ -299,8 +299,7 @@ $weekdayOptions = [
                         </td>
                         <td>
                             <div><?= e($summary) ?></div>
-                            <div class="small muted mono" style="margin-top: 6px;"><?= e($schedule['cron_expression']) ?></div>
-                            <div class="small muted"><?= e($schedule['timezone']) ?></div>
+                            <div class="small muted">Múi giờ: <?= e($schedule['timezone']) ?></div>
                             <div class="small muted"><?= e((string) $analysis['runs_per_day']) ?> lần/ngày · <?= e($analysis['min_gap_minutes'] !== null ? (string) $analysis['min_gap_minutes'] . ' phút/lần' : 'không xác định') ?></div>
                         </td>
                         <td>
