@@ -34,14 +34,19 @@ class SchedulerService
         $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
         $jobs = $this->db->fetchAll(
             'SELECT sj.*, ta.name AS account_name, ta.phone_number, ta.session_name, ta.session_status,
-                    ta.last_sent_at, ta.cooldown_until, ta.cooldown_reason,
+                    ta.last_sent_at, ta.cooldown_until, ta.cooldown_reason, ta.is_active AS account_active,
+                    u.role AS owner_role, u.status AS owner_status, u.subscription_expires_at AS owner_subscription_expires_at,
                     tg.title AS group_title, tg.peer_identifier, tg.topic_id, tg.topic_title,
                     mt.name AS template_name, mt.body, mt.parse_mode, mt.label_id
              FROM schedule_jobs sj
+             INNER JOIN users u ON u.id = sj.user_id
              INNER JOIN telegram_accounts ta ON ta.id = sj.telegram_account_id
              INNER JOIN telegram_groups tg ON tg.id = sj.telegram_group_id
              INNER JOIN message_templates mt ON mt.id = sj.message_template_id
              WHERE sj.status = :status
+               AND u.status = \'active\'
+               AND (u.role = \'super_admin\' OR u.subscription_expires_at IS NULL OR u.subscription_expires_at >= UTC_TIMESTAMP())
+               AND ta.is_active = 1
                AND tg.is_active = 1
                AND mt.is_active = 1
                AND sj.next_run_at IS NOT NULL
@@ -77,10 +82,12 @@ class SchedulerService
     {
         $job = $this->db->fetch(
             'SELECT sj.*, ta.name AS account_name, ta.phone_number, ta.session_name, ta.session_status,
-                    ta.last_sent_at, ta.cooldown_until, ta.cooldown_reason,
+                    ta.last_sent_at, ta.cooldown_until, ta.cooldown_reason, ta.is_active AS account_active,
+                    u.role AS owner_role, u.status AS owner_status, u.subscription_expires_at AS owner_subscription_expires_at,
                     tg.title AS group_title, tg.peer_identifier, tg.topic_id, tg.topic_title, tg.is_active AS group_active,
                     mt.name AS template_name, mt.body, mt.parse_mode, mt.label_id, mt.is_active AS template_active
              FROM schedule_jobs sj
+             INNER JOIN users u ON u.id = sj.user_id
              INNER JOIN telegram_accounts ta ON ta.id = sj.telegram_account_id
              INNER JOIN telegram_groups tg ON tg.id = sj.telegram_group_id
              INNER JOIN message_templates mt ON mt.id = sj.message_template_id
@@ -103,6 +110,15 @@ class SchedulerService
 
         if (!(bool) $job['template_active']) {
             throw new RuntimeException('Template này đang tắt, chưa thể gửi ngay.');
+        }
+
+        if (!(bool) ($job['account_active'] ?? 1)) {
+            throw new RuntimeException('Account này đang được tạm dừng, chưa thể gửi ngay.');
+        }
+
+        $ownerStateError = $this->ownerStateError($job, new DateTimeImmutable('now', new DateTimeZone('UTC')));
+        if ($ownerStateError !== null) {
+            throw new RuntimeException($ownerStateError);
         }
 
         if (!$this->lockJob((int) $job['id'])) {
@@ -407,6 +423,15 @@ class SchedulerService
         $retryAt = null;
 
         try {
+            $ownerStateError = $this->ownerStateError($job, $now);
+            if ($ownerStateError !== null) {
+                throw new RuntimeException($ownerStateError);
+            }
+
+            if (!(bool) ($job['account_active'] ?? 1)) {
+                throw new RuntimeException('Account này đang được tạm dừng.');
+            }
+
             if ($job['session_status'] !== 'active') {
                 throw new RuntimeException('Telegram account chưa ở trạng thái active.');
             }
@@ -691,6 +716,25 @@ class SchedulerService
     private function maxDateTimeString(string $left, string $right): string
     {
         return strtotime($left) >= strtotime($right) ? $left : $right;
+    }
+
+    private function ownerStateError(array $job, DateTimeImmutable $now): ?string
+    {
+        if ((string) ($job['owner_status'] ?? 'inactive') !== 'active') {
+            return 'Người dùng sở hữu lịch này hiện đang bị khóa.';
+        }
+
+        if ((string) ($job['owner_role'] ?? 'admin') === 'super_admin') {
+            return null;
+        }
+
+        $expiresAt = $this->nullableDate((string) ($job['owner_subscription_expires_at'] ?? ''));
+
+        if ($expiresAt !== null && $expiresAt < $now) {
+            return 'Gói sử dụng của admin này đã hết hạn, lịch gửi đang bị khóa.';
+        }
+
+        return null;
     }
 
     private function isDueNow(string $value, DateTimeImmutable $now): bool

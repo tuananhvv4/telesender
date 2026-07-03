@@ -79,7 +79,7 @@ class ScheduleController extends Controller
         }
 
         $this->render('schedules/index', [
-            'title' => 'Schedules',
+            'title' => 'Lịch gửi',
             'schedules' => $schedules,
             'accounts' => $this->accounts->listForUser($userId),
             'groups' => $this->groups->listForUser($userId),
@@ -127,6 +127,17 @@ class ScheduleController extends Controller
 
     public function store(Request $request): void
     {
+        $user = auth()->user() ?? [];
+        $limit = auth()->access()->scheduleLimit($user);
+        $currentCount = $this->schedules->count('user_id = :user_id', ['user_id' => (int) auth()->id()]);
+
+        if (auth()->access()->limitReached($limit, $currentCount)) {
+            $this->redirectWith(
+                '/schedules',
+                error: 'Bạn đã chạm giới hạn tối đa ' . auth()->access()->limitLabel($limit) . ' schedule.'
+            );
+        }
+
         $scheduler = new SchedulerService(app()->db(), new TelegramService(), new CronExpression());
         $data = $this->validatedData($request, $scheduler);
         $analysis = $scheduler->analyzeScheduleRisk($data['cron_expression'], $data['timezone']);

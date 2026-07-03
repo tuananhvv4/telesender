@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Core;
 
+use App\Services\UserAccessService;
+
 class Auth
 {
     public function __construct(private readonly Database $db)
@@ -12,18 +14,40 @@ class Auth
 
     public function attempt(string $email, string $password): bool
     {
+        return $this->attemptDetailed($email, $password)['ok'];
+    }
+
+    public function attemptDetailed(string $email, string $password): array
+    {
         $user = $this->db->fetch(
-            'SELECT * FROM users WHERE email = :email AND status = :status LIMIT 1',
-            ['email' => $email, 'status' => 'active']
+            'SELECT * FROM users WHERE email = :email LIMIT 1',
+            ['email' => $email]
         );
 
         if ($user === null || !password_verify($password, $user['password_hash'])) {
-            return false;
+            return [
+                'ok' => false,
+                'reason' => 'invalid',
+                'user' => null,
+            ];
+        }
+
+        if ((string) ($user['status'] ?? 'inactive') !== 'active') {
+            return [
+                'ok' => false,
+                'reason' => 'inactive',
+                'user' => $user,
+            ];
         }
 
         Session::regenerate();
         Session::put('auth_user_id', (int) $user['id']);
-        return true;
+
+        return [
+            'ok' => true,
+            'reason' => null,
+            'user' => $user,
+        ];
     }
 
     public function check(): bool
@@ -46,6 +70,11 @@ class Auth
         }
 
         return $this->db->fetch('SELECT * FROM users WHERE id = :id LIMIT 1', ['id' => $id]);
+    }
+
+    public function access(): UserAccessService
+    {
+        return new UserAccessService($this->db);
     }
 
     public function logout(): void

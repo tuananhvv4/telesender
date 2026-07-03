@@ -9,5 +9,6 @@ return [
     'url' => env('APP_URL', 'http://localhost:8000'),
     'key' => env('APP_KEY', 'change-me'),
     'timezone' => env('APP_TIMEZONE', 'UTC'),
-    'allow_registration' => filter_var(env('ALLOW_REGISTRATION', true), FILTER_VALIDATE_BOOL),
+    'allow_registration' => filter_var(env('ALLOW_REGISTRATION', false), FILTER_VALIDATE_BOOL),
+    'super_admin_email' => env('SUPER_ADMIN_EMAIL', ''),
 ];

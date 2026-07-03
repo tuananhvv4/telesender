@@ -8,7 +8,7 @@
             <div class="group-editor-head">
                 <div>
                     <h2 class="section-title"><?= $editGroup ? 'Cập nhật nhóm' : 'Thêm nhóm mới' ?></h2>
-                    <div class="small muted"><?= $editGroup ? 'Sửa nhanh thông tin đích gửi và topic tương ứng.' : 'Khai báo nhóm đích, topic và gắn đúng với tài khoản gửi.' ?></div>
+                    <div class="small muted"><?= $editGroup ? 'Sửa nhanh thông tin đích gửi và topic tương ứng.' : 'Vui lòng chọn đúng tài khoản Telegram và nhóm tương ứng với tài khoản ( Yêu cầu tài khoản đã tham gia nhóm )' ?></div>
                 </div>
                 <?php if ($editGroup): ?>
                     <span class="badge info">Đang sửa</span>
@@ -41,6 +41,7 @@
 
                     <div class="field group-field-span-2">
                         <label for="peer_identifier">Id Nhóm</label>
+                        <div class="small muted">Lấy ID nhóm từ bot @id_bot hoặc @username_to_id_bot</div>
                         <input class="input mono" id="peer_identifier" type="text" name="peer_identifier" value="<?= e($editGroup['peer_identifier'] ?? '') ?>" placeholder="Ví dụ: -1001234567890" required>
                     </div>
 

@@ -15,6 +15,7 @@ class TelegramAccount extends Model
         'phone_number',
         'session_name',
         'session_status',
+        'is_active',
         'tg_user_id',
         'tg_username',
         'last_connected_at',

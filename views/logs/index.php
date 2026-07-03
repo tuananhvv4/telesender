@@ -23,7 +23,6 @@
             <?php foreach ($logs as $log): ?>
                 <?php
                 $statusLabel = $log['status'] === 'success' ? 'Thành công' : 'Thất bại';
-                $responsePreview = trim((string) ($log['response_payload'] ?? ''));
                 $messagePreview = trim((string) ($log['message_preview'] ?? ''));
                 ?>
                 <article class="log-card">
@@ -37,6 +36,10 @@
                             <span class="badge info"><?= e($log['label_name']) ?></span>
                         <?php endif; ?>
                     </div>
+
+                    <?php if (!empty($log['error_message'])): ?>
+                        <div class="log-alert danger"><?= e($log['error_message']) ?></div>
+                    <?php endif; ?>
 
                     <div class="log-card-grid">
                         <section class="log-card-section log-card-main">
@@ -63,24 +66,12 @@
                             </div>
                             <?php if (!empty($log['actual_topic_label'])): ?>
                                 <div class="log-kv">
-                                    <span class="log-kv-label">Topic thực tế</span>
-                                    <span class="<?= !empty($log['topic_mismatch']) ? 'log-mismatch' : 'log-match' ?>">
-                                        <?= e($log['actual_topic_label']) ?>
-                                    </span>
-                                </div>
-                            <?php endif; ?>
-                        </section>
-
-                        <section class="log-card-section log-card-response">
-                            <div class="log-section-label">Phản hồi</div>
-                            <?php if (!empty($log['error_message'])): ?>
-                                <div class="log-alert danger"><?= e($log['error_message']) ?></div>
-                            <?php endif; ?>
-                            <?php if ($responsePreview !== ''): ?>
-                                <pre class="log-response-code mono"><?= e(mb_substr($responsePreview, 0, 800)) ?></pre>
-                            <?php elseif (empty($log['error_message'])): ?>
-                                <div class="small muted">Không có phản hồi chi tiết.</div>
-                            <?php endif; ?>
+                                <span class="log-kv-label">Topic thực tế</span>
+                                <span class="<?= !empty($log['topic_mismatch']) ? 'log-mismatch' : 'log-match' ?>">
+                                    <?= e($log['actual_topic_label']) ?>
+                                </span>
+                            </div>
+                        <?php endif; ?>
                         </section>
                     </div>
                 </article>

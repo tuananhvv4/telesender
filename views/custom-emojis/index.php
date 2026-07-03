@@ -28,11 +28,13 @@
                 <div class="grid grid-2">
                     <div class="field">
                         <label for="emoji_identifier">Emoji ID</label>
+                        <small>Lấy Id của emoji từ bot @emojiid_get_bot</small>
                         <input class="input mono" id="emoji_identifier" type="text" name="emoji_identifier" value="<?= e($editEmoji['emoji_identifier'] ?? '') ?>" placeholder="5318779098686826724" required>
                     </div>
                     <div class="field">
-                        <label for="fallback_emoji">Fallback emoji</label>
-                        <input class="input" id="fallback_emoji" type="text" name="fallback_emoji" value="<?= e($editEmoji['fallback_emoji'] ?? '') ?>" placeholder="🔥" required>
+                        <label for="fallback_emoji">Icon dự phòng</label>
+                        <small>Icon này sẽ hiển thị khi emoji không khả dụng (Hết premium hoặc lỗi)</small>
+                        <input class="input" id="fallback_emoji" type="text" name="fallback_emoji" value="<?= e($editEmoji['fallback_emoji'] ?? '🔥') ?>" placeholder="Có thể lấy từ getemoji.com hoặc điện thoại" required>
                     </div>
                 </div>
 

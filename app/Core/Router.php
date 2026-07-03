@@ -71,13 +71,62 @@ class Router
     private function runMiddleware(array $middleware): void
     {
         foreach ($middleware as $item) {
-            if ($item === 'auth' && !$this->app->auth()->check()) {
-                Session::flash('error', 'Vui lòng đăng nhập để tiếp tục.');
-                redirect('/login');
+            if ($item === 'auth') {
+                if (!$this->app->auth()->check()) {
+                    Session::flash('error', 'Vui lòng đăng nhập để tiếp tục.');
+                    redirect('/login');
+                }
+
+                $user = $this->app->auth()->user();
+
+                if ($user === null) {
+                    $this->app->auth()->logout();
+                    Session::flash('error', 'Phiên đăng nhập không còn hợp lệ.');
+                    redirect('/login');
+                }
+
+                if ((string) ($user['status'] ?? 'inactive') !== 'active') {
+                    $this->app->auth()->logout();
+                    Session::flash('error', 'Tài khoản của bạn hiện đang bị khóa.');
+                    redirect('/login');
+                }
             }
 
             if ($item === 'guest' && $this->app->auth()->check()) {
                 redirect('/');
+            }
+
+            if ($item === 'subscription_active') {
+                $user = $this->app->auth()->user();
+
+                if ($user === null) {
+                    $this->app->auth()->logout();
+                    Session::flash('error', 'Phiên đăng nhập không còn hợp lệ.');
+                    redirect('/login');
+                }
+
+                if ($this->app->auth()->access()->isSuperAdmin($user)) {
+                    continue;
+                }
+
+                if ($this->app->auth()->access()->isExpired($user)) {
+                    redirect('/expired');
+                }
+            }
+
+            if ($item === 'super_admin') {
+                $user = $this->app->auth()->user();
+
+                if ($user === null) {
+                    $this->app->auth()->logout();
+                    Session::flash('error', 'Phiên đăng nhập không còn hợp lệ.');
+                    redirect('/login');
+                }
+
+                if (!$this->app->auth()->access()->isSuperAdmin($user)) {
+                    Session::flash('error', 'Bạn không có quyền truy cập khu vực này.');
+                    redirect('/');
+                }
             }
         }
     }

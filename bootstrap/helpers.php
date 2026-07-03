@@ -134,6 +134,104 @@ if (!function_exists('auth')) {
     }
 }
 
+if (!function_exists('user_is_super_admin')) {
+    function user_is_super_admin(?array $user = null): bool
+    {
+        $user ??= auth()->user();
+
+        if ($user === null) {
+            return false;
+        }
+
+        return auth()->access()->isSuperAdmin($user);
+    }
+}
+
+if (!function_exists('user_is_expired')) {
+    function user_is_expired(?array $user = null): bool
+    {
+        $user ??= auth()->user();
+
+        if ($user === null) {
+            return false;
+        }
+
+        return auth()->access()->isExpired($user);
+    }
+}
+
+if (!function_exists('user_days_remaining')) {
+    function user_days_remaining(?array $user = null): ?int
+    {
+        $user ??= auth()->user();
+
+        if ($user === null) {
+            return null;
+        }
+
+        return auth()->access()->daysRemaining($user);
+    }
+}
+
+if (!function_exists('user_subscription_label')) {
+    function user_subscription_label(?array $user = null): string
+    {
+        $user ??= auth()->user();
+
+        if ($user === null) {
+            return '';
+        }
+
+        return auth()->access()->subscriptionStateLabel($user);
+    }
+}
+
+if (!function_exists('system_settings_map')) {
+    function system_settings_map(): array
+    {
+        static $cache = null;
+
+        if (is_array($cache)) {
+            return $cache;
+        }
+
+        $model = new App\Models\SystemSetting();
+
+        try {
+            $cache = $model->resolvedMap();
+        } catch (Throwable) {
+            $cache = $model->defaults();
+        }
+
+        return $cache;
+    }
+}
+
+if (!function_exists('support_contact_href')) {
+    function support_contact_href(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        if (filter_var($value, FILTER_VALIDATE_EMAIL)) {
+            return 'mailto:' . $value;
+        }
+
+        if (filter_var($value, FILTER_VALIDATE_URL)) {
+            return $value;
+        }
+
+        if (preg_match('/^\+?[0-9][0-9\s\-\(\)]*$/', $value) === 1) {
+            return 'tel:' . preg_replace('/[^0-9+]/', '', $value);
+        }
+
+        return null;
+    }
+}
+
 if (!function_exists('csrf_token')) {
     function csrf_token(): string
     {

@@ -21,6 +21,6 @@
     <button class="button primary" type="submit">Đăng nhập</button>
 </form>
 
-<?php if (config('app.allow_registration', true)): ?>
-    <p class="small muted">Chưa có tài khoản? <a href="<?= e(url('/register')) ?>"><strong>Đăng ký</strong></a></p>
+<?php if (!empty($showRegisterLink)): ?>
+    <p class="small muted">Chưa có tài khoản? <a href="<?= e(url('/register')) ?>"><strong><?= e((string) ($registerLinkLabel ?? 'Đăng ký')) ?></strong></a></p>
 <?php endif; ?>

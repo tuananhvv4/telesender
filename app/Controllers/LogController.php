@@ -21,7 +21,7 @@ class LogController extends Controller
         $result = $this->logs->paginateForUser((int) auth()->id(), (int) $request->query('page', 1), $perPage, $searchQuery);
 
         $this->render('logs/index', [
-            'title' => 'Dispatch Logs',
+            'title' => 'Nhật ký gửi tin',
             'logs' => $result['items'],
             'pagination' => $result['pagination'],
             'searchQuery' => $searchQuery,

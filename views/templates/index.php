@@ -110,7 +110,7 @@
                     <?php endif; ?>
 
                     <div class="field" id="template_used_tokens_field" hidden>
-                        <label>Token đang dùng</label>
+                        <label>Emoji đang dùng</label>
                         <div class="chip-row" id="template_used_tokens"></div>
                     </div>
                 </section>

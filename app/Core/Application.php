@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Core;
 
+use App\Services\UserAccessService;
 use Throwable;
 
 class Application
@@ -31,6 +32,7 @@ class Application
 
         $this->request = Request::capture();
         $this->database = new Database($this->config('database'));
+        (new UserAccessService($this->database))->syncSuperAdminRole();
         $this->auth = new Auth($this->database);
         $this->router = new Router($this);
 

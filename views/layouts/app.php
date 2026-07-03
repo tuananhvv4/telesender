@@ -11,9 +11,36 @@
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
 </head>
 <?php
-$userName = (string) (auth()->user()['name'] ?? '');
-$userEmail = (string) (auth()->user()['email'] ?? '');
+$currentUser = auth()->user() ?? [];
+$userName = (string) ($currentUser['name'] ?? '');
+$userEmail = (string) ($currentUser['email'] ?? '');
 $userInitial = $userName !== '' ? mb_strtoupper(mb_substr($userName, 0, 1)) : 'U';
+$isSuperAdmin = user_is_super_admin($currentUser);
+$daysRemaining = user_days_remaining($currentUser);
+$systemSettings = system_settings_map();
+$footerText = trim((string) ($systemSettings['footer_text'] ?? ''));
+$supportName = trim((string) ($systemSettings['support_contact_name'] ?? ''));
+$supportValue = trim((string) ($systemSettings['support_contact_value'] ?? ''));
+$supportExtra = trim((string) ($systemSettings['support_contact_extra'] ?? ''));
+$supportHref = support_contact_href($supportValue);
+$hasFooterMeta = $footerText !== '' || $supportName !== '' || $supportValue !== '' || $supportExtra !== '';
+
+if ($isSuperAdmin) {
+    $subscriptionBadgeClass = 'info';
+    $subscriptionBadgeText = user_subscription_label($currentUser);
+} elseif ($daysRemaining === null) {
+    $subscriptionBadgeClass = 'success';
+    $subscriptionBadgeText = 'Không giới hạn sử dụng';
+} elseif ($daysRemaining <= 0) {
+    $subscriptionBadgeClass = 'danger';
+    $subscriptionBadgeText = 'Đã hết hạn sử dụng';
+} elseif ($daysRemaining < 5) {
+    $subscriptionBadgeClass = 'danger';
+    $subscriptionBadgeText = 'Còn ' . $daysRemaining . ' ngày sử dụng';
+} else {
+    $subscriptionBadgeClass = 'success';
+    $subscriptionBadgeText = 'Còn ' . $daysRemaining . ' ngày sử dụng';
+}
 ?>
 <body class="app-layout">
     <div class="shell">
@@ -51,13 +78,13 @@ $userInitial = $userName !== '' ? mb_strtoupper(mb_substr($userName, 0, 1)) : 'U
                     <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-tags"></i></span>
                     <span class="nav-text">Nhãn</span>
                 </a>
+                <a class="nav-link <?= is_active_path('/custom-emojis') ? 'active' : '' ?>" href="<?= e(url('/custom-emojis')) ?>" title="Emoji tùy chỉnh">
+                    <span class="nav-icon" aria-hidden="true"><i class="fa-regular fa-face-smile"></i></span>
+                    <span class="nav-text">Emoji tùy chỉnh</span>
+                </a>
                 <a class="nav-link <?= is_active_path('/templates') ? 'active' : '' ?>" href="<?= e(url('/templates')) ?>" title="Mẫu tin nhắn">
                     <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-file-lines"></i></span>
                     <span class="nav-text">Mẫu tin nhắn</span>
-                </a>
-                <a class="nav-link <?= is_active_path('/custom-emojis') ? 'active' : '' ?>" href="<?= e(url('/custom-emojis')) ?>" title="Premium Emoji">
-                    <span class="nav-icon" aria-hidden="true"><i class="fa-regular fa-face-smile"></i></span>
-                    <span class="nav-text">Premium Emoji</span>
                 </a>
                 <a class="nav-link <?= is_active_path('/schedules') ? 'active' : '' ?>" href="<?= e(url('/schedules')) ?>" title="Lịch gửi">
                     <span class="nav-icon" aria-hidden="true"><i class="fa-regular fa-calendar-days"></i></span>
@@ -69,12 +96,33 @@ $userInitial = $userName !== '' ? mb_strtoupper(mb_substr($userName, 0, 1)) : 'U
                 </a>
             </nav>
 
+            <?php if ($isSuperAdmin): ?>
+                <div class="sidebar-section-label">Quản trị</div>
+                <nav class="nav nav-admin">
+                    <a class="nav-link <?= is_active_path('/admin/users') ? 'active' : '' ?>" href="<?= e(url('/admin/users')) ?>" title="Admin con">
+                        <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-user-shield"></i></span>
+                        <span class="nav-text">Admin con</span>
+                    </a>
+                    <a class="nav-link <?= is_active_path('/admin/subscriptions') ? 'active' : '' ?>" href="<?= e(url('/admin/subscriptions')) ?>" title="Hạn sử dụng">
+                        <span class="nav-icon" aria-hidden="true"><i class="fa-regular fa-hourglass-half"></i></span>
+                        <span class="nav-text">Hạn sử dụng</span>
+                    </a>
+                    <a class="nav-link <?= is_active_path('/admin/settings') ? 'active' : '' ?>" href="<?= e(url('/admin/settings')) ?>" title="Cấu hình hệ thống">
+                        <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-sliders"></i></span>
+                        <span class="nav-text">Cấu hình hệ thống</span>
+                    </a>
+                </nav>
+            <?php endif; ?>
+
             <div class="sidebar-footer">
                 <div class="sidebar-user">
                     <div class="sidebar-user-avatar"><?= e($userInitial) ?></div>
                     <div class="sidebar-user-copy">
                         <strong><?= e($userName) ?></strong>
                         <div class="small muted"><?= e($userEmail) ?></div>
+                        <div class="sidebar-user-meta">
+                            <span class="badge <?= e($subscriptionBadgeClass) ?>"><?= e($subscriptionBadgeText) ?></span>
+                        </div>
                     </div>
                 </div>
                 <form method="post" action="<?= e(url('/logout')) ?>">
@@ -110,6 +158,35 @@ $userInitial = $userName !== '' ? mb_strtoupper(mb_substr($userName, 0, 1)) : 'U
                 <?php endif; ?>
                 <?= $content ?>
             </div>
+
+            <footer class="app-footer">
+                <div class="app-footer-inner">
+
+                    <?php if ($hasFooterMeta): ?>
+                        <div class="app-footer-meta">
+                            <?php if ($footerText !== ''): ?>
+                                <div class="app-footer-copy"><?= nl2br(e($footerText)) ?></div>
+                            <?php endif; ?>
+
+                            <?php if ($supportName !== '' || $supportValue !== '' || $supportExtra !== ''): ?>
+                                <div class="app-footer-contact">
+                                    <strong><?= e($supportName !== '' ? $supportName : 'Liên hệ hỗ trợ') ?>:</strong>
+                                    <?php if ($supportValue !== ''): ?>
+                                        <?php if ($supportHref !== null): ?>
+                                            <a href="<?= e($supportHref) ?>" target="_blank" rel="noreferrer"><?= e($supportValue) ?></a>
+                                        <?php else: ?>
+                                            <span><?= e($supportValue) ?></span>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                    <?php if ($supportExtra !== ''): ?>
+                                        <span class="app-footer-extra"><?= e($supportExtra) ?></span>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </footer>
         </main>
     </div>
 

@@ -71,6 +71,59 @@ class MigrationService
         return $currentVersion;
     }
 
+    public function report(): array
+    {
+        $this->ensureTable();
+        $migrations = $this->loadMigrations();
+        $executedRows = $this->pdo->query('SELECT version, name, executed_at FROM migrations ORDER BY executed_at ASC')
+            ->fetchAll(PDO::FETCH_ASSOC);
+
+        $executedByVersion = [];
+
+        foreach ($executedRows as $row) {
+            $version = (string) ($row['version'] ?? '');
+
+            if ($version === '') {
+                continue;
+            }
+
+            $executedByVersion[$version] = [
+                'name' => (string) ($row['name'] ?? ''),
+                'executed_at' => (string) ($row['executed_at'] ?? ''),
+            ];
+        }
+
+        $items = [];
+
+        foreach ($migrations as $migration) {
+            $execution = $executedByVersion[$migration->version] ?? null;
+
+            if ($execution === null && $migration->legacyVersions !== []) {
+                foreach ($migration->legacyVersions as $legacyVersion) {
+                    $legacyExecution = $executedByVersion[(string) $legacyVersion] ?? null;
+
+                    if ($legacyExecution !== null) {
+                        $execution = $legacyExecution;
+                        break;
+                    }
+                }
+            }
+
+            $items[] = [
+                'version' => $migration->version,
+                'name' => $migration->name,
+                'legacy_versions' => $migration->legacyVersions,
+                'executed' => $execution !== null,
+                'executed_at' => $execution['executed_at'] ?? null,
+            ];
+        }
+
+        return [
+            'current_version' => $this->currentVersion(),
+            'items' => $items,
+        ];
+    }
+
     private function ensureTable(): void
     {
         $this->pdo->exec(

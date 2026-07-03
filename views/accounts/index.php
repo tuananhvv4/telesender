@@ -39,6 +39,7 @@
 	                <?php foreach ($accounts as $account): ?>
                         <?php
                         $status = (string) $account['session_status'];
+                        $isActive = (int) ($account['is_active'] ?? 1) === 1;
                         $badgeClass = match ($status) {
                             'active' => 'success',
                             'password_required' => 'warning',
@@ -68,10 +69,20 @@
 	                        <td><?= e((string) $account['schedules_count']) ?></td>
 	                        <td>
 	                            <div class="status-block">
+                                    <form method="post" action="<?= e(url('/accounts/toggle-active')) ?>">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="account_id" value="<?= e((string) $account['id']) ?>">
+                                        <button class="button <?= $isActive ? 'danger' : 'accent' ?>" type="submit">
+                                            <?= $isActive ? 'Tạm dừng tài khoản' : 'Bật lại tài khoản' ?>
+                                        </button>
+                                    </form>
                                     <?php if ($status === 'active'): ?>
                                         <div class="status-card success">
-                                            <div class="status-title">Đăng nhập thành công</div>
+                                            <div class="status-title"><?= $isActive ? 'Đăng nhập thành công và sẵn sàng hoạt động' : 'Tài khoản đang được tạm dừng' ?></div>
                                             <div class="small muted">Kết nối gần nhất: <?= e(fmt_datetime($account['last_connected_at'])) ?></div>
+                                            <?php if (!$isActive): ?>
+                                                <div class="small muted">Tài khoản đang tạm dừng, các hoạt động sẽ bị bỏ qua.</div>
+                                            <?php endif; ?>
                                         </div>
                                     <?php elseif ($status === 'code_sent'): ?>
                                         <div class="status-card info">

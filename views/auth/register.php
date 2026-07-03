@@ -1,5 +1,5 @@
 <span class="badge info">TeleSender</span>
-<h1 class="auth-heading">Tạo người dùng mới</h1>
+<h1 class="auth-heading"><?= e((string) ($registerHeading ?? 'Tạo người dùng mới')) ?></h1>
 
 <?php if ($error = flash('error')): ?>
     <div class="flash error"><?= e($error) ?></div>

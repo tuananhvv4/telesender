@@ -32,9 +32,20 @@ class TelegramAccountController extends Controller
     {
         $name = trim((string) $request->input('name'));
         $phone = trim((string) $request->input('phone_number'));
+        $user = auth()->user() ?? [];
 
         if ($name === '' || $phone === '') {
             $this->redirectWith('/accounts', error: 'Tên account và số điện thoại là bắt buộc.');
+        }
+
+        $limit = auth()->access()->accountLimit($user);
+        $currentCount = $this->accounts->count('user_id = :user_id', ['user_id' => (int) auth()->id()]);
+
+        if (auth()->access()->limitReached($limit, $currentCount)) {
+            $this->redirectWith(
+                '/accounts',
+                error: 'Tài khoản của bạn chỉ có thể quản lý tối đa ' . auth()->access()->limitLabel($limit) . ' tài khoản Telegram. Để thêm nhiều hơn, vui lòng liên hệ quản trị viên để nâng cấp.',
+            );
         }
 
         $sessionName = 'account_' . auth()->id() . '_' . time();
@@ -45,6 +56,7 @@ class TelegramAccountController extends Controller
             'phone_number' => $phone,
             'session_name' => $sessionName,
             'session_status' => 'draft',
+            'is_active' => 1,
             'meta_json' => null,
             'created_at' => gmdate('Y-m-d H:i:s'),
             'updated_at' => gmdate('Y-m-d H:i:s'),
@@ -123,6 +135,24 @@ class TelegramAccountController extends Controller
         } catch (\Throwable $exception) {
             $this->redirectWith('/accounts', error: $exception->getMessage());
         }
+    }
+
+    public function toggleActive(Request $request): void
+    {
+        $account = $this->ownedAccount((int) $request->input('account_id'));
+        $isActive = (int) ($account['is_active'] ?? 1) === 1;
+
+        $this->accounts->updateById((int) $account['id'], [
+            'is_active' => $isActive ? 0 : 1,
+            'updated_at' => gmdate('Y-m-d H:i:s'),
+        ]);
+
+        $this->redirectWith(
+            '/accounts',
+            success: $isActive
+                ? 'Đã tạm dừng tài khoản này.'
+                : 'Đã bật lại tài khoản này.'
+        );
     }
 
     private function ownedAccount(int $accountId): array
