@@ -4,6 +4,28 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e($title ?? config('app.name')) ?></title>
+    <script>
+    (function () {
+        var root = document.documentElement;
+        var storageKey = 'tele_sender_theme';
+        var theme = 'light';
+
+        try {
+            var stored = localStorage.getItem(storageKey);
+            if (stored === 'dark' || stored === 'light') {
+                theme = stored;
+            } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                theme = 'dark';
+            }
+        } catch (error) {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                theme = 'dark';
+            }
+        }
+
+        root.setAttribute('data-theme', theme);
+    })();
+    </script>
     <link rel="stylesheet" href="<?= e(asset('app.css')) ?>">
     <link rel="stylesheet" href="<?= e(asset('vendor/fontawesome/css/all.min.css')) ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -54,9 +76,15 @@ if ($isSuperAdmin) {
                         <h1><?= e(config('app.name')) ?></h1>
                     </div>
                 </div>
-                <button class="sidebar-toggle sidebar-toggle-desktop" type="button" data-sidebar-toggle aria-label="Thu gọn menu">
-                    <i class="fa-solid fa-angles-left" aria-hidden="true"></i>
-                </button>
+                <div class="sidebar-brand-actions">
+                    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Chuyển giao diện" title="Chuyển giao diện">
+                        <i class="fa-solid fa-moon" data-theme-icon aria-hidden="true"></i>
+                        <span class="sr-only">Chuyển giao diện</span>
+                    </button>
+                    <button class="sidebar-toggle sidebar-toggle-desktop" type="button" data-sidebar-toggle aria-label="Thu gọn menu">
+                        <i class="fa-solid fa-angles-left" aria-hidden="true"></i>
+                    </button>
+                </div>
             </div>
 
             <div class="sidebar-section-label">Điều hướng</div>
@@ -144,9 +172,15 @@ if ($isSuperAdmin) {
                         <span>Bảng điều khiển</span>
                     </div>
                 </div>
-                <button class="sidebar-toggle sidebar-toggle-mobile" type="button" data-sidebar-toggle aria-controls="app_sidebar" aria-expanded="false" aria-label="Mở menu">
-                    <i class="fa-solid fa-bars" aria-hidden="true"></i>
-                </button>
+                <div class="mobile-topbar-actions">
+                    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Chuyển giao diện" title="Chuyển giao diện">
+                        <i class="fa-solid fa-moon" data-theme-icon aria-hidden="true"></i>
+                        <span class="sr-only">Chuyển giao diện</span>
+                    </button>
+                    <button class="sidebar-toggle sidebar-toggle-mobile" type="button" data-sidebar-toggle aria-controls="app_sidebar" aria-expanded="false" aria-label="Mở menu">
+                        <i class="fa-solid fa-bars" aria-hidden="true"></i>
+                    </button>
+                </div>
             </header>
 
             <div class="main-content">
@@ -209,6 +243,7 @@ if ($isSuperAdmin) {
         </div>
     </div>
 
+    <script src="<?= e(asset('theme.js')) ?>" defer></script>
     <script>
     (function () {
         const body = document.body;
