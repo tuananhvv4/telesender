@@ -54,9 +54,33 @@ class Application
         try {
             $this->router->dispatch($this->request);
         } catch (HttpException $exception) {
+            if ($this->request->expectsJson()) {
+                Response::json([
+                    'ok' => false,
+                    'message' => $exception->getMessage(),
+                    'status' => $exception->status(),
+                ], $exception->status());
+            }
+
             http_response_code($exception->status());
             echo View::make('errors/http', ['exception' => $exception], 'guest');
         } catch (Throwable $exception) {
+            if ($this->request->expectsJson()) {
+                $payload = [
+                    'ok' => false,
+                    'message' => (bool) $this->config('app.debug', false)
+                        ? $exception->getMessage()
+                        : 'Đã có lỗi nội bộ xảy ra.',
+                    'status' => 500,
+                ];
+
+                if ((bool) $this->config('app.debug', false)) {
+                    $payload['trace'] = $exception->getTraceAsString();
+                }
+
+                Response::json($payload, 500);
+            }
+
             http_response_code(500);
 
             if ((bool) $this->config('app.debug', false)) {

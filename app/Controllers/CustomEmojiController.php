@@ -24,22 +24,15 @@ class CustomEmojiController extends Controller
     public function index(Request $request): void
     {
         $userId = (int) auth()->id();
-        $editEmoji = null;
-        $editId = (int) $request->query('edit', 0);
         $result = $this->customEmojis->paginateForUser(
             $userId,
             (int) $request->query('page', 1),
             pagination_per_page(18, [9, 18, 27, 36, 54])
         );
 
-        if ($editId > 0) {
-            $editEmoji = $this->customEmojis->findForUser($editId, $userId);
-        }
-
         $this->render('custom-emojis/index', [
             'title' => 'Custom Emoji',
             'customEmojis' => $result['items'],
-            'editEmoji' => $editEmoji,
             'pagination' => $result['pagination'],
             'sharedEmojiSource' => $this->sharedEmojis->sourceSummaryForUser($userId),
             'sharedCustomEmojis' => $this->sharedEmojis->sharedActiveForUser($userId),
@@ -54,7 +47,9 @@ class CustomEmojiController extends Controller
         $userId = (int) auth()->id();
 
         if (!is_array($rawRows)) {
-            Session::flash('custom_emoji_import_open', true);
+            if (!request()->expectsJson()) {
+                Session::flash('custom_emoji_import_open', true);
+            }
             $this->redirectWith('/custom-emojis', error: 'Dữ liệu import không hợp lệ.');
         }
 
@@ -156,14 +151,14 @@ class CustomEmojiController extends Controller
         try {
             $payload = $this->validatePayload($this->normalizedPayload($request->all()));
         } catch (RuntimeException $exception) {
-            $this->redirectWith('/custom-emojis?edit=' . $emoji['id'], error: $exception->getMessage());
+            $this->redirectWith('/custom-emojis', error: $exception->getMessage());
         }
 
         $userId = (int) auth()->id();
         $existing = $this->customEmojis->findBySlugForUser($payload['slug'], $userId);
 
         if ($existing !== null && (int) $existing['id'] !== (int) $emoji['id']) {
-            $this->redirectWith('/custom-emojis?edit=' . $emoji['id'], error: 'Slug custom emoji đã tồn tại. Hãy chọn slug khác.');
+            $this->redirectWith('/custom-emojis', error: 'Slug custom emoji đã tồn tại. Hãy chọn slug khác.');
         }
 
         $this->customEmojis->updateById((int) $emoji['id'], array_merge($payload, [
@@ -285,6 +280,10 @@ class CustomEmojiController extends Controller
 
     private function flashImportState(array $rows): void
     {
+        if (request()->expectsJson()) {
+            return;
+        }
+
         Session::flash('custom_emoji_import_rows', $rows);
         Session::flash('custom_emoji_import_open', true);
     }

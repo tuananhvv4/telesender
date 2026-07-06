@@ -2,16 +2,6 @@
 
 declare(strict_types=1);
 
-$formType = (string) ($formScheduleState['schedule_type'] ?? 'daily_times');
-$formTimezone = (string) ($formScheduleState['timezone'] ?? $defaultTimezone);
-$formCronExpression = (string) ($formScheduleState['cron_expression'] ?? '0 8 * * *');
-$formBuilder = (array) ($formScheduleState['builder'] ?? []);
-$intervalMinutes = (int) ($formBuilder['interval_minutes'] ?? 15);
-$intervalHours = (int) ($formBuilder['interval_hours'] ?? 4);
-$intervalHourMinute = (string) ($formBuilder['interval_hour_minute'] ?? '00');
-$dailyTimes = (array) ($formBuilder['daily_times'] ?? ['08:00', '12:00', '20:00']);
-$weeklyDays = array_map('strval', (array) ($formBuilder['weekly_days'] ?? ['1', '2', '3', '4', '5']));
-$weeklyTimes = (array) ($formBuilder['weekly_times'] ?? ['09:00', '13:00', '17:00']);
 $scheduleTypeLabels = [
     'interval_minutes' => 'Mỗi X phút',
     'interval_hours' => 'Mỗi X giờ',
@@ -19,229 +9,75 @@ $scheduleTypeLabels = [
     'weekly_times' => 'Theo ngày trong tuần',
     'advanced' => 'Nâng cao',
 ];
-$weekdayOptions = [
-    '1' => 'Thứ 2',
-    '2' => 'Thứ 3',
-    '3' => 'Thứ 4',
-    '4' => 'Thứ 5',
-    '5' => 'Thứ 6',
-    '6' => 'Thứ 7',
-    '0' => 'Chủ nhật',
-];
+$scheduleRecords = [];
+
+foreach ($schedules as $schedule) {
+    $scheduleRecords[(int) $schedule['id']] = [
+        'id' => (int) $schedule['id'],
+        'telegram_account_id' => (int) $schedule['telegram_account_id'],
+        'telegram_group_id' => (int) $schedule['telegram_group_id'],
+        'message_template_id' => (int) $schedule['message_template_id'],
+        'status' => (string) $schedule['status'],
+        'form_state' => $scheduleFormStates[(int) $schedule['id']] ?? $defaultFormScheduleState,
+    ];
+}
 ?>
 <section class="stack">
     <div class="topbar">
         <h1 class="page-title">Lịch gửi</h1>
+        <div class="inline-actions">
+            <button class="button primary" type="button" id="open_schedule_create">
+                <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                Tạo lịch gửi
+            </button>
+        </div>
     </div>
 
-    <div class="schedule-builder-layout">
-        <section class="card schedule-builder-main">
-            <h2 class="section-title"><?= $editSchedule ? 'Cập nhật lịch gửi' : 'Tạo lịch gửi mới' ?></h2>
-            <div class="field" style="margin: 16px 0 18px;">
-                <label for="schedule_preset">Lịch cài sẵn</label>
-                <select class="select" id="schedule_preset">
-                    <option value="">Chọn nhanh mẫu lịch gửi hoặc tự tuỳ chỉnh ở dưới</option>
-                    <?php foreach ($schedulePresets as $preset): ?>
-                        <option value="<?= e($preset['key']) ?>"><?= e($preset['name']) ?> · <?= e($preset['description']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="chip-row" style="margin-bottom: 18px;">
-                <?php foreach ($schedulePresets as $preset): ?>
-                    <button class="chip" type="button" data-schedule-chip="<?= e($preset['key']) ?>"><?= e($preset['name']) ?></button>
-                <?php endforeach; ?>
+    <div data-live-region="schedules-shell">
+    <script type="application/json" data-schedule-records><?= json_encode($scheduleRecords, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?></script>
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <h2 class="panel-title">Danh sách lịch gửi</h2>
+                <p class="panel-copy">Lọc theo tài khoản, mẫu tin, trạng thái hoặc từ khóa để quản lý danh sách lịch gửi lớn dễ hơn.</p>
             </div>
 
-            <form class="form-grid" id="schedule_form" method="post" action="<?= e(url($editSchedule ? '/schedules/update' : '/schedules')) ?>">
-                <?= csrf_field() ?>
-                <?php if ($editSchedule): ?>
-                    <input type="hidden" name="id" value="<?= e((string) $editSchedule['id']) ?>">
+            <form class="toolbar-form" method="get" action="<?= e(url('/schedules')) ?>">
+                <?php if ((int) request()->query('per_page', 0) > 0): ?>
+                    <input type="hidden" name="per_page" value="<?= e((string) request()->query('per_page')) ?>">
                 <?php endif; ?>
+                <div class="toolbar-search schedule-toolbar-search">
+                    <select class="select" name="telegram_account_id">
+                        <option value="">Tất cả tài khoản</option>
+                        <?php foreach ($accounts as $account): ?>
+                            <option value="<?= e((string) $account['id']) ?>" <?= (int) ($selectedAccountId ?? 0) === (int) $account['id'] ? 'selected' : '' ?>>
+                                <?= e($account['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
 
-                <section class="builder-block">
-                    <div class="builder-block-head">
-                        <div>
-                            <h3 class="builder-block-title">Thông tin nền</h3>
-                        </div>
-                    </div>
-                    <div class="schedule-core-grid">
-                        <div class="field">
-                            <label for="telegram_account_id">Tài khoản Telegram</label>
-                            <select class="select" id="telegram_account_id" name="telegram_account_id" required>
-                                <option value="">Chọn tài khoản</option>
-                                <?php foreach ($accounts as $account): ?>
-                                    <option value="<?= e((string) $account['id']) ?>" <?= (string) ($editSchedule['telegram_account_id'] ?? '') === (string) $account['id'] ? 'selected' : '' ?>>
-                                        <?= e($account['name']) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
+                    <select class="select" name="message_template_id">
+                        <option value="">Tất cả mẫu tin</option>
+                        <?php foreach ($templates as $template): ?>
+                            <option value="<?= e((string) $template['id']) ?>" <?= (int) ($selectedTemplateId ?? 0) === (int) $template['id'] ? 'selected' : '' ?>>
+                                <?= e($template['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
 
-                        <div class="field">
-                            <label for="telegram_group_id">Nhóm Telegram</label>
-                            <select class="select" id="telegram_group_id" name="telegram_group_id" required>
-                                <option value="">Chọn nhóm</option>
-                                <?php foreach ($groups as $group): ?>
-                                    <option value="<?= e((string) $group['id']) ?>" <?= (string) ($editSchedule['telegram_group_id'] ?? '') === (string) $group['id'] ? 'selected' : '' ?>>
-                                        <?= e($group['title']) ?>
-                                        <?php if (!empty($group['topic_title'])): ?>
-                                            · Topic: <?= e($group['topic_title']) ?>
-                                        <?php elseif (!empty($group['topic_id'])): ?>
-                                            · Topic ID: <?= e((string) $group['topic_id']) ?>
-                                        <?php endif; ?>
-                                        (<?= e($group['account_name']) ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
+                    <select class="select" name="status">
+                        <option value="">Mọi trạng thái</option>
+                        <option value="active" <?= ($selectedStatus ?? '') === 'active' ? 'selected' : '' ?>>Đang chạy</option>
+                        <option value="paused" <?= ($selectedStatus ?? '') === 'paused' ? 'selected' : '' ?>>Tạm dừng</option>
+                    </select>
 
-                        <div class="field schedule-field-span-2">
-                            <label for="message_template_id">Mẫu tin nhắn</label>
-                            <select class="select" id="message_template_id" name="message_template_id" required>
-                                <option value="">Chọn mẫu tin nhắn</option>
-                                <?php foreach ($templates as $template): ?>
-                                    <option value="<?= e((string) $template['id']) ?>" <?= (string) ($editSchedule['message_template_id'] ?? '') === (string) $template['id'] ? 'selected' : '' ?>>
-                                        <?= e($template['name']) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div class="field">
-                            <label for="timezone">Múi giờ</label>
-                            <input class="input" id="timezone" type="text" name="timezone" value="<?= e($formTimezone) ?>" required>
-                        </div>
-
-                        <div class="field">
-                            <label for="schedule_type">Kiểu lịch</label>
-                            <select class="select" id="schedule_type" name="schedule_type" required>
-                                <?php foreach ($scheduleModes as $mode): ?>
-                                    <option value="<?= e($mode['value']) ?>" <?= $formType === $mode['value'] ? 'selected' : '' ?>>
-                                        <?= e($mode['label']) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="builder-block">
-                    <div class="builder-block-head">
-                        <div>
-                            <h3 class="builder-block-title">Cấu hình lịch</h3>
-                        </div>
-                    </div>
-
-                    <div class="field" data-schedule-section="interval_minutes">
-                        <label for="interval_minutes">Mỗi X phút</label>
-                        <div class="schedule-inline-grid">
-                            <input class="input" id="interval_minutes" type="number" name="interval_minutes" min="5" max="59" value="<?= e((string) $intervalMinutes) ?>">
-                            <div class="inline-hint">phút / lần</div>
-                        </div>
-                    </div>
-
-                    <div class="field" data-schedule-section="interval_hours">
-                        <label for="interval_hours">Mỗi X giờ</label>
-                        <div class="schedule-inline-grid schedule-inline-grid-wide">
-                            <input class="input" id="interval_hours" type="number" name="interval_hours" min="1" max="23" value="<?= e((string) $intervalHours) ?>" placeholder="Ví dụ: 4">
-                            <select class="select" id="interval_hour_minute" name="interval_hour_minute">
-                                <?php for ($minute = 0; $minute < 60; $minute++): ?>
-                                    <?php $formattedMinute = str_pad((string) $minute, 2, '0', STR_PAD_LEFT); ?>
-                                    <option value="<?= e($formattedMinute) ?>" <?= $intervalHourMinute === $formattedMinute ? 'selected' : '' ?>>
-                                        Phút <?= e($formattedMinute) ?>
-                                    </option>
-                                <?php endfor; ?>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="field" data-schedule-section="daily_times">
-                        <div class="schedule-section-head">
-                            <label>Những giờ chạy mỗi ngày</label>
-                            <button class="button secondary schedule-add-button" type="button" id="add_daily_time">Thêm mốc giờ</button>
-                        </div>
-                        <div class="stack schedule-time-list" id="daily_times_list">
-                            <?php foreach ($dailyTimes as $time): ?>
-                                <div class="schedule-time-row">
-                                    <input class="input schedule-time-input" type="time" name="daily_times[]" value="<?= e((string) $time) ?>">
-                                    <button class="button secondary schedule-time-delete" type="button" data-remove-time>Xóa</button>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-
-                    <div class="field" data-schedule-section="weekly_times">
-                        <label>Ngày chạy trong tuần</label>
-                        <div class="chip-row schedule-weekday-row" style="margin-bottom: 12px;">
-                            <?php foreach ($weekdayOptions as $weekdayValue => $weekdayLabel): ?>
-                                <label class="chip schedule-weekday-chip" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                                    <input type="checkbox" name="weekly_days[]" value="<?= e($weekdayValue) ?>" <?= in_array($weekdayValue, $weeklyDays, true) ? 'checked' : '' ?>>
-                                    <span><?= e($weekdayLabel) ?></span>
-                                </label>
-                            <?php endforeach; ?>
-                        </div>
-
-                        <div class="schedule-section-head">
-                            <label>Những giờ chạy ở các ngày đã chọn</label>
-                            <button class="button secondary schedule-add-button" type="button" id="add_weekly_time">Thêm mốc giờ</button>
-                        </div>
-                        <div class="stack schedule-time-list" id="weekly_times_list">
-                            <?php foreach ($weeklyTimes as $time): ?>
-                                <div class="schedule-time-row">
-                                    <input class="input schedule-time-input" type="time" name="weekly_times[]" value="<?= e((string) $time) ?>">
-                                    <button class="button secondary schedule-time-delete" type="button" data-remove-time>Xóa</button>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-
-                    <div class="field" data-schedule-section="advanced">
-                        <label for="cron_expression">Cron nâng cao</label>
-                        <textarea class="textarea mono" id="cron_expression" name="cron_expression" rows="4" placeholder="Ví dụ: 0 8 * * *&#10;hoặc&#10;30 8 * * 1,2,3,4,5 | 0 20 * * *"><?= e($formCronExpression) ?></textarea>
-                    </div>
-                </section>
-
-                <div class="actions">
-                    <button class="button primary" type="submit"><?= $editSchedule ? 'Cập nhật lịch gửi' : 'Tạo lịch gửi' ?></button>
-                    <?php if ($editSchedule): ?>
-                        <a class="button secondary" href="<?= e(url('/schedules')) ?>">Tạo mới</a>
+                    <input class="input" type="text" name="q" value="<?= e($searchQuery ?? '') ?>" placeholder="Tìm theo mẫu tin, tài khoản, nhóm, topic, cron, timezone...">
+                    <button class="button secondary" type="submit">Lọc</button>
+                    <?php if (($searchQuery ?? '') !== '' || (int) ($selectedAccountId ?? 0) > 0 || (int) ($selectedTemplateId ?? 0) > 0 || ($selectedStatus ?? '') !== ''): ?>
+                        <a class="button secondary" href="<?= e(url('/schedules')) ?>">Xóa lọc</a>
                     <?php endif; ?>
                 </div>
             </form>
-        </section>
-
-        <section class="card schedule-builder-side">
-            <h2 class="section-title">Xem trước lịch chạy</h2>
-            <div class="list">
-                <div class="list-item">
-                    <strong>Cron thực thi</strong>
-                    <div class="inline-actions" style="margin-top: 8px;">
-                        <div class="small mono" id="schedule_preview_cron" style="flex:1;">-</div>
-                        <button class="button secondary" id="copy_preview_cron" type="button">Sao chép cron</button>
-                    </div>
-                </div>
-                <div class="list-item">
-                    <strong>Mô tả</strong>
-                    <div class="small muted" id="schedule_preview_summary">-</div>
-                </div>
-                <div class="list-item">
-                    <strong>5 lần chạy tiếp theo</strong>
-                    <div class="small muted" id="schedule_preview_runs">-</div>
-                </div>
-                <div class="list-item">
-                    <strong>Mật độ an toàn</strong>
-                    <div class="inline-actions" style="margin-top: 8px;">
-                        <span class="badge info" id="schedule_preview_risk_badge">Đang tính</span>
-                    </div>
-                    <div class="small muted" id="schedule_preview_risk_message" style="margin-top: 8px; display:none;"></div>
-                </div>
-            </div>
-        </section>
-    </div>
-
-    <section class="panel">
-        <div class="panel-header">
-            <h2 class="panel-title">Danh sách lịch gửi</h2>
         </div>
         <div class="panel-body table-wrap">
             <table>
@@ -320,7 +156,7 @@ $weekdayOptions = [
                         </td>
                         <td>
                             <div class="inline-actions">
-                                <a class="button secondary" href="<?= e(url('/schedules?edit=' . $schedule['id'])) ?>">Sửa</a>
+                                <button class="button secondary" type="button" data-schedule-edit="<?= e((string) $schedule['id']) ?>">Sửa</button>
                                 <form
                                     method="post"
                                     action="<?= e(url('/schedules/send-now')) ?>"
@@ -347,7 +183,13 @@ $weekdayOptions = [
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($schedules === []): ?>
-                    <tr><td colspan="7" class="muted">Chưa có lịch gửi nào.</td></tr>
+                    <tr>
+                        <td colspan="7" class="muted">
+                            <?= (($searchQuery ?? '') !== '' || (int) ($selectedAccountId ?? 0) > 0 || (int) ($selectedTemplateId ?? 0) > 0 || ($selectedStatus ?? '') !== '')
+                                ? 'Không có lịch gửi nào khớp với bộ lọc hiện tại.'
+                                : 'Chưa có lịch gửi nào.' ?>
+                        </td>
+                    </tr>
                 <?php endif; ?>
                 </tbody>
             </table>
@@ -420,238 +262,550 @@ $weekdayOptions = [
             </div>
         </section>
     <?php endif; ?>
+</div>
 </section>
 
+<template id="schedule_editor_template">
+    <div class="schedule-builder-layout">
+        <section class="card schedule-builder-main">
+            <div class="field" style="margin: 16px 0 18px;">
+                <label for="schedule_modal_preset">Lịch cài sẵn</label>
+                <select class="select" id="schedule_modal_preset" data-schedule-preset>
+                    <option value="">Chọn nhanh mẫu lịch gửi hoặc tự tuỳ chỉnh ở dưới</option>
+                    <?php foreach ($schedulePresets as $preset): ?>
+                        <option value="<?= e($preset['key']) ?>"><?= e($preset['name']) ?> · <?= e($preset['description']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="chip-row" style="margin-bottom: 18px;">
+                <?php foreach ($schedulePresets as $preset): ?>
+                    <button class="chip" type="button" data-schedule-chip="<?= e($preset['key']) ?>"><?= e($preset['name']) ?></button>
+                <?php endforeach; ?>
+            </div>
+
+            <form class="form-grid" method="post" action="<?= e(url('/schedules')) ?>" data-schedule-form>
+                <?= csrf_field() ?>
+                <div class="form-feedback" data-form-feedback hidden></div>
+
+                <section class="builder-block">
+                    <div class="builder-block-head">
+                        <div>
+                            <h3 class="builder-block-title">Thông tin nền</h3>
+                        </div>
+                    </div>
+                    <div class="schedule-core-grid">
+                        <div class="field">
+                            <label for="schedule_modal_account">Tài khoản Telegram</label>
+                            <select class="select" id="schedule_modal_account" name="telegram_account_id" required data-schedule-account>
+                                <option value="">Chọn tài khoản</option>
+                                <?php foreach ($accounts as $account): ?>
+                                    <option value="<?= e((string) $account['id']) ?>"><?= e($account['name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="schedule_modal_group">Nhóm Telegram</label>
+                            <select class="select" id="schedule_modal_group" name="telegram_group_id" required data-schedule-group>
+                                <option value="">Chọn nhóm</option>
+                                <?php foreach ($groups as $group): ?>
+                                    <option value="<?= e((string) $group['id']) ?>">
+                                        <?= e($group['title']) ?>
+                                        <?php if (!empty($group['topic_title'])): ?>
+                                            · Topic: <?= e($group['topic_title']) ?>
+                                        <?php elseif (!empty($group['topic_id'])): ?>
+                                            · Topic ID: <?= e((string) $group['topic_id']) ?>
+                                        <?php endif; ?>
+                                        (<?= e($group['account_name']) ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="field schedule-field-span-2">
+                            <label for="schedule_modal_template">Mẫu tin nhắn</label>
+                            <select class="select" id="schedule_modal_template" name="message_template_id" required data-schedule-template>
+                                <option value="">Chọn mẫu tin nhắn</option>
+                                <?php foreach ($templates as $template): ?>
+                                    <option value="<?= e((string) $template['id']) ?>"><?= e($template['name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="schedule_modal_timezone">Múi giờ</label>
+                            <input class="input" id="schedule_modal_timezone" type="text" name="timezone" value="<?= e($defaultTimezone) ?>" required data-schedule-timezone>
+                        </div>
+
+                        <div class="field">
+                            <label for="schedule_modal_type">Kiểu lịch</label>
+                            <select class="select" id="schedule_modal_type" name="schedule_type" required data-schedule-type>
+                                <?php foreach ($scheduleModes as $mode): ?>
+                                    <option value="<?= e($mode['value']) ?>"><?= e($mode['label']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="builder-block">
+                    <div class="builder-block-head">
+                        <div>
+                            <h3 class="builder-block-title">Cấu hình lịch</h3>
+                        </div>
+                    </div>
+
+                    <div class="field" data-schedule-section="interval_minutes">
+                        <label for="schedule_modal_interval_minutes">Mỗi X phút</label>
+                        <div class="schedule-inline-grid">
+                            <input class="input" id="schedule_modal_interval_minutes" type="number" name="interval_minutes" min="5" max="59" value="15" data-schedule-interval-minutes>
+                            <div class="inline-hint">phút / lần</div>
+                        </div>
+                    </div>
+
+                    <div class="field" data-schedule-section="interval_hours">
+                        <label for="schedule_modal_interval_hours">Mỗi X giờ</label>
+                        <div class="schedule-inline-grid schedule-inline-grid-wide">
+                            <input class="input" id="schedule_modal_interval_hours" type="number" name="interval_hours" min="1" max="23" value="4" placeholder="Ví dụ: 4" data-schedule-interval-hours>
+                            <select class="select" id="schedule_modal_interval_hour_minute" name="interval_hour_minute" data-schedule-interval-hour-minute>
+                                <?php for ($minute = 0; $minute < 60; $minute++): ?>
+                                    <?php $formattedMinute = str_pad((string) $minute, 2, '0', STR_PAD_LEFT); ?>
+                                    <option value="<?= e($formattedMinute) ?>" <?= $formattedMinute === '00' ? 'selected' : '' ?>>Phút <?= e($formattedMinute) ?></option>
+                                <?php endfor; ?>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="field" data-schedule-section="daily_times">
+                        <div class="schedule-section-head">
+                            <label>Những giờ chạy mỗi ngày</label>
+                            <button class="button secondary schedule-add-button" type="button" data-add-daily-time>Thêm mốc giờ</button>
+                        </div>
+                        <div class="stack schedule-time-list" data-daily-times-list></div>
+                    </div>
+
+                    <div class="field" data-schedule-section="weekly_times">
+                        <label>Ngày chạy trong tuần</label>
+                        <div class="chip-row schedule-weekday-row" style="margin-bottom: 12px;">
+                            <?php foreach ([
+                                '1' => 'Thứ 2',
+                                '2' => 'Thứ 3',
+                                '3' => 'Thứ 4',
+                                '4' => 'Thứ 5',
+                                '5' => 'Thứ 6',
+                                '6' => 'Thứ 7',
+                                '0' => 'Chủ nhật',
+                            ] as $weekdayValue => $weekdayLabel): ?>
+                                <label class="chip schedule-weekday-chip" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                                    <input type="checkbox" name="weekly_days[]" value="<?= e($weekdayValue) ?>" data-weekly-day>
+                                    <span><?= e($weekdayLabel) ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+
+                        <div class="schedule-section-head">
+                            <label>Những giờ chạy ở các ngày đã chọn</label>
+                            <button class="button secondary schedule-add-button" type="button" data-add-weekly-time>Thêm mốc giờ</button>
+                        </div>
+                        <div class="stack schedule-time-list" data-weekly-times-list></div>
+                    </div>
+
+                    <div class="field" data-schedule-section="advanced">
+                        <label for="schedule_modal_cron">Cron nâng cao</label>
+                        <textarea class="textarea mono" id="schedule_modal_cron" name="cron_expression" rows="4" placeholder="Ví dụ: 0 8 * * *&#10;hoặc&#10;30 8 * * 1,2,3,4,5 | 0 20 * * *" data-schedule-cron></textarea>
+                    </div>
+                </section>
+
+                <div class="actions">
+                    <button class="button primary" type="submit" data-schedule-submit data-loading-text="Đang lưu...">Lưu lịch gửi</button>
+                    <button class="button secondary" type="button" data-crud-modal-close>Hủy</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="card schedule-builder-side">
+            <h2 class="section-title">Xem trước lịch chạy</h2>
+            <div class="list">
+                <div class="list-item">
+                    <strong>Cron thực thi</strong>
+                    <div class="inline-actions" style="margin-top: 8px;">
+                        <div class="small mono" style="flex:1;" data-schedule-preview-cron>-</div>
+                        <button class="button secondary" type="button" data-copy-preview-cron>Sao chép cron</button>
+                    </div>
+                </div>
+                <div class="list-item">
+                    <strong>Mô tả</strong>
+                    <div class="small muted" data-schedule-preview-summary>-</div>
+                </div>
+                <div class="list-item">
+                    <strong>5 lần chạy tiếp theo</strong>
+                    <div class="small muted" data-schedule-preview-runs>-</div>
+                </div>
+                <div class="list-item">
+                    <strong>Mật độ an toàn</strong>
+                    <div class="inline-actions" style="margin-top: 8px;">
+                        <span class="badge info" data-schedule-preview-risk-badge>Đang tính</span>
+                    </div>
+                    <div class="small muted" style="margin-top: 8px; display:none;" data-schedule-preview-risk-message></div>
+                </div>
+            </div>
+        </section>
+    </div>
+</template>
+
 <script>
-function requestAppModal(mode, options = {}) {
-    return new Promise((resolve) => {
-        const responseEvent = `app:modal:response:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-        const handleResponse = (event) => {
-            document.removeEventListener(responseEvent, handleResponse);
-            resolve(Boolean(event.detail?.confirmed));
-        };
+document.addEventListener('DOMContentLoaded', () => {
+(function () {
+    const schedulePresets = <?= json_encode($schedulePresets, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    const defaultScheduleState = <?= json_encode($defaultFormScheduleState, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    const previewUrl = <?= json_encode(url('/schedules/preview'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    const createUrl = <?= json_encode(url('/schedules'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    const updateUrl = <?= json_encode(url('/schedules/update'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    const createButton = document.getElementById('open_schedule_create');
+    const editorTemplate = document.getElementById('schedule_editor_template');
+    let scheduleRecords = window.TeleSenderApp?.readJsonScript('[data-schedule-records]', {}) || {};
 
-        document.addEventListener(responseEvent, handleResponse, { once: true });
-        document.dispatchEvent(new CustomEvent('app:modal:open', {
-            detail: {
-                mode,
-                options,
-                responseEvent,
-            },
-        }));
-    });
-}
+    if (!editorTemplate || !window.TeleSenderCrudModal || !window.TeleSenderApp) {
+        return;
+    }
 
-const schedulePresets = <?= json_encode($schedulePresets, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
-const scheduleForm = document.getElementById('schedule_form');
-const schedulePresetSelect = document.getElementById('schedule_preset');
-const scheduleTypeInput = document.getElementById('schedule_type');
-const timezoneInput = document.getElementById('timezone');
-const cronInput = document.getElementById('cron_expression');
-const dailyTimesList = document.getElementById('daily_times_list');
-const weeklyTimesList = document.getElementById('weekly_times_list');
-const previewCron = document.getElementById('schedule_preview_cron');
-const previewSummary = document.getElementById('schedule_preview_summary');
-const previewRuns = document.getElementById('schedule_preview_runs');
-const previewRiskBadge = document.getElementById('schedule_preview_risk_badge');
-const previewRiskMessage = document.getElementById('schedule_preview_risk_message');
-const copyPreviewCronButton = document.getElementById('copy_preview_cron');
-const previewUrl = '<?= e(url('/schedules/preview')) ?>';
+    function requestAppModal(mode, options = {}) {
+        return new Promise((resolve) => {
+            const responseEvent = `app:modal:response:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+            const handleResponse = (event) => {
+                document.removeEventListener(responseEvent, handleResponse);
+                resolve(Boolean(event.detail?.confirmed));
+            };
 
-function toggleScheduleSections() {
-    const activeType = scheduleTypeInput.value;
-    document.querySelectorAll('[data-schedule-section]').forEach((section) => {
-        section.style.display = section.getAttribute('data-schedule-section') === activeType ? '' : 'none';
-    });
-}
+            document.addEventListener(responseEvent, handleResponse, { once: true });
+            document.dispatchEvent(new CustomEvent('app:modal:open', {
+                detail: {
+                    mode,
+                    options,
+                    responseEvent,
+                },
+            }));
+        });
+    }
 
-function createTimeRow(name, value = '') {
-    const row = document.createElement('div');
-    row.className = 'schedule-time-row';
-    row.innerHTML = `
-        <input class="input schedule-time-input" type="time" name="${name}" value="${value}">
-        <button class="button secondary schedule-time-delete" type="button" data-remove-time>Xóa</button>
-    `;
-    return row;
-}
+    function createTimeRow(name, value = '') {
+        const row = document.createElement('div');
+        row.className = 'schedule-time-row';
+        row.innerHTML = `
+            <input class="input schedule-time-input" type="time" name="${name}" value="${value}">
+            <button class="button secondary schedule-time-delete" type="button" data-remove-time>Xóa</button>
+        `;
+        return row;
+    }
 
-function bindRemoveTimeButtons(scope = document) {
-    scope.querySelectorAll('[data-remove-time]').forEach((button) => {
-        if (button.dataset.bound === '1') {
+    function openScheduleModal(mode, scheduleId = null) {
+        const fragment = editorTemplate.content.cloneNode(true);
+        const wrapper = document.createElement('div');
+        wrapper.appendChild(fragment);
+
+        const form = wrapper.querySelector('[data-schedule-form]');
+        const presetSelect = wrapper.querySelector('[data-schedule-preset]');
+        const typeInput = wrapper.querySelector('[data-schedule-type]');
+        const timezoneInput = wrapper.querySelector('[data-schedule-timezone]');
+        const cronInput = wrapper.querySelector('[data-schedule-cron]');
+        const accountInput = wrapper.querySelector('[data-schedule-account]');
+        const groupInput = wrapper.querySelector('[data-schedule-group]');
+        const templateInput = wrapper.querySelector('[data-schedule-template]');
+        const submitButton = wrapper.querySelector('[data-schedule-submit]');
+        const dailyTimesList = wrapper.querySelector('[data-daily-times-list]');
+        const weeklyTimesList = wrapper.querySelector('[data-weekly-times-list]');
+        const previewCron = wrapper.querySelector('[data-schedule-preview-cron]');
+        const previewSummary = wrapper.querySelector('[data-schedule-preview-summary]');
+        const previewRuns = wrapper.querySelector('[data-schedule-preview-runs]');
+        const previewRiskBadge = wrapper.querySelector('[data-schedule-preview-risk-badge]');
+        const previewRiskMessage = wrapper.querySelector('[data-schedule-preview-risk-message]');
+        const copyPreviewCronButton = wrapper.querySelector('[data-copy-preview-cron]');
+        let previewTimer = null;
+
+        if (
+            !form || !presetSelect || !typeInput || !timezoneInput || !cronInput || !accountInput || !groupInput
+            || !templateInput || !submitButton || !dailyTimesList || !weeklyTimesList || !previewCron
+            || !previewSummary || !previewRuns || !previewRiskBadge || !previewRiskMessage || !copyPreviewCronButton
+        ) {
             return;
         }
 
-        button.dataset.bound = '1';
-        button.addEventListener('click', () => {
-            const row = button.closest('.schedule-time-row');
-            row?.remove();
-            triggerPreview();
-        });
-    });
-}
-
-function addTimeRow(container, name, value = '') {
-    const row = createTimeRow(name, value);
-    container.appendChild(row);
-    bindRemoveTimeButtons(row);
-}
-
-function applySchedulePreset(key) {
-    const preset = schedulePresets.find((item) => item.key === key);
-    if (!preset) {
-        return;
-    }
-
-    timezoneInput.value = preset.timezone || 'Asia/Ho_Chi_Minh';
-
-    if (preset.schedule_type) {
-        scheduleTypeInput.value = preset.schedule_type;
-        toggleScheduleSections();
-    } else {
-        scheduleTypeInput.value = 'advanced';
-        toggleScheduleSections();
-    }
-
-    cronInput.value = preset.cron_expression || '';
-
-    const config = preset.schedule_config || {};
-    if (preset.schedule_type === 'interval_minutes') {
-        document.getElementById('interval_minutes').value = config.interval_minutes || 15;
-    }
-
-    if (preset.schedule_type === 'interval_hours') {
-        document.getElementById('interval_hours').value = config.interval_hours || 4;
-        document.getElementById('interval_hour_minute').value = String(config.minute ?? 0).padStart(2, '0');
-    }
-
-    if (preset.schedule_type === 'daily_times') {
-        dailyTimesList.innerHTML = '';
-        (config.times || ['08:00']).forEach((time) => addTimeRow(dailyTimesList, 'daily_times[]', time));
-    }
-
-    if (preset.schedule_type === 'weekly_times') {
-        document.querySelectorAll('input[name="weekly_days[]"]').forEach((checkbox) => {
-            checkbox.checked = (config.days || []).includes(checkbox.value);
-        });
-
-        weeklyTimesList.innerHTML = '';
-        (config.times || ['09:00']).forEach((time) => addTimeRow(weeklyTimesList, 'weekly_times[]', time));
-    }
-
-    triggerPreview();
-}
-
-let previewTimer = null;
-
-async function updateSchedulePreview() {
-    const query = new URLSearchParams(new FormData(scheduleForm));
-
-    try {
-        const response = await fetch(`${previewUrl}?${query.toString()}`, {
-            headers: {
-                'Accept': 'application/json',
-            },
-        });
-        const payload = await response.json();
-
-        if (!response.ok || !payload.ok) {
-            throw new Error(payload.message || 'Không preview được lịch này.');
+        function toggleScheduleSections() {
+            const activeType = typeInput.value;
+            wrapper.querySelectorAll('[data-schedule-section]').forEach((section) => {
+                section.style.display = section.getAttribute('data-schedule-section') === activeType ? '' : 'none';
+            });
         }
 
-        previewCron.textContent = payload.cron_expression;
-        previewSummary.textContent = payload.summary;
-        previewRuns.textContent = payload.next_runs.join(' · ');
+        function bindRemoveTimeButtons(scope = wrapper) {
+            scope.querySelectorAll('[data-remove-time]').forEach((button) => {
+                if (button.dataset.bound === '1') {
+                    return;
+                }
 
-        const risk = payload.risk || {};
-        const riskLabel = {
-            safe: 'An toàn',
-            medium: 'Cần lưu ý',
-            high: 'Khá dày',
-            blocked: 'Quá dày',
-        }[risk.risk] || 'Đang tính';
-        const riskClass = {
-            safe: 'success',
-            medium: 'info',
-            high: 'warning',
-            blocked: 'danger',
-        }[risk.risk] || 'info';
+                button.dataset.bound = '1';
+                button.addEventListener('click', () => {
+                    const row = button.closest('.schedule-time-row');
+                    row?.remove();
+                    triggerPreview();
+                });
+            });
+        }
 
-        previewRiskBadge.className = `badge ${riskClass}`;
-        previewRiskBadge.textContent = riskLabel;
-        previewRiskMessage.textContent = risk.message || '';
-        previewRiskMessage.style.display = risk.message ? '' : 'none';
-    } catch (error) {
-        previewCron.textContent = '-';
-        previewSummary.textContent = error.message || 'Không preview được lịch này.';
-        previewRuns.textContent = '-';
-        previewRiskBadge.className = 'badge warning';
-        previewRiskBadge.textContent = 'Chưa hợp lệ';
-        previewRiskMessage.textContent = error.message || 'Vui lòng kiểm tra lại cấu hình lịch.';
-        previewRiskMessage.style.display = '';
+        function addTimeRow(container, name, value = '') {
+            const row = createTimeRow(name, value);
+            container.appendChild(row);
+            bindRemoveTimeButtons(row);
+        }
+
+        function applySchedulePreset(key) {
+            const preset = schedulePresets.find((item) => item.key === key);
+            if (!preset) {
+                return;
+            }
+
+            timezoneInput.value = preset.timezone || 'Asia/Ho_Chi_Minh';
+
+            if (preset.schedule_type) {
+                typeInput.value = preset.schedule_type;
+                toggleScheduleSections();
+            } else {
+                typeInput.value = 'advanced';
+                toggleScheduleSections();
+            }
+
+            cronInput.value = preset.cron_expression || '';
+
+            const config = preset.schedule_config || {};
+            const intervalMinutesInput = wrapper.querySelector('[data-schedule-interval-minutes]');
+            const intervalHoursInput = wrapper.querySelector('[data-schedule-interval-hours]');
+            const intervalHourMinuteInput = wrapper.querySelector('[data-schedule-interval-hour-minute]');
+
+            if (preset.schedule_type === 'interval_minutes' && intervalMinutesInput) {
+                intervalMinutesInput.value = config.interval_minutes || 15;
+            }
+
+            if (preset.schedule_type === 'interval_hours' && intervalHoursInput && intervalHourMinuteInput) {
+                intervalHoursInput.value = config.interval_hours || 4;
+                intervalHourMinuteInput.value = String(config.minute ?? 0).padStart(2, '0');
+            }
+
+            if (preset.schedule_type === 'daily_times') {
+                dailyTimesList.innerHTML = '';
+                (config.times || ['08:00']).forEach((time) => addTimeRow(dailyTimesList, 'daily_times[]', time));
+            }
+
+            if (preset.schedule_type === 'weekly_times') {
+                wrapper.querySelectorAll('input[name="weekly_days[]"]').forEach((checkbox) => {
+                    checkbox.checked = (config.days || []).includes(checkbox.value);
+                });
+
+                weeklyTimesList.innerHTML = '';
+                (config.times || ['09:00']).forEach((time) => addTimeRow(weeklyTimesList, 'weekly_times[]', time));
+            }
+
+            triggerPreview();
+        }
+
+        async function updateSchedulePreview() {
+            const query = new URLSearchParams(new FormData(form));
+
+            try {
+                const payload = await window.TeleSenderApp.fetchJson(`${previewUrl}?${query.toString()}`);
+
+                previewCron.textContent = payload.cron_expression;
+                previewSummary.textContent = payload.summary;
+                previewRuns.textContent = Array.isArray(payload.next_runs) ? payload.next_runs.join(' · ') : '-';
+
+                const risk = payload.risk || {};
+                const riskLabel = {
+                    safe: 'An toàn',
+                    medium: 'Cần lưu ý',
+                    high: 'Khá dày',
+                    blocked: 'Quá dày',
+                }[risk.risk] || 'Đang tính';
+                const riskClass = {
+                    safe: 'success',
+                    medium: 'info',
+                    high: 'warning',
+                    blocked: 'danger',
+                }[risk.risk] || 'info';
+
+                previewRiskBadge.className = `badge ${riskClass}`;
+                previewRiskBadge.textContent = riskLabel;
+                previewRiskMessage.textContent = risk.message || '';
+                previewRiskMessage.style.display = risk.message ? '' : 'none';
+            } catch (error) {
+                previewCron.textContent = '-';
+                previewSummary.textContent = error.message || 'Không preview được lịch này.';
+                previewRuns.textContent = '-';
+                previewRiskBadge.className = 'badge warning';
+                previewRiskBadge.textContent = 'Chưa hợp lệ';
+                previewRiskMessage.textContent = error.message || 'Vui lòng kiểm tra lại cấu hình lịch.';
+                previewRiskMessage.style.display = '';
+            }
+        }
+
+        function triggerPreview() {
+            clearTimeout(previewTimer);
+            previewTimer = setTimeout(updateSchedulePreview, 180);
+        }
+
+        function applyFormState(state) {
+            const formState = state || defaultScheduleState;
+            const builder = formState.builder || {};
+            const intervalMinutesInput = wrapper.querySelector('[data-schedule-interval-minutes]');
+            const intervalHoursInput = wrapper.querySelector('[data-schedule-interval-hours]');
+            const intervalHourMinuteInput = wrapper.querySelector('[data-schedule-interval-hour-minute]');
+
+            typeInput.value = formState.schedule_type || 'daily_times';
+            timezoneInput.value = formState.timezone || 'Asia/Ho_Chi_Minh';
+            cronInput.value = formState.cron_expression || '';
+
+            if (intervalMinutesInput) {
+                intervalMinutesInput.value = builder.interval_minutes || 15;
+            }
+
+            if (intervalHoursInput) {
+                intervalHoursInput.value = builder.interval_hours || 4;
+            }
+
+            if (intervalHourMinuteInput) {
+                intervalHourMinuteInput.value = builder.interval_hour_minute || '00';
+            }
+
+            dailyTimesList.innerHTML = '';
+            (builder.daily_times || ['08:00']).forEach((time) => addTimeRow(dailyTimesList, 'daily_times[]', time));
+
+            wrapper.querySelectorAll('input[name="weekly_days[]"]').forEach((checkbox) => {
+                checkbox.checked = (builder.weekly_days || []).includes(checkbox.value);
+            });
+
+            weeklyTimesList.innerHTML = '';
+            (builder.weekly_times || ['09:00']).forEach((time) => addTimeRow(weeklyTimesList, 'weekly_times[]', time));
+
+            toggleScheduleSections();
+        }
+
+        const record = mode === 'edit' ? (scheduleRecords[String(scheduleId)] || null) : null;
+
+        if (mode === 'edit' && !record) {
+            window.TeleSenderApp.showFlash('error', 'Không tìm thấy schedule để chỉnh sửa.');
+            return;
+        }
+
+        form.action = mode === 'edit' ? updateUrl : createUrl;
+        submitButton.textContent = mode === 'edit' ? 'Cập nhật lịch gửi' : 'Tạo lịch gửi';
+        applyFormState(record ? record.form_state : defaultScheduleState);
+        accountInput.value = record ? String(record.telegram_account_id || '') : '';
+        groupInput.value = record ? String(record.telegram_group_id || '') : '';
+        templateInput.value = record ? String(record.message_template_id || '') : '';
+
+        if (mode === 'edit' && record) {
+            const idField = document.createElement('input');
+            idField.type = 'hidden';
+            idField.name = 'id';
+            idField.value = String(record.id || '');
+            form.prepend(idField);
+        }
+
+        wrapper.querySelector('[data-add-daily-time]')?.addEventListener('click', () => {
+            addTimeRow(dailyTimesList, 'daily_times[]', '08:00');
+            triggerPreview();
+        });
+
+        wrapper.querySelector('[data-add-weekly-time]')?.addEventListener('click', () => {
+            addTimeRow(weeklyTimesList, 'weekly_times[]', '09:00');
+            triggerPreview();
+        });
+
+        typeInput.addEventListener('change', () => {
+            toggleScheduleSections();
+            triggerPreview();
+        });
+
+        presetSelect.addEventListener('change', (event) => {
+            applySchedulePreset(event.target.value);
+        });
+
+        wrapper.querySelectorAll('[data-schedule-chip]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const key = button.getAttribute('data-schedule-chip');
+                presetSelect.value = key;
+                applySchedulePreset(key);
+            });
+        });
+
+        form.addEventListener('input', triggerPreview);
+        form.addEventListener('change', triggerPreview);
+
+        bindRemoveTimeButtons();
+        toggleScheduleSections();
+        triggerPreview();
+
+        copyPreviewCronButton.addEventListener('click', async () => {
+            const cron = previewCron.textContent?.trim();
+            if (!cron || cron === '-') {
+                return;
+            }
+
+            try {
+                await navigator.clipboard.writeText(cron);
+                copyPreviewCronButton.textContent = 'Đã sao chép';
+                setTimeout(() => {
+                    copyPreviewCronButton.textContent = 'Sao chép cron';
+                }, 1200);
+            } catch (error) {
+                copyPreviewCronButton.textContent = 'Lỗi sao chép';
+                setTimeout(() => {
+                    copyPreviewCronButton.textContent = 'Sao chép cron';
+                }, 1200);
+            }
+        });
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            await window.TeleSenderApp.submitAjaxForm(form, {
+                closeCrudModalOnSuccess: true,
+                refreshRegionsOnSuccess: ['[data-live-region="schedules-shell"]'],
+            });
+        });
+
+        window.TeleSenderCrudModal.open({
+            title: mode === 'edit' ? 'Cập nhật lịch gửi' : 'Tạo lịch gửi mới',
+            description: 'Giữ nguyên schedule builder và preview cron realtime, chỉ chuyển form vào modal để gọn UI hơn.',
+            size: 'full',
+            content: wrapper,
+            onClose() {
+                if (previewTimer !== null) {
+                    clearTimeout(previewTimer);
+                }
+            },
+        });
     }
-}
 
-function triggerPreview() {
-    clearTimeout(previewTimer);
-    previewTimer = setTimeout(updateSchedulePreview, 180);
-}
-
-document.getElementById('add_daily_time')?.addEventListener('click', () => {
-    addTimeRow(dailyTimesList, 'daily_times[]', '08:00');
-    triggerPreview();
-});
-
-document.getElementById('add_weekly_time')?.addEventListener('click', () => {
-    addTimeRow(weeklyTimesList, 'weekly_times[]', '09:00');
-    triggerPreview();
-});
-
-scheduleTypeInput?.addEventListener('change', () => {
-    toggleScheduleSections();
-    triggerPreview();
-});
-
-schedulePresetSelect?.addEventListener('change', (event) => {
-    applySchedulePreset(event.target.value);
-});
-
-document.querySelectorAll('[data-schedule-chip]').forEach((button) => {
-    button.addEventListener('click', () => {
-        const key = button.getAttribute('data-schedule-chip');
-        schedulePresetSelect.value = key;
-        applySchedulePreset(key);
+    createButton?.addEventListener('click', () => {
+        openScheduleModal('create');
     });
-});
 
-scheduleForm?.addEventListener('input', triggerPreview);
-scheduleForm?.addEventListener('change', triggerPreview);
+    document.addEventListener('click', (event) => {
+        const button = event.target instanceof Element ? event.target.closest('[data-schedule-edit]') : null;
 
-bindRemoveTimeButtons();
-toggleScheduleSections();
-triggerPreview();
+        if (!button) {
+            return;
+        }
 
-copyPreviewCronButton?.addEventListener('click', async () => {
-    const cron = previewCron.textContent?.trim();
-    if (!cron || cron === '-') {
-        return;
-    }
+        openScheduleModal('edit', button.getAttribute('data-schedule-edit'));
+    });
 
-    try {
-        await navigator.clipboard.writeText(cron);
-        copyPreviewCronButton.textContent = 'Đã sao chép';
-        setTimeout(() => {
-            copyPreviewCronButton.textContent = 'Sao chép cron';
-        }, 1200);
-    } catch (error) {
-        copyPreviewCronButton.textContent = 'Lỗi sao chép';
-        setTimeout(() => {
-            copyPreviewCronButton.textContent = 'Sao chép cron';
-        }, 1200);
-    }
-});
+    document.addEventListener('submit', async (event) => {
+        const form = event.target instanceof HTMLFormElement ? event.target : null;
 
-document.querySelectorAll('[data-send-now-form]').forEach((form) => {
-    form.addEventListener('submit', async (event) => {
+        if (!form || !form.matches('[data-send-now-form]')) {
+            return;
+        }
+
         const message = form.getAttribute('data-risk-message') || '';
         const forceInput = form.querySelector('[data-force-send-input]');
 
@@ -682,5 +836,10 @@ document.querySelectorAll('[data-send-now-form]').forEach((form) => {
         forceInput.value = '1';
         form.submit();
     });
+
+    document.addEventListener('app:regions:refreshed', () => {
+        scheduleRecords = window.TeleSenderApp.readJsonScript('[data-schedule-records]', {});
+    });
+})();
 });
 </script>

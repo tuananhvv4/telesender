@@ -28,22 +28,13 @@ class SuperAdminController extends Controller
         $perPage = pagination_per_page(15, [10, 15, 20, 30, 50, 100]);
         $result = $this->users->paginateAdmins((int) $request->query('page', 1), $perPage, $searchQuery);
         $access = new UserAccessService(app()->db());
-        $viewId = (int) $request->query('view', 0);
-        $viewUser = $viewId > 0 ? $this->users->findAdminWithStats($viewId) : null;
 
         $admins = array_map(fn (array $admin): array => $this->decorateAdmin($admin, $access), $result['items']);
-        $viewUser = $viewUser !== null ? $this->decorateAdmin($viewUser, $access) : null;
-
-        $recentLogs = $viewUser !== null ? $this->logs->recentForUser((int) $viewUser['id'], 6) : [];
-        $recentAdjustments = $viewUser !== null ? $this->adjustments->recentForTargetUser((int) $viewUser['id'], 8) : [];
 
         $this->render('admin/users', [
             'title' => 'Quản lý admin',
             'systemSummary' => $this->systemSummary(),
             'admins' => $admins,
-            'viewUser' => $viewUser,
-            'recentLogs' => $recentLogs,
-            'recentAdjustments' => $recentAdjustments,
             'pagination' => $result['pagination'],
             'searchQuery' => $searchQuery,
         ]);
@@ -112,7 +103,7 @@ class SuperAdminController extends Controller
         ]);
 
         $this->redirectWith(
-            '/admin/users?view=' . $user['id'],
+            '/admin/users',
             success: $isActive ? 'Đã khóa admin này.' : 'Đã mở khóa admin này.'
         );
     }
@@ -126,7 +117,7 @@ class SuperAdminController extends Controller
             $maxTelegramAccounts = $access->normalizeLimit($request->input('max_telegram_accounts'));
             $maxScheduleJobs = $access->normalizeLimit($request->input('max_schedule_jobs'));
         } catch (\Throwable $exception) {
-            $this->redirectWith('/admin/users?view=' . $user['id'], error: $exception->getMessage());
+            $this->redirectWith('/admin/users', error: $exception->getMessage());
         }
 
         $internalNote = trim((string) $request->input('internal_note'));
@@ -138,7 +129,72 @@ class SuperAdminController extends Controller
             'updated_at' => gmdate('Y-m-d H:i:s'),
         ]);
 
-        $this->redirectWith('/admin/users?view=' . $user['id'], success: 'Đã cập nhật giới hạn và ghi chú nội bộ.');
+        $this->redirectWith('/admin/users', success: 'Đã cập nhật giới hạn và ghi chú nội bộ.');
+    }
+
+    public function userDetails(Request $request): void
+    {
+        $userId = (int) $request->query('user_id', 0);
+        $user = $this->users->findAdminWithStats($userId);
+
+        if ($user === null) {
+            abort404();
+        }
+
+        $access = new UserAccessService(app()->db());
+        $user = $this->decorateAdmin($user, $access);
+
+        $recentLogs = array_map(function (array $log): array {
+            return [
+                'template_name' => (string) ($log['template_name'] ?? 'Không rõ mẫu'),
+                'group_title' => (string) ($log['group_title'] ?? 'Không rõ nhóm'),
+                'sent_at_label' => fmt_datetime((string) ($log['sent_at'] ?? '')),
+                'status' => (string) ($log['status'] ?? ''),
+            ];
+        }, $this->logs->recentForUser($userId, 6));
+
+        $recentAdjustments = array_map(function (array $adjustment): array {
+            $deltaDays = (int) ($adjustment['delta_days'] ?? 0);
+
+            return [
+                'delta_label' => ($deltaDays > 0 ? '+' : '') . $deltaDays . ' ngày',
+                'actor_name' => (string) ($adjustment['actor_name'] ?? 'Super admin'),
+                'created_at_label' => fmt_datetime((string) ($adjustment['created_at'] ?? '')),
+                'new_expires_at_label' => !empty($adjustment['new_expires_at'])
+                    ? fmt_datetime((string) $adjustment['new_expires_at'])
+                    : 'Không có',
+            ];
+        }, $this->adjustments->recentForTargetUser($userId, 8));
+
+        $this->jsonSuccess('Đã tải thông tin admin.', [
+            'user' => [
+                'id' => (int) $user['id'],
+                'name' => (string) $user['name'],
+                'email' => (string) $user['email'],
+                'status' => (string) ($user['status'] ?? 'inactive'),
+                'subscription_state' => (string) ($user['subscription_state'] ?? 'inactive'),
+                'subscription_label' => (string) ($user['subscription_label'] ?? '-'),
+                'remaining_label' => $this->remainingLabel($user),
+                'created_at_label' => fmt_datetime((string) ($user['created_at'] ?? '')),
+                'telegram_accounts_active' => (int) ($user['telegram_accounts_active'] ?? 0),
+                'telegram_accounts_total' => (int) ($user['telegram_accounts_total'] ?? 0),
+                'account_limit' => $user['account_limit'],
+                'account_limit_label' => (string) ($user['account_limit_label'] ?? 'Không giới hạn'),
+                'groups_active' => (int) ($user['groups_active'] ?? 0),
+                'groups_total' => (int) ($user['groups_total'] ?? 0),
+                'schedules_active' => (int) ($user['schedules_active'] ?? 0),
+                'schedules_total' => (int) ($user['schedules_total'] ?? 0),
+                'schedule_limit' => $user['schedule_limit'],
+                'schedule_limit_label' => (string) ($user['schedule_limit_label'] ?? 'Không giới hạn'),
+                'templates_total' => (int) ($user['templates_total'] ?? 0),
+                'logs_success_recent' => (int) ($user['logs_success_recent'] ?? 0),
+                'logs_error_recent' => (int) ($user['logs_error_recent'] ?? 0),
+                'last_dispatch_at_label' => fmt_datetime((string) ($user['last_dispatch_at'] ?? '')),
+                'internal_note' => (string) ($user['internal_note'] ?? ''),
+            ],
+            'recent_logs' => $recentLogs,
+            'recent_adjustments' => $recentAdjustments,
+        ]);
     }
 
     public function subscriptions(Request $request): void
@@ -147,17 +203,12 @@ class SuperAdminController extends Controller
         $perPage = pagination_per_page(15, [10, 15, 20, 30, 50, 100]);
         $result = $this->users->paginateAdminsBySubscription((int) $request->query('page', 1), $perPage, $searchQuery);
         $access = new UserAccessService(app()->db());
-        $focusUserId = (int) $request->query('user', 0);
-        $focusUser = $focusUserId > 0 ? $this->users->findAdminWithStats($focusUserId) : null;
 
         $admins = array_map(fn (array $admin): array => $this->decorateAdmin($admin, $access), $result['items']);
-        $focusUser = $focusUser !== null ? $this->decorateAdmin($focusUser, $access) : null;
 
         $this->render('admin/subscriptions', [
             'title' => 'Quản lý hạn dùng',
             'admins' => $admins,
-            'focusUser' => $focusUser,
-            'adjustmentLogs' => $focusUser !== null ? $this->adjustments->recentForTargetUser((int) $focusUser['id'], 20) : [],
             'pagination' => $result['pagination'],
             'searchQuery' => $searchQuery,
         ]);
@@ -171,7 +222,7 @@ class SuperAdminController extends Controller
         $note = trim((string) $request->input('note'));
 
         if ($days <= 0) {
-            $this->redirectWith('/admin/subscriptions?user=' . $user['id'], error: 'Số ngày điều chỉnh phải lớn hơn 0.');
+            $this->redirectWith('/admin/subscriptions', error: 'Số ngày điều chỉnh phải lớn hơn 0.');
         }
 
         $delta = $direction === 'subtract' ? -$days : $days;
@@ -180,7 +231,7 @@ class SuperAdminController extends Controller
         try {
             $result = $access->adjustSubscription((string) ($user['subscription_expires_at'] ?? ''), $delta);
         } catch (\Throwable $exception) {
-            $this->redirectWith('/admin/subscriptions?user=' . $user['id'], error: $exception->getMessage());
+            $this->redirectWith('/admin/subscriptions', error: $exception->getMessage());
         }
 
         app()->db()->transaction(function () use ($user, $delta, $note, $result): void {
@@ -201,7 +252,52 @@ class SuperAdminController extends Controller
             ]);
         });
 
-        $this->redirectWith('/admin/subscriptions?user=' . $user['id'], success: 'Đã cập nhật hạn dùng cho admin này.');
+        $this->redirectWith('/admin/subscriptions', success: 'Đã cập nhật hạn dùng cho admin này.');
+    }
+
+    public function subscriptionDetails(Request $request): void
+    {
+        $userId = (int) $request->query('user_id', 0);
+        $user = $this->users->findAdminWithStats($userId);
+
+        if ($user === null) {
+            abort404();
+        }
+
+        $access = new UserAccessService(app()->db());
+        $user = $this->decorateAdmin($user, $access);
+
+        $adjustments = array_map(function (array $adjustment): array {
+            $deltaDays = (int) ($adjustment['delta_days'] ?? 0);
+
+            return [
+                'delta_label' => ($deltaDays > 0 ? '+' : '') . $deltaDays . ' ngày',
+                'actor_name' => (string) ($adjustment['actor_name'] ?? 'Super admin'),
+                'created_at_label' => fmt_datetime((string) ($adjustment['created_at'] ?? '')),
+                'note' => (string) ($adjustment['note'] ?? ''),
+                'previous_expires_at_label' => !empty($adjustment['previous_expires_at'])
+                    ? fmt_datetime((string) $adjustment['previous_expires_at'])
+                    : 'Không có',
+                'new_expires_at_label' => !empty($adjustment['new_expires_at'])
+                    ? fmt_datetime((string) $adjustment['new_expires_at'])
+                    : 'Không có',
+            ];
+        }, $this->adjustments->recentForTargetUser($userId, 20));
+
+        $this->jsonSuccess('Đã tải thông tin hạn dùng.', [
+            'user' => [
+                'id' => (int) $user['id'],
+                'name' => (string) $user['name'],
+                'email' => (string) $user['email'],
+                'subscription_state' => (string) ($user['subscription_state'] ?? 'inactive'),
+                'subscription_label' => (string) ($user['subscription_label'] ?? '-'),
+                'remaining_label' => $this->remainingLabel($user),
+                'expires_at_label' => !empty($user['subscription_expires_at'])
+                    ? fmt_datetime((string) $user['subscription_expires_at'])
+                    : 'Không giới hạn',
+            ],
+            'adjustments' => $adjustments,
+        ]);
     }
 
     public function settings(Request $request): void
@@ -289,5 +385,24 @@ class SuperAdminController extends Controller
             'logs_total' => (int) ($row['logs_total'] ?? 0),
             'logs_last_24h' => (int) ($row['logs_last_24h'] ?? 0),
         ];
+    }
+
+    private function remainingLabel(array $user): string
+    {
+        if (($user['subscription_state'] ?? '') === 'unlimited') {
+            return 'Không giới hạn';
+        }
+
+        $days = $user['days_remaining'] ?? null;
+
+        if ($days === null) {
+            return '-';
+        }
+
+        if ((int) $days <= 0) {
+            return 'Đã hết hạn';
+        }
+
+        return (int) $days . ' ngày';
     }
 }

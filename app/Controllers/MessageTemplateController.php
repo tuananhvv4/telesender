@@ -24,22 +24,15 @@ class MessageTemplateController extends Controller
     public function index(Request $request): void
     {
         $userId = (int) auth()->id();
-        $editTemplate = null;
-        $editId = (int) $request->query('edit', 0);
         $searchQuery = trim((string) $request->query('q', ''));
         $perPage = pagination_per_page(15, [10, 15, 20, 30, 50]);
         $result = $this->templates->paginateForUser($userId, (int) $request->query('page', 1), $perPage, $searchQuery);
         $templates = $result['items'];
 
-        if ($editId > 0) {
-            $editTemplate = $this->templates->findForUser($editId, $userId);
-        }
-
         $this->render('templates/index', [
             'title' => 'Message Templates',
             'templates' => $templates,
             'labels' => $this->labels->allByUser($userId, 'name ASC'),
-            'editTemplate' => $editTemplate,
             'templatePresets' => (new PresetService(app()->db()))->templatePresets(),
             'customEmojis' => $this->customEmojiService->pickerLibrary($userId),
             'templatePreviewBodies' => $this->previewBodies($templates, $userId),
@@ -91,7 +84,7 @@ class MessageTemplateController extends Controller
         $body = trim((string) $request->input('body'));
 
         if ($name === '' || $body === '') {
-            $this->redirectWith('/templates?edit=' . $template['id'], error: 'Template name và nội dung là bắt buộc.');
+            $this->redirectWith('/templates', error: 'Template name và nội dung là bắt buộc.');
         }
 
         $parseMode = trim((string) $request->input('parse_mode', 'HTML'));
@@ -99,7 +92,7 @@ class MessageTemplateController extends Controller
         try {
             $this->customEmojiService->ensureTemplateIsValid($body, $parseMode, (int) auth()->id());
         } catch (\Throwable $exception) {
-            $this->redirectWith('/templates?edit=' . $template['id'], error: $exception->getMessage());
+            $this->redirectWith('/templates', error: $exception->getMessage());
         }
 
         $this->templates->updateById((int) $template['id'], [

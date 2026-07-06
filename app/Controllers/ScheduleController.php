@@ -33,21 +33,31 @@ class ScheduleController extends Controller
     public function index(Request $request): void
     {
         $userId = (int) auth()->id();
-        $editSchedule = null;
-        $editId = (int) $request->query('edit', 0);
         $scheduler = new SchedulerService(app()->db(), new TelegramService(), new CronExpression());
         $builder = new ScheduleBuilderService(new CronExpression());
-        $allSchedules = $this->schedules->listForUser($userId);
-        $pageResult = $this->schedules->paginateForUser($userId, (int) $request->query('page', 1), pagination_per_page(15, [10, 15, 20, 30, 50]));
+        $searchQuery = trim((string) $request->query('q', ''));
+        $selectedAccountId = (int) $request->query('telegram_account_id', 0);
+        $selectedTemplateId = (int) $request->query('message_template_id', 0);
+        $selectedStatus = trim((string) $request->query('status', ''));
+        $filters = [
+            'query' => $searchQuery,
+            'telegram_account_id' => $selectedAccountId,
+            'message_template_id' => $selectedTemplateId,
+            'status' => $selectedStatus,
+        ];
+        $allSchedules = $this->schedules->listForUser($userId, $filters);
+        $pageResult = $this->schedules->paginateForUser(
+            $userId,
+            (int) $request->query('page', 1),
+            pagination_per_page(15, [10, 15, 20, 30, 50]),
+            $filters
+        );
         $schedules = $pageResult['items'];
         $scheduleAnalyses = [];
         $scheduleSummaries = [];
         $scheduleManualGuards = [];
         $accountScheduleAnalyses = [];
-
-        if ($editId > 0) {
-            $editSchedule = $this->schedules->findForUser($editId, $userId);
-        }
+        $defaultTimezone = (string) config('app.timezone', 'Asia/Ho_Chi_Minh');
 
         foreach ($schedules as $schedule) {
             $scheduleAnalyses[(int) $schedule['id']] = $scheduler->analyzeScheduleRisk(
@@ -56,6 +66,7 @@ class ScheduleController extends Controller
             );
             $scheduleSummaries[(int) $schedule['id']] = $builder->summaryFromSchedule($schedule);
             $scheduleManualGuards[(int) $schedule['id']] = $scheduler->explainManualDispatchGuard($schedule);
+            $scheduleFormStates[(int) $schedule['id']] = $builder->formDataFromSchedule($schedule, $defaultTimezone);
         }
 
         foreach ($allSchedules as $schedule) {
@@ -84,8 +95,11 @@ class ScheduleController extends Controller
             'accounts' => $this->accounts->listForUser($userId),
             'groups' => $this->groups->listForUser($userId),
             'templates' => $this->templates->listForUser($userId),
-            'editSchedule' => $editSchedule,
-            'defaultTimezone' => config('app.timezone', 'Asia/Ho_Chi_Minh'),
+            'searchQuery' => $searchQuery,
+            'selectedAccountId' => $selectedAccountId,
+            'selectedTemplateId' => $selectedTemplateId,
+            'selectedStatus' => $selectedStatus,
+            'defaultTimezone' => $defaultTimezone,
             'schedulePresets' => (new PresetService(app()->db()))->schedulePresets(),
             'scheduleAnalyses' => $scheduleAnalyses,
             'scheduleSummaries' => $scheduleSummaries,
@@ -93,7 +107,8 @@ class ScheduleController extends Controller
             'accountScheduleAnalyses' => array_values($accountScheduleAnalyses),
             'safetyRules' => config('safety'),
             'scheduleModes' => $builder->modeOptions(),
-            'formScheduleState' => $builder->formDataFromSchedule($editSchedule, (string) config('app.timezone', 'Asia/Ho_Chi_Minh')),
+            'defaultFormScheduleState' => $builder->defaultFormData($defaultTimezone),
+            'scheduleFormStates' => $scheduleFormStates ?? [],
             'pagination' => $pageResult['pagination'],
         ]);
     }

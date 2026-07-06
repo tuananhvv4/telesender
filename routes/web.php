@@ -75,10 +75,12 @@ $router->post('/schedules/delete', [ScheduleController::class, 'delete'], ['auth
 $router->get('/logs', [LogController::class, 'index'], ['auth', 'subscription_active']);
 
 $router->get('/admin/users', [SuperAdminController::class, 'users'], ['auth', 'super_admin']);
+$router->get('/admin/users/details', [SuperAdminController::class, 'userDetails'], ['auth', 'super_admin']);
 $router->post('/admin/users', [SuperAdminController::class, 'storeUser'], ['auth', 'super_admin']);
 $router->post('/admin/users/status', [SuperAdminController::class, 'toggleUserStatus'], ['auth', 'super_admin']);
 $router->post('/admin/users/limits', [SuperAdminController::class, 'updateLimits'], ['auth', 'super_admin']);
 $router->get('/admin/subscriptions', [SuperAdminController::class, 'subscriptions'], ['auth', 'super_admin']);
+$router->get('/admin/subscriptions/details', [SuperAdminController::class, 'subscriptionDetails'], ['auth', 'super_admin']);
 $router->post('/admin/subscriptions/adjust', [SuperAdminController::class, 'adjustSubscription'], ['auth', 'super_admin']);
 $router->get('/admin/settings', [SuperAdminController::class, 'settings'], ['auth', 'super_admin']);
 $router->post('/admin/settings', [SuperAdminController::class, 'updateSettings'], ['auth', 'super_admin']);

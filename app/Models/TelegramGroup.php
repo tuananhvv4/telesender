@@ -34,18 +34,46 @@ class TelegramGroup extends Model
         );
     }
 
-    public function paginateForUser(int $userId, int $page = 1, int $perPage = 20): array
+    public function paginateForUser(int $userId, int $page = 1, int $perPage = 20, array $filters = []): array
     {
+        $bindings = ['user_id' => $userId];
+        $whereSql = ' WHERE tg.user_id = :user_id';
+        $searchQuery = trim((string) ($filters['query'] ?? ''));
+        $accountId = (int) ($filters['telegram_account_id'] ?? 0);
+        $status = trim((string) ($filters['status'] ?? ''));
+
+        if ($accountId > 0) {
+            $whereSql .= ' AND tg.telegram_account_id = :telegram_account_id';
+            $bindings['telegram_account_id'] = $accountId;
+        }
+
+        if ($status === 'active') {
+            $whereSql .= ' AND tg.is_active = 1';
+        } elseif ($status === 'inactive') {
+            $whereSql .= ' AND tg.is_active = 0';
+        }
+
+        if ($searchQuery !== '') {
+            $whereSql .= ' AND (
+                tg.title LIKE :search
+                OR tg.peer_identifier LIKE :search
+                OR tg.topic_title LIKE :search
+                OR tg.notes LIKE :search
+                OR ta.name LIKE :search
+            )';
+            $bindings['search'] = '%' . $searchQuery . '%';
+        }
+
         return $this->paginateQuery(
             'SELECT COUNT(*) AS aggregate
-             FROM telegram_groups
-             WHERE user_id = :user_id',
+             FROM telegram_groups tg
+             INNER JOIN telegram_accounts ta ON ta.id = tg.telegram_account_id' . $whereSql,
             'SELECT tg.*, ta.name AS account_name
              FROM telegram_groups tg
              INNER JOIN telegram_accounts ta ON ta.id = tg.telegram_account_id
-             WHERE tg.user_id = :user_id
+             ' . $whereSql . '
              ORDER BY tg.id DESC',
-            ['user_id' => $userId],
+            $bindings,
             $page,
             $perPage
         );

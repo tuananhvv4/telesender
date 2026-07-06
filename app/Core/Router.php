@@ -64,6 +64,15 @@ class Router
         $token = (string) $request->input('_token', '');
 
         if (!Session::verifyCsrf($token)) {
+            if ($request->expectsJson()) {
+                Response::json([
+                    'ok' => false,
+                    'message' => 'Phiên làm việc đã hết hạn hoặc CSRF token không hợp lệ.',
+                    'redirect' => url('/login'),
+                    'status' => 419,
+                ], 419);
+            }
+
             throw new HttpException(419, 'Phiên làm việc đã hết hạn hoặc CSRF token không hợp lệ.');
         }
     }
@@ -73,26 +82,32 @@ class Router
         foreach ($middleware as $item) {
             if ($item === 'auth') {
                 if (!$this->app->auth()->check()) {
-                    Session::flash('error', 'Vui lòng đăng nhập để tiếp tục.');
-                    redirect('/login');
+                    $this->interruptRequest(401, 'Vui lòng đăng nhập để tiếp tục.', '/login');
                 }
 
                 $user = $this->app->auth()->user();
 
                 if ($user === null) {
                     $this->app->auth()->logout();
-                    Session::flash('error', 'Phiên đăng nhập không còn hợp lệ.');
-                    redirect('/login');
+                    $this->interruptRequest(401, 'Phiên đăng nhập không còn hợp lệ.', '/login');
                 }
 
                 if ((string) ($user['status'] ?? 'inactive') !== 'active') {
                     $this->app->auth()->logout();
-                    Session::flash('error', 'Tài khoản của bạn hiện đang bị khóa.');
-                    redirect('/login');
+                    $this->interruptRequest(403, 'Tài khoản của bạn hiện đang bị khóa.', '/login');
                 }
             }
 
             if ($item === 'guest' && $this->app->auth()->check()) {
+                if (request()->expectsJson()) {
+                    Response::json([
+                        'ok' => false,
+                        'message' => 'Bạn đã đăng nhập rồi.',
+                        'redirect' => url('/'),
+                        'status' => 409,
+                    ], 409);
+                }
+
                 redirect('/');
             }
 
@@ -101,8 +116,7 @@ class Router
 
                 if ($user === null) {
                     $this->app->auth()->logout();
-                    Session::flash('error', 'Phiên đăng nhập không còn hợp lệ.');
-                    redirect('/login');
+                    $this->interruptRequest(401, 'Phiên đăng nhập không còn hợp lệ.', '/login');
                 }
 
                 if ($this->app->auth()->access()->isSuperAdmin($user)) {
@@ -110,7 +124,7 @@ class Router
                 }
 
                 if ($this->app->auth()->access()->isExpired($user)) {
-                    redirect('/expired');
+                    $this->interruptRequest(403, 'Gói sử dụng của bạn đã hết hạn.', '/expired', null);
                 }
             }
 
@@ -119,15 +133,31 @@ class Router
 
                 if ($user === null) {
                     $this->app->auth()->logout();
-                    Session::flash('error', 'Phiên đăng nhập không còn hợp lệ.');
-                    redirect('/login');
+                    $this->interruptRequest(401, 'Phiên đăng nhập không còn hợp lệ.', '/login');
                 }
 
                 if (!$this->app->auth()->access()->isSuperAdmin($user)) {
-                    Session::flash('error', 'Bạn không có quyền truy cập khu vực này.');
-                    redirect('/');
+                    $this->interruptRequest(403, 'Bạn không có quyền truy cập khu vực này.', '/');
                 }
             }
         }
+    }
+
+    private function interruptRequest(int $status, string $message, string $redirectPath, ?string $flashKey = 'error'): never
+    {
+        if (request()->expectsJson()) {
+            Response::json([
+                'ok' => false,
+                'message' => $message,
+                'redirect' => url($redirectPath),
+                'status' => $status,
+            ], $status);
+        }
+
+        if ($flashKey !== null) {
+            Session::flash($flashKey, $message);
+        }
+
+        redirect($redirectPath);
     }
 }

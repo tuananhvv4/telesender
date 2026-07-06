@@ -23,20 +23,29 @@ class TelegramGroupController extends Controller
     public function index(Request $request): void
     {
         $userId = (int) auth()->id();
-        $editGroup = null;
-        $editId = (int) $request->query('edit', 0);
-        $result = $this->groups->paginateForUser($userId, (int) $request->query('page', 1), pagination_per_page(20));
-
-        if ($editId > 0) {
-            $editGroup = $this->groups->findForUser($editId, $userId);
-        }
+        $searchQuery = trim((string) $request->query('q', ''));
+        $selectedAccountId = (int) $request->query('telegram_account_id', 0);
+        $selectedStatus = trim((string) $request->query('status', ''));
+        $perPage = pagination_per_page(20);
+        $result = $this->groups->paginateForUser(
+            $userId,
+            (int) $request->query('page', 1),
+            $perPage,
+            [
+                'query' => $searchQuery,
+                'telegram_account_id' => $selectedAccountId,
+                'status' => $selectedStatus,
+            ]
+        );
 
         $this->render('groups/index', [
             'title' => 'Telegram Groups',
             'groups' => $result['items'],
             'accounts' => $this->accounts->listForUser($userId),
-            'editGroup' => $editGroup,
             'pagination' => $result['pagination'],
+            'searchQuery' => $searchQuery,
+            'selectedAccountId' => $selectedAccountId,
+            'selectedStatus' => $selectedStatus,
         ]);
     }
 
@@ -65,7 +74,7 @@ class TelegramGroupController extends Controller
             abort404();
         }
 
-        $payload = $this->validatedGroupInput($request, $userId, '/groups?edit=' . $groupId, $groupId);
+        $payload = $this->validatedGroupInput($request, $userId, '/groups', $groupId);
 
         $this->groups->updateById($groupId, [
             ...$payload,

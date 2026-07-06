@@ -62,4 +62,35 @@ class Request
     {
         return $this->server[$key] ?? $default;
     }
+
+    public function header(string $key, mixed $default = null): mixed
+    {
+        $normalized = strtoupper(str_replace('-', '_', $key));
+        $serverKey = 'HTTP_' . $normalized;
+
+        if (in_array($normalized, ['CONTENT_TYPE', 'CONTENT_LENGTH'], true)) {
+            $serverKey = $normalized;
+        }
+
+        return $this->server[$serverKey] ?? $default;
+    }
+
+    public function isAjax(): bool
+    {
+        return strcasecmp((string) $this->header('X-Requested-With', ''), 'XMLHttpRequest') === 0;
+    }
+
+    public function acceptsJson(): bool
+    {
+        $accept = strtolower((string) $this->header('Accept', ''));
+
+        return str_contains($accept, 'application/json')
+            || str_contains($accept, 'text/json')
+            || str_contains($accept, 'application/problem+json');
+    }
+
+    public function expectsJson(): bool
+    {
+        return $this->isAjax() || $this->acceptsJson();
+    }
 }

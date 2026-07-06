@@ -17,18 +17,11 @@ class LabelController extends Controller
     public function index(Request $request): void
     {
         $userId = (int) auth()->id();
-        $editLabel = null;
-        $editId = (int) $request->query('edit', 0);
         $result = $this->labels->paginateForUser($userId, (int) $request->query('page', 1), pagination_per_page(20));
-
-        if ($editId > 0) {
-            $editLabel = $this->labels->findForUser($editId, $userId);
-        }
 
         $this->render('labels/index', [
             'title' => 'Message Labels',
             'labels' => $result['items'],
-            'editLabel' => $editLabel,
             'pagination' => $result['pagination'],
         ]);
     }
@@ -66,7 +59,7 @@ class LabelController extends Controller
         $slug = trim((string) $request->input('slug'));
 
         if ($name === '' || $slug === '') {
-            $this->redirectWith('/labels?edit=' . $label['id'], error: 'Tên và slug của label là bắt buộc.');
+            $this->redirectWith('/labels', error: 'Tên và slug của label là bắt buộc.');
         }
 
         $this->labels->updateById((int) $label['id'], [

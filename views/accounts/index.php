@@ -1,25 +1,15 @@
 <section class="stack">
     <div class="topbar">
         <h1 class="page-title">Tài khoản Telegram</h1>
+        <div class="inline-actions">
+            <button class="button primary" type="button" id="open_account_create">
+                <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                Tạo tài khoản
+            </button>
+        </div>
     </div>
 
-    <section class="card">
-        <h2 class="section-title">Thêm tài khoản mới</h2>
-        <form class="form-grid" method="post" action="<?= e(url('/accounts')) ?>">
-            <?= csrf_field() ?>
-            <div class="field">
-                <label for="name">Tên hiển thị</label>
-                <input class="input" id="name" type="text" name="name" placeholder="Ví dụ: Tài khoản Sale #2" required>
-            </div>
-            <div class="field">
-                <label for="phone_number">Số điện thoại Telegram</label>
-                <input class="input" id="phone_number" type="text" name="phone_number" placeholder="+8490xxxxxxx" required>
-            </div>
-            <button class="button primary" type="submit">Tạo tài khoản</button>
-        </form>
-    </section>
-
-    <section class="panel">
+    <section class="panel" data-live-region="accounts-panel">
         <div class="panel-header">
             <h2 class="panel-title">Danh sách tài khoản</h2>
         </div>
@@ -135,3 +125,63 @@
         </div>
     </section>
 </section>
+
+<template id="account_form_template">
+    <form class="form-grid" method="post" action="<?= e(url('/accounts')) ?>">
+        <?= csrf_field() ?>
+        <div class="form-feedback" data-form-feedback hidden></div>
+        <div class="field">
+            <label for="account_modal_name">Tên hiển thị</label>
+            <input class="input" id="account_modal_name" type="text" name="name" placeholder="Ví dụ: Tài khoản Sale #2" required>
+        </div>
+        <div class="field">
+            <label for="account_modal_phone">Số điện thoại Telegram</label>
+            <input class="input" id="account_modal_phone" type="text" name="phone_number" placeholder="+8490xxxxxxx" required>
+        </div>
+        <div class="actions">
+            <button class="button primary" type="submit" data-loading-text="Đang tạo...">Tạo tài khoản</button>
+            <button class="button secondary" type="button" data-crud-modal-close>Hủy</button>
+        </div>
+    </form>
+</template>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+(function () {
+    const createButton = document.getElementById('open_account_create');
+    const template = document.getElementById('account_form_template');
+
+    if (!createButton || !template || !window.TeleSenderCrudModal || !window.TeleSenderApp) {
+        return;
+    }
+
+    createButton.addEventListener('click', () => {
+        const fragment = template.content.cloneNode(true);
+        const wrapper = document.createElement('div');
+        wrapper.appendChild(fragment);
+
+        const form = wrapper.querySelector('form');
+
+        if (!form) {
+            return;
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            await window.TeleSenderApp.submitAjaxForm(form, {
+                closeCrudModalOnSuccess: true,
+                refreshRegionsOnSuccess: ['[data-live-region="accounts-panel"]'],
+            });
+        });
+
+        window.TeleSenderCrudModal.open({
+            title: 'Tạo tài khoản Telegram',
+            description: 'Tạo trước tên hiển thị và số điện thoại, sau đó bạn có thể xác thực OTP hoặc 2FA ngay trong danh sách.',
+            size: 'md',
+            content: wrapper,
+        });
+    });
+})();
+});
+</script>
