@@ -40,7 +40,9 @@ $router->post('/accounts/verify-code', [TelegramAccountController::class, 'verif
 $router->post('/accounts/verify-password', [TelegramAccountController::class, 'verifyPassword'], ['auth', 'subscription_active']);
 
 $router->get('/groups', [TelegramGroupController::class, 'index'], ['auth', 'subscription_active']);
+$router->get('/groups/dialogs', [TelegramGroupController::class, 'dialogs'], ['auth', 'subscription_active']);
 $router->get('/groups/topics', [TelegramGroupController::class, 'topics'], ['auth', 'subscription_active']);
+$router->post('/groups/import', [TelegramGroupController::class, 'import'], ['auth', 'subscription_active']);
 $router->post('/groups', [TelegramGroupController::class, 'store'], ['auth', 'subscription_active']);
 $router->post('/groups/update', [TelegramGroupController::class, 'update'], ['auth', 'subscription_active']);
 $router->post('/groups/delete', [TelegramGroupController::class, 'delete'], ['auth', 'subscription_active']);
@@ -58,6 +60,7 @@ $router->post('/templates/delete', [MessageTemplateController::class, 'delete'],
 
 $router->get('/custom-emojis', [CustomEmojiController::class, 'index'], ['auth', 'subscription_active']);
 $router->post('/custom-emojis', [CustomEmojiController::class, 'store'], ['auth', 'subscription_active']);
+$router->post('/custom-emojis/import-bulk', [CustomEmojiController::class, 'bulkImport'], ['auth', 'subscription_active']);
 $router->post('/custom-emojis/update', [CustomEmojiController::class, 'update'], ['auth', 'subscription_active']);
 $router->post('/custom-emojis/delete', [CustomEmojiController::class, 'delete'], ['auth', 'subscription_active']);
 

@@ -50,4 +50,69 @@ class TelegramGroup extends Model
             $perPage
         );
     }
+
+    public function findDuplicateForUser(
+        int $userId,
+        int $accountId,
+        string $peerIdentifier,
+        ?int $topicId,
+        ?int $ignoreId = null
+    ): ?array {
+        $bindings = [
+            'user_id' => $userId,
+            'telegram_account_id' => $accountId,
+            'peer_identifier' => $peerIdentifier,
+            'topic_id' => $topicId,
+        ];
+
+        $sql = 'SELECT *
+                FROM telegram_groups
+                WHERE user_id = :user_id
+                  AND telegram_account_id = :telegram_account_id
+                  AND peer_identifier = :peer_identifier
+                  AND topic_id <=> :topic_id';
+
+        if ($ignoreId !== null) {
+            $sql .= ' AND id != :ignore_id';
+            $bindings['ignore_id'] = $ignoreId;
+        }
+
+        $sql .= ' LIMIT 1';
+
+        return $this->db()->fetch($sql, $bindings);
+    }
+
+    public function peerUsageSummaryForAccount(int $userId, int $accountId): array
+    {
+        $rows = $this->db()->fetchAll(
+            'SELECT peer_identifier,
+                    COUNT(*) AS existing_count,
+                    SUM(CASE WHEN topic_id IS NULL THEN 1 ELSE 0 END) AS root_count
+             FROM telegram_groups
+             WHERE user_id = :user_id
+               AND telegram_account_id = :telegram_account_id
+             GROUP BY peer_identifier',
+            [
+                'user_id' => $userId,
+                'telegram_account_id' => $accountId,
+            ]
+        );
+
+        $summary = [];
+
+        foreach ($rows as $row) {
+            $peerIdentifier = (string) ($row['peer_identifier'] ?? '');
+
+            if ($peerIdentifier === '') {
+                continue;
+            }
+
+            $summary[$peerIdentifier] = [
+                'existing_count' => (int) ($row['existing_count'] ?? 0),
+                'has_root' => (int) ($row['root_count'] ?? 0) > 0,
+            ];
+        }
+
+        return $summary;
+    }
 }

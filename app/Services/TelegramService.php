@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use danog\MadelineProto\API as MadelineProtoApi;
 use danog\MadelineProto\ParseMode;
 use RuntimeException;
 use danog\MadelineProto\Settings\AppInfo;
@@ -113,6 +114,100 @@ class TelegramService
         return $topics;
     }
 
+    public function getAvailableGroups(array $account): array
+    {
+        $api = $this->client($account);
+        $api->start();
+
+        $dialogs = $api->getFullDialogs();
+        $groups = [];
+
+        foreach (array_keys($dialogs) as $dialogId) {
+            $dialogId = (int) $dialogId;
+
+            if ($dialogId === 0) {
+                continue;
+            }
+
+            try {
+                $info = $api->getInfo($dialogId);
+            } catch (\Throwable) {
+                continue;
+            }
+
+            $type = (string) ($info['type'] ?? '');
+            $chat = is_array($info['Chat'] ?? null) ? $info['Chat'] : [];
+
+            if (!in_array($type, [MadelineProtoApi::PEER_TYPE_GROUP, MadelineProtoApi::PEER_TYPE_SUPERGROUP], true)) {
+                continue;
+            }
+
+            if ($chat === []) {
+                continue;
+            }
+
+            if ((bool) ($chat['left'] ?? false) || (bool) ($chat['deactivated'] ?? false) || (bool) ($chat['broadcast'] ?? false) || (bool) ($chat['monoforum'] ?? false)) {
+                continue;
+            }
+
+            $title = trim((string) ($chat['title'] ?? ''));
+            $username = $this->normalizeUsername($chat['username'] ?? null);
+            $inviteLink = null;
+
+            if ($username === null) {
+                $extraAccess = $this->resolveDialogAccessInfo($api, $dialogId);
+                $username = $extraAccess['username'];
+                $inviteLink = $extraAccess['invite_link'];
+            }
+
+            if ($title === '') {
+                $title = ($type === MadelineProtoApi::PEER_TYPE_SUPERGROUP ? 'Supergroup' : 'Group') . ' #' . $dialogId;
+            }
+
+            $groups[] = [
+                'title' => $title,
+                'peer_identifier' => (string) $dialogId,
+                'type' => $type,
+                'is_forum' => (bool) ($chat['forum'] ?? false),
+                'username' => $username,
+                'public_link' => $username !== null ? 'https://t.me/' . $username : null,
+                'invite_link' => $inviteLink,
+                'participants_count' => isset($chat['participants_count']) ? (int) $chat['participants_count'] : null,
+            ];
+        }
+
+        usort($groups, static function (array $left, array $right): int {
+            $leftTitle = mb_strtolower((string) ($left['title'] ?? ''));
+            $rightTitle = mb_strtolower((string) ($right['title'] ?? ''));
+            $byTitle = $leftTitle <=> $rightTitle;
+
+            if ($byTitle !== 0) {
+                return $byTitle;
+            }
+
+            return strcmp((string) ($left['peer_identifier'] ?? ''), (string) ($right['peer_identifier'] ?? ''));
+        });
+
+        return $groups;
+    }
+
+    private function resolveDialogAccessInfo(object $api, int $dialogId): array
+    {
+        try {
+            $chat = $api->getPwrChat($dialogId, false);
+        } catch (\Throwable) {
+            return [
+                'username' => null,
+                'invite_link' => null,
+            ];
+        }
+
+        return [
+            'username' => $this->normalizeUsername($chat['username'] ?? null),
+            'invite_link' => $this->normalizeInviteLink($chat['invite'] ?? null),
+        ];
+    }
+
     public function getSessionFile(array $account): string
     {
         return storage_path('telegram/' . $account['session_name'] . '.madeline');
@@ -134,7 +229,7 @@ class TelegramService
             ->setApiId((int) $apiId)
             ->setApiHash((string) $apiHash);
 
-        return new \danog\MadelineProto\API($sessionFile, $settings);
+        return new MadelineProtoApi($sessionFile, $settings);
     }
 
     private function bootstrapMadeline(): void
@@ -145,7 +240,7 @@ class TelegramService
             require_once $autoload;
         }
 
-        if (!class_exists(\danog\MadelineProto\API::class)) {
+        if (!class_exists(MadelineProtoApi::class)) {
             throw new RuntimeException('Chưa cài dependency Telegram. Hãy chạy `composer install` trước.');
         }
     }
@@ -157,5 +252,17 @@ class TelegramService
             'MARKDOWN' => ParseMode::MARKDOWN,
             default => ParseMode::TEXT,
         };
+    }
+
+    private function normalizeUsername(mixed $value): ?string
+    {
+        $username = ltrim(trim((string) $value), '@');
+        return $username !== '' ? $username : null;
+    }
+
+    private function normalizeInviteLink(mixed $value): ?string
+    {
+        $link = trim((string) $value);
+        return $link !== '' ? $link : null;
     }
 }

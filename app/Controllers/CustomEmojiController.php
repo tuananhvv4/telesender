@@ -6,14 +6,18 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Core\Request;
+use App\Core\Session;
 use App\Models\CustomEmoji;
 use App\Models\MessageTemplate;
+use App\Services\SharedCustomEmojiService;
+use RuntimeException;
 
 class CustomEmojiController extends Controller
 {
     public function __construct(
         private readonly CustomEmoji $customEmojis = new CustomEmoji(),
-        private readonly MessageTemplate $templates = new MessageTemplate()
+        private readonly MessageTemplate $templates = new MessageTemplate(),
+        private readonly SharedCustomEmojiService $sharedEmojis = new SharedCustomEmojiService()
     ) {
     }
 
@@ -22,7 +26,11 @@ class CustomEmojiController extends Controller
         $userId = (int) auth()->id();
         $editEmoji = null;
         $editId = (int) $request->query('edit', 0);
-        $result = $this->customEmojis->paginateForUser($userId, (int) $request->query('page', 1), pagination_per_page(18, [9, 18, 27, 36, 54]));
+        $result = $this->customEmojis->paginateForUser(
+            $userId,
+            (int) $request->query('page', 1),
+            pagination_per_page(18, [9, 18, 27, 36, 54])
+        );
 
         if ($editId > 0) {
             $editEmoji = $this->customEmojis->findForUser($editId, $userId);
@@ -33,12 +41,95 @@ class CustomEmojiController extends Controller
             'customEmojis' => $result['items'],
             'editEmoji' => $editEmoji,
             'pagination' => $result['pagination'],
+            'sharedEmojiSource' => $this->sharedEmojis->sourceSummaryForUser($userId),
+            'sharedCustomEmojis' => $this->sharedEmojis->sharedActiveForUser($userId),
+            'importRowsState' => flash('custom_emoji_import_rows') ?? [],
+            'importShouldOpen' => (bool) (flash('custom_emoji_import_open') ?? false),
         ]);
+    }
+
+    public function bulkImport(Request $request): void
+    {
+        $rawRows = $request->input('rows', []);
+        $userId = (int) auth()->id();
+
+        if (!is_array($rawRows)) {
+            Session::flash('custom_emoji_import_open', true);
+            $this->redirectWith('/custom-emojis', error: 'Dữ liệu import không hợp lệ.');
+        }
+
+        $normalizedRows = [];
+        foreach ($rawRows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $normalizedRows[] = $this->normalizedPayload($row);
+        }
+
+        $existingSlugs = $this->ownedSlugSet($userId);
+        $batchSlugs = [];
+        $payloads = [];
+
+        foreach ($normalizedRows as $index => $row) {
+            if ($this->isPayloadBlank($row)) {
+                continue;
+            }
+
+            try {
+                $payload = $this->validatePayload($row, $index + 1);
+            } catch (RuntimeException $exception) {
+                $this->flashImportState($normalizedRows);
+                $this->redirectWith('/custom-emojis', error: $exception->getMessage());
+            }
+
+            $slug = strtolower((string) $payload['slug']);
+
+            if (isset($existingSlugs[$slug])) {
+                $this->flashImportState($normalizedRows);
+                $this->redirectWith('/custom-emojis', error: 'Dòng ' . ($index + 1) . ': Slug custom emoji đã tồn tại trong thư viện riêng của bạn.');
+            }
+
+            if (isset($batchSlugs[$slug])) {
+                $this->flashImportState($normalizedRows);
+                $this->redirectWith(
+                    '/custom-emojis',
+                    error: 'Dòng ' . ($index + 1) . ': Slug bị trùng với dòng ' . $batchSlugs[$slug] . ' trong cùng lần import.'
+                );
+            }
+
+            $batchSlugs[$slug] = $index + 1;
+            $payloads[] = $payload;
+        }
+
+        if ($payloads === []) {
+            $this->flashImportState($normalizedRows);
+            $this->redirectWith('/custom-emojis', error: 'Bạn cần nhập ít nhất 1 dòng hợp lệ để import.');
+        }
+
+        app()->db()->transaction(function () use ($payloads, $userId): void {
+            $timestamp = gmdate('Y-m-d H:i:s');
+
+            foreach ($payloads as $payload) {
+                $this->customEmojis->create(array_merge($payload, [
+                    'user_id' => $userId,
+                    'created_at' => $timestamp,
+                    'updated_at' => $timestamp,
+                ]));
+            }
+        });
+
+        $this->redirectWith('/custom-emojis', success: 'Đã import ' . count($payloads) . ' custom emoji vào hệ thống.');
     }
 
     public function store(Request $request): void
     {
-        $payload = $this->validatedData($request);
+        try {
+            $payload = $this->validatePayload($this->normalizedPayload($request->all()));
+        } catch (RuntimeException $exception) {
+            $this->redirectWith('/custom-emojis', error: $exception->getMessage());
+        }
+
         $userId = (int) auth()->id();
 
         if ($this->customEmojis->findBySlugForUser($payload['slug'], $userId) !== null) {
@@ -62,7 +153,12 @@ class CustomEmojiController extends Controller
             abort404();
         }
 
-        $payload = $this->validatedData($request);
+        try {
+            $payload = $this->validatePayload($this->normalizedPayload($request->all()));
+        } catch (RuntimeException $exception) {
+            $this->redirectWith('/custom-emojis?edit=' . $emoji['id'], error: $exception->getMessage());
+        }
+
         $userId = (int) auth()->id();
         $existing = $this->customEmojis->findBySlugForUser($payload['slug'], $userId);
 
@@ -106,26 +202,14 @@ class CustomEmojiController extends Controller
         $this->redirectWith('/custom-emojis', success: 'Đã xóa custom emoji khỏi thư viện.');
     }
 
-    private function validatedData(Request $request): array
+    private function normalizedPayload(array $input): array
     {
-        $name = trim((string) $request->input('name'));
-        $slug = $this->normalizeSlug((string) $request->input('slug', $name));
-        $emojiIdentifier = preg_replace('/\s+/', '', trim((string) $request->input('emoji_identifier')));
-        $fallbackEmoji = trim((string) $request->input('fallback_emoji'));
-        $keywords = trim((string) $request->input('keywords'));
-        $notes = trim((string) $request->input('notes'));
-
-        if ($name === '' || $slug === '' || $emojiIdentifier === '' || $fallbackEmoji === '') {
-            $this->redirectWith('/custom-emojis', error: 'Tên, slug, emoji ID và fallback emoji là bắt buộc.');
-        }
-
-        if (!preg_match('/^[0-9]{5,40}$/', $emojiIdentifier)) {
-            $this->redirectWith('/custom-emojis', error: 'Emoji ID không hợp lệ. Hãy nhập đúng dãy số Telegram cung cấp.');
-        }
-
-        if (!preg_match('/^[a-z0-9._-]+$/', $slug)) {
-            $this->redirectWith('/custom-emojis', error: 'Slug chỉ được gồm chữ thường, số, dấu gạch ngang, gạch dưới hoặc dấu chấm.');
-        }
+        $name = trim((string) ($input['name'] ?? ''));
+        $slug = $this->normalizeSlug((string) ($input['slug'] ?? $name));
+        $emojiIdentifier = preg_replace('/\s+/', '', trim((string) ($input['emoji_identifier'] ?? ''))) ?? '';
+        $fallbackEmoji = trim((string) ($input['fallback_emoji'] ?? ''));
+        $keywords = trim((string) ($input['keywords'] ?? ''));
+        $notes = trim((string) ($input['notes'] ?? ''));
 
         return [
             'name' => $name,
@@ -134,14 +218,74 @@ class CustomEmojiController extends Controller
             'fallback_emoji' => $fallbackEmoji,
             'keywords' => $keywords !== '' ? $keywords : null,
             'notes' => $notes !== '' ? $notes : null,
-            'is_active' => $request->input('is_active') ? 1 : 0,
+            'is_active' => !empty($input['is_active']) ? 1 : 0,
         ];
+    }
+
+    private function validatePayload(array $payload, ?int $rowNumber = null): array
+    {
+        $prefix = $rowNumber !== null ? 'Dòng ' . $rowNumber . ': ' : '';
+        $name = trim((string) ($payload['name'] ?? ''));
+        $slug = trim((string) ($payload['slug'] ?? ''));
+        $emojiIdentifier = trim((string) ($payload['emoji_identifier'] ?? ''));
+        $fallbackEmoji = trim((string) ($payload['fallback_emoji'] ?? ''));
+
+        if ($name === '' || $slug === '' || $emojiIdentifier === '' || $fallbackEmoji === '') {
+            throw new RuntimeException($prefix . 'Tên, slug, emoji ID và fallback emoji là bắt buộc.');
+        }
+
+        if (!preg_match('/^[0-9]{5,40}$/', $emojiIdentifier)) {
+            throw new RuntimeException($prefix . 'Emoji ID không hợp lệ. Hãy nhập đúng dãy số Telegram cung cấp.');
+        }
+
+        if (!preg_match('/^[a-z0-9._-]+$/', $slug)) {
+            throw new RuntimeException($prefix . 'Slug chỉ được gồm chữ thường, số, dấu gạch ngang, gạch dưới hoặc dấu chấm.');
+        }
+
+        return $payload;
     }
 
     private function normalizeSlug(string $value): string
     {
         $value = strtolower(trim($value));
         $value = preg_replace('/[^a-z0-9._-]+/', '-', $value) ?? '';
+
         return trim($value, '-');
+    }
+
+    private function isPayloadBlank(array $payload): bool
+    {
+        return trim((string) ($payload['name'] ?? '')) === ''
+            && trim((string) ($payload['slug'] ?? '')) === ''
+            && trim((string) ($payload['emoji_identifier'] ?? '')) === ''
+            && trim((string) ($payload['fallback_emoji'] ?? '')) === ''
+            && trim((string) ($payload['keywords'] ?? '')) === ''
+            && trim((string) ($payload['notes'] ?? '')) === '';
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    private function ownedSlugSet(int $userId): array
+    {
+        $set = [];
+
+        foreach ($this->customEmojis->allByUser($userId, 'id DESC') as $emoji) {
+            $slug = strtolower((string) ($emoji['slug'] ?? ''));
+
+            if ($slug === '') {
+                continue;
+            }
+
+            $set[$slug] = true;
+        }
+
+        return $set;
+    }
+
+    private function flashImportState(array $rows): void
+    {
+        Session::flash('custom_emoji_import_rows', $rows);
+        Session::flash('custom_emoji_import_open', true);
     }
 }

@@ -31,6 +31,14 @@ class User extends Model
         );
     }
 
+    public function firstSuperAdmin(): ?array
+    {
+        return $this->db()->fetch(
+            'SELECT * FROM users WHERE role = :role ORDER BY id ASC LIMIT 1',
+            ['role' => 'super_admin']
+        );
+    }
+
     public function paginateAdmins(int $page = 1, int $perPage = 20, string $query = ''): array
     {
         return $this->paginateAdminsWithOrder($page, $perPage, $query, 'u.created_at DESC, u.id DESC');

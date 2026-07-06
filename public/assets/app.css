@@ -1101,7 +1101,232 @@ body.sidebar-collapsed .sidebar-logout {
   grid-column: span 2;
 }
 
+.group-account-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.group-account-row .button {
+  white-space: nowrap;
+}
+
 .group-topic-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.group-topic-head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.text-success {
+  color: var(--success);
+}
+
+.text-danger {
+  color: var(--danger);
+}
+
+.group-account-feedback,
+.group-peer-feedback {
+  margin-top: 10px;
+  overflow-wrap: anywhere;
+}
+
+.group-form-hint {
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.group-dialog-status {
+  line-height: 1.5;
+}
+
+.group-dialog-browser {
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-muted) 100%);
+  overflow: hidden;
+}
+
+.group-dialog-browser-summary {
+  list-style: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+  cursor: pointer;
+}
+
+.group-dialog-browser-summary::-webkit-details-marker {
+  display: none;
+}
+
+.group-dialog-browser-summary::marker {
+  content: '';
+}
+
+.group-dialog-browser-summary::after {
+  content: '+';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.group-dialog-browser-summary:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 3px var(--focus-ring);
+}
+
+.group-dialog-browser-summary-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.group-dialog-browser-summary-copy .section-title {
+  margin: 0;
+}
+
+.group-dialog-browser[open] .group-dialog-browser-summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.group-dialog-browser[open] .group-dialog-browser-summary::after {
+  content: '-';
+}
+
+.group-dialog-browser-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.group-dialog-browser-meta {
+  max-width: 260px;
+  margin-left: auto;
+  text-align: right;
+  line-height: 1.5;
+}
+
+.group-dialog-toolbar {
+  display: grid;
+  gap: 12px;
+}
+
+.group-dialog-search-field {
+  margin: 0;
+}
+
+.group-dialog-toolbar-actions {
+  align-items: center;
+}
+
+.group-dialog-list {
+  display: grid;
+  gap: 12px;
+}
+
+.group-dialog-empty {
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px dashed var(--border-strong);
+  background: var(--surface-muted);
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.group-dialog-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.group-dialog-card.is-picked {
+  border-color: var(--accent-border-strong);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.group-dialog-card.is-selected {
+  background: var(--surface-muted);
+}
+
+.group-dialog-card.is-disabled {
+  opacity: 0.88;
+}
+
+.group-dialog-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.group-dialog-card-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.group-dialog-card-copy strong {
+  line-height: 1.35;
+}
+
+.group-dialog-card-badges {
+  justify-content: flex-end;
+}
+
+.group-dialog-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.group-dialog-card-meta span {
+  overflow-wrap: anywhere;
+}
+
+.group-dialog-card-actions {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.group-dialog-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--foreground);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.group-dialog-check input {
+  margin: 0;
+}
+
+.group-dialog-check.disabled {
+  color: var(--muted);
+}
+
+.group-dialog-import-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1463,6 +1688,14 @@ body.sidebar-collapsed .sidebar-logout {
   overflow: hidden;
 }
 
+.template-emoji-origin {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
 .template-emoji-token {
   color: var(--muted);
   font-size: 0.74rem;
@@ -1608,12 +1841,68 @@ body.sidebar-collapsed .sidebar-logout {
   line-height: 1.2;
 }
 
+.emoji-meta-chip-warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
 .emoji-library-note {
   line-height: 1.45;
 }
 
 .emoji-library-actions {
   gap: 8px;
+}
+
+.emoji-import-modal .app-modal-dialog {
+  width: min(100%, 1220px);
+}
+
+.emoji-import-body {
+  display: grid;
+  gap: 16px;
+  white-space: normal;
+}
+
+.emoji-import-table-wrap {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface-strong);
+}
+
+.emoji-import-table th,
+.emoji-import-table td {
+  padding: 10px;
+  min-width: 110px;
+}
+
+.emoji-import-index {
+  width: 42px;
+  min-width: 42px;
+  text-align: center;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.emoji-import-textarea {
+  min-height: 72px;
+}
+
+.emoji-import-check-cell,
+.emoji-import-action-cell {
+  min-width: 72px;
+  text-align: center;
+}
+
+.emoji-import-check-cell input {
+  width: 18px;
+  height: 18px;
+  margin-top: 8px;
+}
+
+.emoji-import-toolbar {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .button.sm {
@@ -2233,6 +2522,10 @@ td {
     grid-column: auto;
   }
 
+  .group-account-row {
+    grid-template-columns: 1fr;
+  }
+
   .template-parse-field {
     grid-column: auto;
   }
@@ -2246,9 +2539,19 @@ td {
   .template-library-head,
   .group-editor-head,
   .group-card-head,
-  .group-topic-head {
+  .group-topic-head,
+  .group-dialog-browser-summary,
+  .group-dialog-card-head,
+  .group-dialog-card-actions,
+  .group-dialog-import-bar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .group-dialog-browser-meta {
+    max-width: none;
+    margin-left: 0;
+    text-align: left;
   }
 
   .template-preview-card {

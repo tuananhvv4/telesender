@@ -88,6 +88,7 @@
 
                         <div class="template-emoji-grid" id="template_emoji_grid">
                             <?php foreach ($customEmojis as $emoji): ?>
+                                <?php $emojiOrigin = (string) ($emoji['scope_label'] ?? 'Riêng'); ?>
                                 <button
                                     class="template-emoji-tile"
                                     type="button"
@@ -101,6 +102,7 @@
                                         <span class="template-emoji-symbol"><?= e((string) $emoji['fallback_emoji']) ?></span>
                                         <span class="template-emoji-name"><?= e((string) $emoji['name']) ?></span>
                                     </div>
+                                    <span class="template-emoji-origin"><?= e($emojiOrigin) ?></span>
                                     <span class="template-emoji-token mono"><?= e('{{ce:' . $emoji['slug'] . '}}') ?></span>
                                 </button>
                             <?php endforeach; ?>
@@ -218,6 +220,9 @@ const customEmojiLibrary = <?= json_encode(array_map(static fn ($emoji) => [
     'fallback_emoji' => $emoji['fallback_emoji'],
     'keywords' => $emoji['keywords'] ?? '',
     'notes' => $emoji['notes'] ?? '',
+    'library_scope' => $emoji['library_scope'] ?? 'owned',
+    'scope_label' => $emoji['scope_label'] ?? 'Riêng',
+    'source_user_name' => $emoji['source_user_name'] ?? '',
     'token' => '{{ce:' . $emoji['slug'] . '}}',
 ], $customEmojis), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 const csrfToken = <?= json_encode(csrf_token(), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
@@ -304,7 +309,7 @@ function filteredEmojiLibrary() {
     const recents = getRecents();
 
     return customEmojiLibrary.filter((emoji) => {
-        const haystack = [emoji.name, emoji.slug, emoji.keywords, emoji.notes].join(' ').toLowerCase();
+        const haystack = [emoji.name, emoji.slug, emoji.keywords, emoji.notes, emoji.scope_label, emoji.source_user_name].join(' ').toLowerCase();
         const matchesSearch = search === '' || haystack.includes(search);
 
         if (!matchesSearch) {
@@ -357,6 +362,7 @@ function renderEmojiGrid() {
                 <span class="template-emoji-symbol">${escapeHtml(String(emoji.fallback_emoji))}</span>
                 <span class="template-emoji-name">${escapeHtml(String(emoji.name))}</span>
             </div>
+            <span class="template-emoji-origin">${escapeHtml(String(emoji.scope_label || 'Riêng'))}</span>
             <span class="template-emoji-token mono">${escapeHtml(String(emoji.token))}</span>
         </button>
     `).join('');

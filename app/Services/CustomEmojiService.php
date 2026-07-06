@@ -12,18 +12,46 @@ class CustomEmojiService
     private const TOKEN_PATTERN = '/\{\{\s*ce:([a-z0-9._-]+)\s*\}\}/i';
 
     public function __construct(
-        private readonly CustomEmoji $customEmojis = new CustomEmoji()
+        private readonly CustomEmoji $customEmojis = new CustomEmoji(),
+        private readonly SharedCustomEmojiService $sharedEmojis = new SharedCustomEmojiService()
     ) {
     }
 
     public function pickerLibrary(int $userId): array
     {
-        return $this->customEmojis->activeForUser($userId);
+        $ownedSlugs = $this->ownedSlugSet($userId);
+        $picker = [];
+
+        foreach ($this->customEmojis->activeForUser($userId) as $emoji) {
+            $picker[] = $this->decorateEmoji($emoji, 'owned');
+        }
+
+        foreach ($this->sharedEmojis->sharedActiveForUser($userId) as $emoji) {
+            $slug = strtolower((string) ($emoji['slug'] ?? ''));
+
+            if ($slug === '' || isset($ownedSlugs[$slug])) {
+                continue;
+            }
+
+            $picker[] = $this->decorateEmoji($emoji, 'shared');
+        }
+
+        usort(
+            $picker,
+            static fn (array $left, array $right): int => strcasecmp((string) ($left['name'] ?? ''), (string) ($right['name'] ?? ''))
+        );
+
+        return $picker;
     }
 
     public function allForUser(int $userId): array
     {
         return $this->customEmojis->listForUser($userId);
+    }
+
+    public function sharedLibrary(int $userId): array
+    {
+        return $this->sharedEmojis->sharedActiveForUser($userId);
     }
 
     public function analyzeTemplate(string $body, string $parseMode, int $userId): array
@@ -158,9 +186,60 @@ class CustomEmojiService
         $map = [];
 
         foreach ($this->customEmojis->listForUser($userId) as $emoji) {
-            $map[strtolower((string) $emoji['slug'])] = $emoji;
+            $slug = strtolower((string) ($emoji['slug'] ?? ''));
+
+            if ($slug === '') {
+                continue;
+            }
+
+            $map[$slug] = $this->decorateEmoji($emoji, 'owned');
+        }
+
+        foreach ($this->sharedEmojis->sharedMapForUser($userId) as $slug => $emoji) {
+            if (isset($map[$slug])) {
+                continue;
+            }
+
+            $map[$slug] = $this->decorateEmoji($emoji, 'shared');
         }
 
         return $map;
+    }
+
+    private function decorateEmoji(array $emoji, string $scope): array
+    {
+        if (!isset($emoji['library_scope'])) {
+            $emoji['library_scope'] = $scope;
+        }
+
+        if (!isset($emoji['scope_label'])) {
+            $emoji['scope_label'] = $scope === 'shared' ? 'Dùng chung' : 'Riêng';
+        }
+
+        if (!isset($emoji['is_shared'])) {
+            $emoji['is_shared'] = $scope === 'shared' ? 1 : 0;
+        }
+
+        return $emoji;
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    private function ownedSlugSet(int $userId): array
+    {
+        $set = [];
+
+        foreach ($this->customEmojis->allByUser($userId, 'id DESC') as $emoji) {
+            $slug = strtolower((string) ($emoji['slug'] ?? ''));
+
+            if ($slug === '') {
+                continue;
+            }
+
+            $set[$slug] = true;
+        }
+
+        return $set;
     }
 }
