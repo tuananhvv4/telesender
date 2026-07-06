@@ -307,16 +307,23 @@ foreach ($schedules as $schedule) {
                         <div class="field">
                             <label for="schedule_modal_group">Nhóm Telegram</label>
                             <select class="select" id="schedule_modal_group" name="telegram_group_id" required data-schedule-group>
-                                <option value="">Chọn nhóm</option>
+                                <option value="">Chọn tài khoản trước</option>
                                 <?php foreach ($groups as $group): ?>
-                                    <option value="<?= e((string) $group['id']) ?>">
-                                        <?= e($group['title']) ?>
-                                        <?php if (!empty($group['topic_title'])): ?>
-                                            · Topic: <?= e($group['topic_title']) ?>
-                                        <?php elseif (!empty($group['topic_id'])): ?>
-                                            · Topic ID: <?= e((string) $group['topic_id']) ?>
-                                        <?php endif; ?>
-                                        (<?= e($group['account_name']) ?>)
+                                    <?php
+                                    $groupLabel = (string) $group['title'];
+                                    if (!empty($group['topic_title'])) {
+                                        $groupLabel .= ' · Topic: ' . (string) $group['topic_title'];
+                                    } elseif (!empty($group['topic_id'])) {
+                                        $groupLabel .= ' · Topic ID: ' . (string) $group['topic_id'];
+                                    }
+                                    $groupLabel .= ' (' . (string) $group['account_name'] . ')';
+                                    ?>
+                                    <option
+                                        value="<?= e((string) $group['id']) ?>"
+                                        data-group-account-id="<?= e((string) $group['telegram_account_id']) ?>"
+                                        data-group-label="<?= e($groupLabel) ?>"
+                                    >
+                                        <?= e($groupLabel) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -530,11 +537,53 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        const allGroupOptions = Array.from(groupInput.querySelectorAll('option[data-group-account-id]')).map((option) => ({
+            value: option.value,
+            accountId: option.getAttribute('data-group-account-id') || '',
+            label: option.getAttribute('data-group-label') || option.textContent.trim(),
+        }));
+
         function toggleScheduleSections() {
             const activeType = typeInput.value;
             wrapper.querySelectorAll('[data-schedule-section]').forEach((section) => {
                 section.style.display = section.getAttribute('data-schedule-section') === activeType ? '' : 'none';
             });
+        }
+
+        function syncGroupOptions(preferredGroupId = null) {
+            const selectedAccountId = String(accountInput.value || '');
+            const fallbackGroupId = preferredGroupId === null ? String(groupInput.value || '') : String(preferredGroupId || '');
+            const matchingGroups = selectedAccountId === ''
+                ? []
+                : allGroupOptions.filter((option) => option.accountId === selectedAccountId);
+
+            groupInput.innerHTML = '';
+
+            const placeholderOption = document.createElement('option');
+            placeholderOption.value = '';
+
+            if (selectedAccountId === '') {
+                placeholderOption.textContent = 'Chọn tài khoản trước';
+                groupInput.disabled = true;
+            } else if (matchingGroups.length === 0) {
+                placeholderOption.textContent = 'Tài khoản này chưa có nhóm đã lưu';
+                groupInput.disabled = false;
+            } else {
+                placeholderOption.textContent = 'Chọn nhóm';
+                groupInput.disabled = false;
+            }
+
+            groupInput.appendChild(placeholderOption);
+
+            matchingGroups.forEach((option) => {
+                const element = document.createElement('option');
+                element.value = option.value;
+                element.textContent = option.label;
+                groupInput.appendChild(element);
+            });
+
+            const nextGroupId = matchingGroups.some((option) => option.value === fallbackGroupId) ? fallbackGroupId : '';
+            groupInput.value = nextGroupId;
         }
 
         function bindRemoveTimeButtons(scope = wrapper) {
@@ -698,7 +747,7 @@ document.addEventListener('DOMContentLoaded', () => {
         submitButton.textContent = mode === 'edit' ? 'Cập nhật lịch gửi' : 'Tạo lịch gửi';
         applyFormState(record ? record.form_state : defaultScheduleState);
         accountInput.value = record ? String(record.telegram_account_id || '') : '';
-        groupInput.value = record ? String(record.telegram_group_id || '') : '';
+        syncGroupOptions(record ? String(record.telegram_group_id || '') : '');
         templateInput.value = record ? String(record.message_template_id || '') : '';
 
         if (mode === 'edit' && record) {
@@ -722,6 +771,10 @@ document.addEventListener('DOMContentLoaded', () => {
         typeInput.addEventListener('change', () => {
             toggleScheduleSections();
             triggerPreview();
+        });
+
+        accountInput.addEventListener('change', () => {
+            syncGroupOptions();
         });
 
         presetSelect.addEventListener('change', (event) => {
