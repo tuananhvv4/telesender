@@ -1,10 +1,6 @@
 <span class="badge info">TeleSender</span>
 <h1 class="auth-heading"><?= e((string) ($registerHeading ?? 'Tạo người dùng mới')) ?></h1>
 
-<?php if ($error = flash('error')): ?>
-    <div class="flash error"><?= e($error) ?></div>
-<?php endif; ?>
-
 <form class="form-grid" method="post" action="<?= e(url('/register')) ?>">
     <?= csrf_field() ?>
     <div class="field">

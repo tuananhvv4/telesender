@@ -113,7 +113,7 @@ foreach ($customEmojis as $emoji) {
                     <div class="inline-actions emoji-library-actions">
                         <button class="button secondary sm" type="button" data-copy-token="<?= e($token) ?>">Chép token</button>
                         <button class="button secondary sm" type="button" data-emoji-edit="<?= e((string) $emoji['id']) ?>">Sửa</button>
-                        <form method="post" action="<?= e(url('/custom-emojis/delete')) ?>">
+                        <form method="post" action="<?= e(url('/custom-emojis/delete')) ?>" data-ajax-form data-ajax-refresh="custom-emojis-shell">
                             <?= csrf_field() ?>
                             <input type="hidden" name="id" value="<?= e((string) $emoji['id']) ?>">
                             <button class="button danger sm" type="submit">Xóa</button>

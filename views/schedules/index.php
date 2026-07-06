@@ -160,6 +160,11 @@ foreach ($schedules as $schedule) {
                                 <form
                                     method="post"
                                     action="<?= e(url('/schedules/send-now')) ?>"
+                                    data-ajax-form
+                                    data-ajax-refresh="schedules-shell"
+                                    data-ajax-risk-confirm="1"
+                                    data-ajax-confirm-title="Xác nhận gửi ngay"
+                                    data-ajax-confirm-text="Vẫn gửi ngay"
                                     data-send-now-form
                                     <?= $manualGuard !== null ? 'data-risk-message="' . e((string) ($manualGuard['reason'] ?? 'Tài khoản đang trong vùng rủi ro an toàn.')) . '"' : '' ?>
                                 >
@@ -168,12 +173,12 @@ foreach ($schedules as $schedule) {
                                     <input type="hidden" name="force_send" value="0" data-force-send-input>
                                     <button class="button secondary" type="submit">Gửi ngay</button>
                                 </form>
-                                <form method="post" action="<?= e(url('/schedules/toggle')) ?>">
+                                <form method="post" action="<?= e(url('/schedules/toggle')) ?>" data-ajax-form data-ajax-refresh="schedules-shell">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= e((string) $schedule['id']) ?>">
                                     <button class="button accent" type="submit"><?= $schedule['status'] === 'active' ? 'Tạm dừng' : 'Tiếp tục' ?></button>
                                 </form>
-                                <form method="post" action="<?= e(url('/schedules/delete')) ?>">
+                                <form method="post" action="<?= e(url('/schedules/delete')) ?>" data-ajax-form data-ajax-refresh="schedules-shell">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= e((string) $schedule['id']) ?>">
                                     <button class="button danger" type="submit">Xóa</button>
@@ -474,25 +479,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!editorTemplate || !window.TeleSenderCrudModal || !window.TeleSenderApp) {
         return;
-    }
-
-    function requestAppModal(mode, options = {}) {
-        return new Promise((resolve) => {
-            const responseEvent = `app:modal:response:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-            const handleResponse = (event) => {
-                document.removeEventListener(responseEvent, handleResponse);
-                resolve(Boolean(event.detail?.confirmed));
-            };
-
-            document.addEventListener(responseEvent, handleResponse, { once: true });
-            document.dispatchEvent(new CustomEvent('app:modal:open', {
-                detail: {
-                    mode,
-                    options,
-                    responseEvent,
-                },
-            }));
-        });
     }
 
     function createTimeRow(name, value = '') {
@@ -850,44 +836,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         openScheduleModal('edit', button.getAttribute('data-schedule-edit'));
-    });
-
-    document.addEventListener('submit', async (event) => {
-        const form = event.target instanceof HTMLFormElement ? event.target : null;
-
-        if (!form || !form.matches('[data-send-now-form]')) {
-            return;
-        }
-
-        const message = form.getAttribute('data-risk-message') || '';
-        const forceInput = form.querySelector('[data-force-send-input]');
-
-        if (!forceInput) {
-            return;
-        }
-
-        if (message === '') {
-            forceInput.value = '0';
-            return;
-        }
-
-        event.preventDefault();
-
-        const confirmed = await requestAppModal('confirm', {
-            title: 'Xác nhận gửi ngay',
-            message: message + '\n\nNếu tiếp tục, hệ thống sẽ ép gửi ngay và bỏ qua cooldown / giãn cách an toàn ở lần bấm này.',
-            confirmText: 'Vẫn gửi ngay',
-            cancelText: 'Hủy',
-            confirmClass: 'danger',
-        });
-
-        if (!confirmed) {
-            forceInput.value = '0';
-            return;
-        }
-
-        forceInput.value = '1';
-        form.submit();
     });
 
     document.addEventListener('app:regions:refreshed', () => {

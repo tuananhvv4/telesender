@@ -59,7 +59,7 @@
 	                        <td><?= e((string) $account['schedules_count']) ?></td>
 	                        <td>
 	                            <div class="status-block">
-                                    <form method="post" action="<?= e(url('/accounts/toggle-active')) ?>">
+                                    <form method="post" action="<?= e(url('/accounts/toggle-active')) ?>" data-ajax-form data-ajax-refresh="accounts-panel">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="account_id" value="<?= e((string) $account['id']) ?>">
                                         <button class="button <?= $isActive ? 'danger' : 'accent' ?>" type="submit">
@@ -77,13 +77,14 @@
                                     <?php elseif ($status === 'code_sent'): ?>
                                         <div class="status-card info">
                                             <div class="status-title">Nhập mã OTP</div>
-                                            <form class="status-form" method="post" action="<?= e(url('/accounts/verify-code')) ?>">
+                                            <form class="status-form" method="post" action="<?= e(url('/accounts/verify-code')) ?>" data-ajax-form data-ajax-refresh="accounts-panel">
                                                 <?= csrf_field() ?>
                                                 <input type="hidden" name="account_id" value="<?= e((string) $account['id']) ?>">
+                                                <div class="form-feedback" data-form-feedback hidden></div>
                                                 <input class="input" type="text" name="code" placeholder="Nhập mã OTP" required>
                                                 <button class="button accent" type="submit">Xác thực mã</button>
                                             </form>
-                                            <form method="post" action="<?= e(url('/accounts/send-code')) ?>">
+                                            <form method="post" action="<?= e(url('/accounts/send-code')) ?>" data-ajax-form data-ajax-refresh="accounts-panel">
                                                 <?= csrf_field() ?>
                                                 <input type="hidden" name="account_id" value="<?= e((string) $account['id']) ?>">
                                                 <button class="button secondary" type="submit">Gửi lại OTP</button>
@@ -92,9 +93,10 @@
                                     <?php elseif ($status === 'password_required'): ?>
                                         <div class="status-card warning">
                                             <div class="status-title">Cần mật khẩu 2FA</div>
-                                            <form class="status-form" method="post" action="<?= e(url('/accounts/verify-password')) ?>">
+                                            <form class="status-form" method="post" action="<?= e(url('/accounts/verify-password')) ?>" data-ajax-form data-ajax-refresh="accounts-panel">
                                                 <?= csrf_field() ?>
                                                 <input type="hidden" name="account_id" value="<?= e((string) $account['id']) ?>">
+                                                <div class="form-feedback" data-form-feedback hidden></div>
                                                 <input class="input" type="password" name="password" placeholder="Nhập mật khẩu 2FA" required>
                                                 <button class="button secondary" type="submit">Xác thực 2FA</button>
                                             </form>
@@ -102,7 +104,7 @@
                                     <?php else: ?>
                                         <div class="status-card">
                                             <div class="status-title">Bắt đầu kết nối</div>
-                                            <form method="post" action="<?= e(url('/accounts/send-code')) ?>">
+                                            <form method="post" action="<?= e(url('/accounts/send-code')) ?>" data-ajax-form data-ajax-refresh="accounts-panel">
                                                 <?= csrf_field() ?>
                                                 <input type="hidden" name="account_id" value="<?= e((string) $account['id']) ?>">
                                                 <button class="button secondary" type="submit">Gửi OTP</button>

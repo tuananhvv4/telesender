@@ -139,7 +139,7 @@ $remainingLabel = static function (array $user): string {
                     <div class="inline-actions">
                         <button class="button secondary sm" type="button" data-admin-detail="<?= e((string) $admin['id']) ?>">Chi tiết / sửa</button>
                         <a class="button secondary sm" href="<?= e(url('/admin/subscriptions')) ?>">Quản lý hạn dùng</a>
-                        <form method="post" action="<?= e(url('/admin/users/status')) ?>">
+                        <form method="post" action="<?= e(url('/admin/users/status')) ?>" data-ajax-form data-ajax-refresh="admin-users-shell">
                             <?= csrf_field() ?>
                             <input type="hidden" name="user_id" value="<?= e((string) $admin['id']) ?>">
                             <button class="button <?= (string) ($admin['status'] ?? 'inactive') === 'active' ? 'danger' : 'accent' ?> sm" type="submit">

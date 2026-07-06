@@ -1,13 +1,6 @@
 <span class="badge info">TeleSender</span>
 <h1 class="auth-heading">Đăng nhập hệ thống</h1>
 
-<?php if ($success = flash('success')): ?>
-    <div class="flash success"><?= e($success) ?></div>
-<?php endif; ?>
-<?php if ($error = flash('error')): ?>
-    <div class="flash error"><?= e($error) ?></div>
-<?php endif; ?>
-
 <form class="form-grid" method="post" action="<?= e(url('/login')) ?>">
     <?= csrf_field() ?>
     <div class="field">

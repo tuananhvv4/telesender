@@ -543,9 +543,15 @@ body.sidebar-collapsed .sidebar-logout {
   align-content: start;
 }
 
-.flash-stack {
+.toast-stack {
+  position: fixed;
+  top: calc(20px + env(safe-area-inset-top, 0px));
+  right: calc(20px + env(safe-area-inset-right, 0px));
+  z-index: 320;
+  width: min(420px, calc(100vw - 32px));
   display: grid;
   gap: 12px;
+  pointer-events: none;
 }
 
 .mobile-topbar {
@@ -888,31 +894,149 @@ body.sidebar-collapsed .sidebar-logout {
   color: var(--accent);
 }
 
-.flash {
-  padding: 14px 18px;
-  border-radius: 14px;
-  margin-bottom: 20px;
+.toast {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 14px 14px 14px 16px;
+  border-radius: 18px;
   border: 1px solid transparent;
+  background: var(--card-strong);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.22);
   opacity: 1;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
   transition: opacity 0.22s ease, transform 0.22s ease;
+  animation: toast-in 0.22s ease;
+  pointer-events: auto;
+  overflow: hidden;
 }
 
-.flash.is-leaving {
+.toast.is-leaving {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateY(-10px) scale(0.98);
 }
 
-.flash.success {
-  background: var(--success-soft);
+.toast-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  flex: 0 0 auto;
+}
+
+.toast-content {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.toast-title {
+  font-size: 0.96rem;
+  line-height: 1.35;
+}
+
+.toast-message {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  white-space: pre-line;
+  word-break: break-word;
+}
+
+.toast-dismiss {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.toast-dismiss:hover {
+  background: var(--surface-muted-2);
+  color: var(--foreground);
+}
+
+.toast-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.toast-progress-bar {
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  transform: scaleX(1);
+}
+
+.toast.success {
   border-color: var(--success-border);
+  background: linear-gradient(135deg, var(--success-soft), var(--card-strong));
+}
+
+.toast.success .toast-icon {
+  background: var(--success-soft);
   color: var(--success);
 }
 
-.flash.error {
-  background: var(--danger-soft);
+.toast.success .toast-progress-bar {
+  background: linear-gradient(90deg, rgba(22, 101, 52, 0.92), rgba(22, 101, 52, 0.56));
+}
+
+.toast.error {
   border-color: var(--danger-border);
+  background: linear-gradient(135deg, var(--danger-soft), var(--card-strong));
+}
+
+.toast.error .toast-icon {
+  background: var(--danger-soft);
   color: var(--danger);
+}
+
+.toast.error .toast-progress-bar {
+  background: linear-gradient(90deg, rgba(185, 28, 28, 0.96), rgba(185, 28, 28, 0.58));
+}
+
+.toast.info {
+  border-color: var(--accent-border);
+  background: linear-gradient(135deg, var(--accent-soft), var(--card-strong));
+}
+
+.toast.info .toast-icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.toast.info .toast-progress-bar {
+  background: linear-gradient(90deg, rgba(15, 118, 110, 0.94), rgba(15, 118, 110, 0.54));
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .form-feedback {
@@ -2781,6 +2905,13 @@ td {
   .mobile-topbar {
     margin-bottom: 14px;
     padding: 12px 14px;
+  }
+
+  .toast-stack {
+    top: calc(14px + env(safe-area-inset-top, 0px));
+    right: calc(14px + env(safe-area-inset-right, 0px));
+    left: calc(14px + env(safe-area-inset-left, 0px));
+    width: auto;
   }
 
   .app-modal {

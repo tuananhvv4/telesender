@@ -63,7 +63,7 @@ foreach ($templates as $template) {
                     <p class="template-library-preview"><?= nl2br(e(mb_substr($templatePreviewBodies[(int) $template['id']] ?? $template['body'], 0, 240))) ?></p>
                     <div class="inline-actions">
                         <button class="button secondary" type="button" data-template-edit="<?= e((string) $template['id']) ?>">Sửa</button>
-                        <form method="post" action="<?= e(url('/templates/delete')) ?>">
+                        <form method="post" action="<?= e(url('/templates/delete')) ?>" data-ajax-form data-ajax-refresh="templates-panel">
                             <?= csrf_field() ?>
                             <input type="hidden" name="id" value="<?= e((string) $template['id']) ?>">
                             <button class="button danger" type="submit">Xóa</button>

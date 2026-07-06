@@ -42,6 +42,39 @@ $supportHref = support_contact_href($supportValue);
 $hasFooterMeta = $footerText !== '' || $supportName !== '' || $supportValue !== '' || $supportExtra !== '';
 ?>
 <body>
+    <div class="toast-stack" id="app_toast_stack" aria-live="polite" aria-atomic="true">
+        <?php if ($success = flash('success')): ?>
+            <div class="toast success" role="status">
+                <div class="toast-icon" aria-hidden="true"><i class="fa-solid fa-circle-check"></i></div>
+                <div class="toast-content">
+                    <strong class="toast-title">Thành công</strong>
+                    <div class="toast-message"><?= e($success) ?></div>
+                </div>
+                <button class="toast-dismiss" type="button" data-toast-close aria-label="Đóng thông báo">
+                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                </button>
+                <div class="toast-progress" aria-hidden="true">
+                    <div class="toast-progress-bar" data-toast-progress-bar></div>
+                </div>
+            </div>
+        <?php endif; ?>
+        <?php if ($error = flash('error')): ?>
+            <div class="toast error" role="alert">
+                <div class="toast-icon" aria-hidden="true"><i class="fa-solid fa-circle-exclamation"></i></div>
+                <div class="toast-content">
+                    <strong class="toast-title">Có lỗi xảy ra</strong>
+                    <div class="toast-message"><?= e($error) ?></div>
+                </div>
+                <button class="toast-dismiss" type="button" data-toast-close aria-label="Đóng thông báo">
+                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                </button>
+                <div class="toast-progress" aria-hidden="true">
+                    <div class="toast-progress-bar" data-toast-progress-bar></div>
+                </div>
+            </div>
+        <?php endif; ?>
+    </div>
+
     <main class="auth-shell">
         <div class="guest-toolbar">
             <button class="theme-toggle theme-toggle-guest" type="button" data-theme-toggle aria-label="Chuyển giao diện" title="Chuyển giao diện">
@@ -83,6 +116,112 @@ $hasFooterMeta = $footerText !== '' || $supportName !== '' || $supportValue !== 
             </div>
         </footer>
     </main>
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const toastStack = document.getElementById('app_toast_stack');
+
+        if (!toastStack) {
+            return;
+        }
+
+        function removeToastElement(element) {
+            if (!(element instanceof HTMLElement) || !element.parentNode) {
+                return;
+            }
+
+            element.classList.add('is-leaving');
+            window.setTimeout(() => {
+                if (element.parentNode) {
+                    element.remove();
+                }
+            }, 220);
+        }
+
+        function bindToastElement(element) {
+            if (!(element instanceof HTMLElement) || element.dataset.toastBound === '1') {
+                return;
+            }
+
+            element.dataset.toastBound = '1';
+
+            let dismissTimer = null;
+            const duration = Number(element.getAttribute('data-toast-duration') || (element.classList.contains('error') ? 5600 : 4200));
+            let remaining = duration;
+            let startedAt = 0;
+            const progressBar = element.querySelector('[data-toast-progress-bar]');
+
+            function syncProgress(ratio, withTransition = false, transitionDuration = 0) {
+                if (!(progressBar instanceof HTMLElement)) {
+                    return;
+                }
+
+                progressBar.style.transition = withTransition ? `transform ${transitionDuration}ms linear` : 'none';
+                progressBar.style.transform = `scaleX(${Math.max(0, Math.min(1, ratio))})`;
+            }
+
+            function pauseTimer() {
+                window.clearTimeout(dismissTimer);
+
+                if (startedAt > 0) {
+                    remaining = Math.max(0, remaining - (Date.now() - startedAt));
+                    startedAt = 0;
+                }
+
+                syncProgress(duration > 0 ? remaining / duration : 0, false);
+            }
+
+            const startTimer = () => {
+                window.clearTimeout(dismissTimer);
+                startedAt = Date.now();
+
+                syncProgress(duration > 0 ? remaining / duration : 0, false);
+
+                if (progressBar instanceof HTMLElement) {
+                    progressBar.getBoundingClientRect();
+                }
+
+                syncProgress(0, true, remaining);
+
+                dismissTimer = window.setTimeout(() => {
+                    removeToastElement(element);
+                }, remaining);
+            };
+
+            element.querySelectorAll('[data-toast-close]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    pauseTimer();
+                    removeToastElement(element);
+                });
+            });
+
+            element.addEventListener('mouseenter', () => {
+                pauseTimer();
+            });
+
+            element.addEventListener('mouseleave', () => {
+                if (remaining > 0) {
+                    startTimer();
+                }
+            });
+
+            element.addEventListener('focusin', () => {
+                pauseTimer();
+            });
+
+            element.addEventListener('focusout', () => {
+                if (!element.contains(document.activeElement) && remaining > 0) {
+                    startTimer();
+                }
+            });
+
+            startTimer();
+        }
+
+        toastStack.querySelectorAll('.toast').forEach((element) => {
+            bindToastElement(element);
+        });
+    });
+    </script>
     <script src="<?= e(asset('theme.js')) ?>" defer></script>
 </body>
 </html>

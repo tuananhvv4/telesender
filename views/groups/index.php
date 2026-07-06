@@ -103,7 +103,7 @@ foreach ($groups as $group) {
 
                     <div class="inline-actions group-card-actions">
                         <button class="button secondary sm" type="button" data-group-edit="<?= e((string) $group['id']) ?>">Sửa</button>
-                        <form method="post" action="<?= e(url('/groups/delete')) ?>">
+                        <form method="post" action="<?= e(url('/groups/delete')) ?>" data-ajax-form data-ajax-refresh="groups-panel">
                             <?= csrf_field() ?>
                             <input type="hidden" name="id" value="<?= e((string) $group['id']) ?>">
                             <button class="button danger sm" type="submit">Xóa</button>

@@ -184,12 +184,36 @@ if ($isSuperAdmin) {
             </header>
 
             <div class="main-content">
-                <div class="flash-stack" id="app_flash_stack" aria-live="polite" aria-atomic="true">
+                <div class="toast-stack" id="app_toast_stack" aria-live="polite" aria-atomic="true">
                     <?php if ($success = flash('success')): ?>
-                        <div class="flash success"><?= e($success) ?></div>
+                        <div class="toast success" role="status">
+                            <div class="toast-icon" aria-hidden="true"><i class="fa-solid fa-circle-check"></i></div>
+                            <div class="toast-content">
+                                <strong class="toast-title">Thành công</strong>
+                                <div class="toast-message"><?= e($success) ?></div>
+                            </div>
+                            <button class="toast-dismiss" type="button" data-toast-close aria-label="Đóng thông báo">
+                                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                            </button>
+                            <div class="toast-progress" aria-hidden="true">
+                                <div class="toast-progress-bar" data-toast-progress-bar></div>
+                            </div>
+                        </div>
                     <?php endif; ?>
                     <?php if ($error = flash('error')): ?>
-                        <div class="flash error"><?= e($error) ?></div>
+                        <div class="toast error" role="alert">
+                            <div class="toast-icon" aria-hidden="true"><i class="fa-solid fa-circle-exclamation"></i></div>
+                            <div class="toast-content">
+                                <strong class="toast-title">Có lỗi xảy ra</strong>
+                                <div class="toast-message"><?= e($error) ?></div>
+                            </div>
+                            <button class="toast-dismiss" type="button" data-toast-close aria-label="Đóng thông báo">
+                                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                            </button>
+                            <div class="toast-progress" aria-hidden="true">
+                                <div class="toast-progress-bar" data-toast-progress-bar></div>
+                            </div>
+                        </div>
                     <?php endif; ?>
                 </div>
                 <?= $content ?>
@@ -365,8 +389,25 @@ if ($isSuperAdmin) {
     })();
 
     (function () {
-        const flashStack = document.getElementById('app_flash_stack');
+        const toastStack = document.getElementById('app_toast_stack');
         const pendingFlashStorageKey = 'tele_sender_pending_flash';
+        const toastMeta = {
+            success: {
+                title: 'Thành công',
+                icon: 'fa-solid fa-circle-check',
+                role: 'status',
+            },
+            error: {
+                title: 'Có lỗi xảy ra',
+                icon: 'fa-solid fa-circle-exclamation',
+                role: 'alert',
+            },
+            info: {
+                title: 'Thông báo',
+                icon: 'fa-solid fa-circle-info',
+                role: 'status',
+            },
+        };
 
         function persistFlash(type, message) {
             if (!message) {
@@ -415,7 +456,7 @@ if ($isSuperAdmin) {
             }
         }
 
-        function removeFlashElement(element) {
+        function removeToastElement(element) {
             if (!(element instanceof HTMLElement) || !element.parentNode) {
                 return;
             }
@@ -428,35 +469,167 @@ if ($isSuperAdmin) {
             }, 220);
         }
 
-        function bindFlashElement(element) {
-            if (!(element instanceof HTMLElement) || element.dataset.flashBound === '1') {
+        function trimToastStack(maxVisible = 4) {
+            if (!toastStack) {
                 return;
             }
 
-            element.dataset.flashBound = '1';
+            const visibleToasts = Array.from(toastStack.querySelectorAll('.toast'));
 
-            window.setTimeout(() => {
-                removeFlashElement(element);
-            }, 4200);
+            visibleToasts.slice(maxVisible).forEach((element) => {
+                removeToastElement(element);
+            });
         }
 
-        function showFlash(type, message, options = {}) {
-            if (!flashStack || !message) {
+        function bindToastElement(element) {
+            if (!(element instanceof HTMLElement) || element.dataset.toastBound === '1') {
                 return;
             }
 
+            element.dataset.toastBound = '1';
+
+            let dismissTimer = null;
+            const duration = Number(element.getAttribute('data-toast-duration') || (element.classList.contains('error') ? 5600 : 4200));
+            let remaining = duration;
+            let startedAt = 0;
+            const progressBar = element.querySelector('[data-toast-progress-bar]');
+
+            function syncProgress(ratio, withTransition = false, transitionDuration = 0) {
+                if (!(progressBar instanceof HTMLElement)) {
+                    return;
+                }
+
+                progressBar.style.transition = withTransition ? `transform ${transitionDuration}ms linear` : 'none';
+                progressBar.style.transform = `scaleX(${Math.max(0, Math.min(1, ratio))})`;
+            }
+
+            function pauseTimer() {
+                window.clearTimeout(dismissTimer);
+
+                if (startedAt > 0) {
+                    remaining = Math.max(0, remaining - (Date.now() - startedAt));
+                    startedAt = 0;
+                }
+
+                syncProgress(duration > 0 ? remaining / duration : 0, false);
+            }
+
+            const startTimer = () => {
+                window.clearTimeout(dismissTimer);
+                startedAt = Date.now();
+
+                syncProgress(duration > 0 ? remaining / duration : 0, false);
+
+                if (progressBar instanceof HTMLElement) {
+                    progressBar.getBoundingClientRect();
+                }
+
+                syncProgress(0, true, remaining);
+
+                dismissTimer = window.setTimeout(() => {
+                    removeToastElement(element);
+                }, remaining);
+            };
+
+            element.querySelectorAll('[data-toast-close]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    pauseTimer();
+                    removeToastElement(element);
+                });
+            });
+
+            element.addEventListener('mouseenter', () => {
+                pauseTimer();
+            });
+
+            element.addEventListener('mouseleave', () => {
+                if (remaining > 0) {
+                    startTimer();
+                }
+            });
+
+            element.addEventListener('focusin', () => {
+                pauseTimer();
+            });
+
+            element.addEventListener('focusout', () => {
+                if (!element.contains(document.activeElement) && remaining > 0) {
+                    startTimer();
+                }
+            });
+
+            startTimer();
+        }
+
+        function createToastElement(type, message) {
+            const resolvedType = type === 'error' ? 'error' : (type === 'info' ? 'info' : 'success');
+            const meta = toastMeta[resolvedType] || toastMeta.success;
             const element = document.createElement('div');
-            element.className = `flash ${type === 'error' ? 'error' : 'success'}`;
-            element.textContent = String(message);
-            element.setAttribute('role', type === 'error' ? 'alert' : 'status');
-            flashStack.prepend(element);
-            bindFlashElement(element);
+            const icon = document.createElement('div');
+            const content = document.createElement('div');
+            const title = document.createElement('strong');
+            const body = document.createElement('div');
+            const dismiss = document.createElement('button');
+            const dismissIcon = document.createElement('i');
+            const progress = document.createElement('div');
+            const progressBar = document.createElement('div');
+
+            element.className = `toast ${resolvedType}`;
+            element.setAttribute('role', meta.role);
+
+            icon.className = 'toast-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.innerHTML = `<i class="${meta.icon}"></i>`;
+
+            content.className = 'toast-content';
+
+            title.className = 'toast-title';
+            title.textContent = meta.title;
+
+            body.className = 'toast-message';
+            body.textContent = String(message);
+
+            dismiss.className = 'toast-dismiss';
+            dismiss.type = 'button';
+            dismiss.setAttribute('data-toast-close', '');
+            dismiss.setAttribute('aria-label', 'Đóng thông báo');
+
+            dismissIcon.className = 'fa-solid fa-xmark';
+            dismissIcon.setAttribute('aria-hidden', 'true');
+
+            progress.className = 'toast-progress';
+            progress.setAttribute('aria-hidden', 'true');
+
+            progressBar.className = 'toast-progress-bar';
+            progressBar.setAttribute('data-toast-progress-bar', '');
+
+            dismiss.appendChild(dismissIcon);
+            content.appendChild(title);
+            content.appendChild(body);
+            progress.appendChild(progressBar);
+            element.appendChild(icon);
+            element.appendChild(content);
+            element.appendChild(dismiss);
+            element.appendChild(progress);
+
+            return element;
+        }
+
+        function showToast(type, message, options = {}) {
+            if (!toastStack || !message) {
+                return;
+            }
+
+            const element = createToastElement(type, message);
+            toastStack.prepend(element);
+            bindToastElement(element);
+            trimToastStack();
 
             if (options.persist === true) {
                 persistFlash(type, message);
             }
 
-            if (options.scrollToTop !== false) {
+            if (options.scrollToTop === true) {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
         }
@@ -476,6 +649,25 @@ if ($isSuperAdmin) {
             }
 
             window.location.reload();
+        }
+
+        function requestAppModal(mode, options = {}) {
+            return new Promise((resolve) => {
+                const responseEvent = `app:modal:response:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+                const handleResponse = (event) => {
+                    document.removeEventListener(responseEvent, handleResponse);
+                    resolve(Boolean(event.detail?.confirmed));
+                };
+
+                document.addEventListener(responseEvent, handleResponse, { once: true });
+                document.dispatchEvent(new CustomEvent('app:modal:open', {
+                    detail: {
+                        mode,
+                        options,
+                        responseEvent,
+                    },
+                }));
+            });
         }
 
         function readJsonScript(target, fallback = {}) {
@@ -661,7 +853,7 @@ if ($isSuperAdmin) {
                         });
 
                         if (payload.message && options.showSuccessFlash !== false) {
-                            showFlash('success', payload.message);
+                            showToast('success', payload.message);
                         }
                     } catch (refreshError) {
                         reloadWithFlash({
@@ -677,7 +869,7 @@ if ($isSuperAdmin) {
                         url: options.redirectUrl || payload.redirect || '',
                     });
                 } else if (payload.message && options.showSuccessFlash !== false) {
-                    showFlash('success', payload.message);
+                    showToast('success', payload.message);
                 }
 
                 return payload;
@@ -687,7 +879,7 @@ if ($isSuperAdmin) {
                 const message = payload.message || 'Không thể xử lý yêu cầu này.';
 
                 if (payload.redirect && [401, 403, 419].includes(status)) {
-                    showFlash('error', message);
+                    showToast('error', message);
                     window.setTimeout(() => {
                         window.location.href = String(payload.redirect);
                     }, 500);
@@ -697,7 +889,11 @@ if ($isSuperAdmin) {
                 if (typeof options.onError === 'function') {
                     await options.onError(payload, form);
                 } else {
-                    setFormFeedback(form, 'error', message);
+                    if (form.querySelector('[data-form-feedback]')) {
+                        setFormFeedback(form, 'error', message);
+                    } else {
+                        showToast('error', message);
+                    }
                 }
 
                 return null;
@@ -706,14 +902,99 @@ if ($isSuperAdmin) {
             }
         }
 
-        flashStack?.querySelectorAll('.flash').forEach((element) => {
-            bindFlashElement(element);
+        function resolveRefreshRegionSelectors(rawValue) {
+            return String(rawValue || '')
+                .split(',')
+                .map((value) => value.trim())
+                .filter(Boolean)
+                .map((value) => {
+                    if (value.startsWith('[') || value.startsWith('#') || value.startsWith('.')) {
+                        return value;
+                    }
+
+                    return `[data-live-region="${value}"]`;
+                });
+        }
+
+        async function confirmAjaxAction(form) {
+            if (!(form instanceof HTMLFormElement)) {
+                return false;
+            }
+
+            const forceInput = form.querySelector('[data-force-send-input]');
+
+            if (forceInput instanceof HTMLInputElement) {
+                forceInput.value = '0';
+            }
+
+            if (form.getAttribute('data-ajax-risk-confirm') === '1') {
+                const message = form.getAttribute('data-risk-message') || '';
+
+                if (message !== '') {
+                    const confirmed = await requestAppModal('confirm', {
+                        title: form.getAttribute('data-ajax-confirm-title') || 'Xác nhận thao tác',
+                        message: message + '\n\nNếu tiếp tục, hệ thống sẽ ép gửi ngay và bỏ qua cooldown / giãn cách an toàn ở lần bấm này.',
+                        confirmText: form.getAttribute('data-ajax-confirm-text') || 'Vẫn tiếp tục',
+                        cancelText: form.getAttribute('data-ajax-cancel-text') || 'Hủy',
+                        confirmClass: form.getAttribute('data-ajax-confirm-class') || 'danger',
+                    });
+
+                    if (confirmed && forceInput instanceof HTMLInputElement) {
+                        forceInput.value = '1';
+                    }
+
+                    return confirmed;
+                }
+            }
+
+            const confirmMessage = form.getAttribute('data-ajax-confirm-message') || '';
+
+            if (confirmMessage !== '') {
+                return requestAppModal(form.getAttribute('data-ajax-confirm-mode') || 'confirm', {
+                    title: form.getAttribute('data-ajax-confirm-title') || 'Xác nhận thao tác',
+                    message: confirmMessage,
+                    confirmText: form.getAttribute('data-ajax-confirm-text') || 'Xác nhận',
+                    cancelText: form.getAttribute('data-ajax-cancel-text') || 'Hủy',
+                    confirmClass: form.getAttribute('data-ajax-confirm-class') || 'danger',
+                });
+            }
+
+            return true;
+        }
+
+        document.addEventListener('submit', async (event) => {
+            const form = event.target instanceof HTMLFormElement ? event.target : null;
+
+            if (!form || !form.matches('[data-ajax-form]')) {
+                return;
+            }
+
+            event.preventDefault();
+
+            const confirmed = await confirmAjaxAction(form);
+
+            if (!confirmed) {
+                return;
+            }
+
+            const refreshRegions = resolveRefreshRegionSelectors(form.getAttribute('data-ajax-refresh'));
+
+            await submitAjaxForm(form, {
+                closeCrudModalOnSuccess: form.getAttribute('data-ajax-close-crud-modal') === '1',
+                refreshRegionsOnSuccess: refreshRegions.length > 0 ? refreshRegions : undefined,
+                reloadOnSuccess: refreshRegions.length === 0,
+                showSuccessFlash: form.getAttribute('data-ajax-success-flash') !== '0',
+            });
+        });
+
+        toastStack?.querySelectorAll('.toast').forEach((element) => {
+            bindToastElement(element);
         });
 
         const pendingFlash = consumePersistedFlash();
 
         if (pendingFlash) {
-            showFlash(pendingFlash.type, pendingFlash.message);
+            showToast(pendingFlash.type, pendingFlash.message);
         }
 
         window.TeleSenderApp = {
@@ -722,8 +1003,10 @@ if ($isSuperAdmin) {
             readJsonScript,
             refreshRegions,
             reloadWithFlash,
+            requestModal: requestAppModal,
             setFormFeedback,
-            showFlash,
+            showFlash: showToast,
+            showToast,
             submitAjaxForm,
         };
     })();

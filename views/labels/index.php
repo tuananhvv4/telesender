@@ -40,7 +40,7 @@ foreach ($labels as $label) {
                     </div>
                     <div class="inline-actions">
                         <button class="button secondary" type="button" data-label-edit="<?= e((string) $label['id']) ?>">Sửa</button>
-                        <form method="post" action="<?= e(url('/labels/delete')) ?>">
+                        <form method="post" action="<?= e(url('/labels/delete')) ?>" data-ajax-form data-ajax-refresh="labels-panel">
                             <?= csrf_field() ?>
                             <input type="hidden" name="id" value="<?= e((string) $label['id']) ?>">
                             <button class="button danger" type="submit">Xóa</button>
