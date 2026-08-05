@@ -79,7 +79,7 @@ $remainingLabel = static function (array $user): string {
         </article>
     </section>
 
-    <section class="panel">
+    <section class="panel listing-panel">
         <div class="panel-header">
             <h2 class="panel-title">Danh sách admin con</h2>
             <form class="toolbar-form" method="get" action="<?= e(url('/admin/users')) ?>">
@@ -96,7 +96,7 @@ $remainingLabel = static function (array $user): string {
             </form>
         </div>
 
-        <div class="panel-body admin-user-list">
+        <div class="panel-body admin-user-list listing-body">
             <?php foreach ($admins as $admin): ?>
                 <article class="admin-user-card">
                     <div class="admin-user-head">

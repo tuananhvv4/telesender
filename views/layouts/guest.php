@@ -30,7 +30,7 @@
     <link rel="stylesheet" href="<?= e(asset('vendor/fontawesome/css/all.min.css')) ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <?php
 $systemSettings = system_settings_map();
@@ -42,6 +42,13 @@ $supportHref = support_contact_href($supportValue);
 $hasFooterMeta = $footerText !== '' || $supportName !== '' || $supportValue !== '' || $supportExtra !== '';
 ?>
 <body>
+    <div class="ambient-canvas" aria-hidden="true">
+        <span class="ambient-blob ambient-blob-primary"></span>
+        <span class="ambient-blob ambient-blob-secondary"></span>
+        <span class="ambient-blob ambient-blob-tertiary"></span>
+        <span class="ambient-grid"></span>
+        <span class="ambient-noise"></span>
+    </div>
     <div class="toast-stack" id="app_toast_stack" aria-live="polite" aria-atomic="true">
         <?php if ($success = flash('success')): ?>
             <div class="toast success" role="status">
@@ -93,12 +100,16 @@ $hasFooterMeta = $footerText !== '' || $supportName !== '' || $supportValue !== 
                 <?php if ($hasFooterMeta): ?>
                     <div class="app-footer-meta">
                         <?php if ($footerText !== ''): ?>
-                            <div class="app-footer-copy"><?= nl2br(e($footerText)) ?></div>
+                            <div class="app-footer-copy">
+                                <span class="app-footer-icon" aria-hidden="true"><i class="fa-regular fa-life-ring"></i></span>
+                                <span><?= nl2br(e($footerText)) ?></span>
+                            </div>
                         <?php endif; ?>
 
                         <?php if ($supportName !== '' || $supportValue !== '' || $supportExtra !== ''): ?>
                             <div class="app-footer-contact">
-                                <strong><?= e($supportName !== '' ? $supportName : 'Liên hệ hỗ trợ') ?>:</strong>
+                                <span class="app-footer-contact-icon" aria-hidden="true"><i class="fa-brands fa-telegram"></i></span>
+                                <strong><?= e($supportName !== '' ? $supportName : 'Liên hệ hỗ trợ') ?></strong>
                                 <?php if ($supportValue !== ''): ?>
                                     <?php if ($supportHref !== null): ?>
                                         <a href="<?= e($supportHref) ?>" target="_blank" rel="noreferrer"><?= e($supportValue) ?></a>

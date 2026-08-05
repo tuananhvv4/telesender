@@ -24,14 +24,14 @@ foreach ($labels as $label) {
         </div>
     </div>
 
-    <section class="panel" data-live-region="labels-panel">
+    <section class="panel listing-panel" data-live-region="labels-panel">
         <script type="application/json" data-label-records><?= json_encode($labelRecords, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?></script>
         <div class="panel-header">
             <h2 class="panel-title">Danh sách nhãn</h2>
         </div>
-        <div class="panel-body list">
+        <div class="panel-body list listing-body">
             <?php foreach ($labels as $label): ?>
-                <article class="list-item">
+                <article class="list-item entity-list-item">
                     <div class="inline-actions">
                         <span class="badge" style="background: <?= e($label['color']) ?>20; color: <?= e($label['color']) ?>;">
                             <?= e($label['name']) ?>

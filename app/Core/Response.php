@@ -13,4 +13,19 @@ class Response
         echo json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         exit;
     }
+
+    public static function file(string $path, string $contentType, int $maxAge = 604800): never
+    {
+        if (!is_file($path)) {
+            http_response_code(404);
+            exit;
+        }
+
+        header('Content-Type: ' . $contentType);
+        header('Content-Length: ' . (string) filesize($path));
+        header('Cache-Control: private, max-age=' . max(0, $maxAge) . ', immutable');
+        header('X-Content-Type-Options: nosniff');
+        readfile($path);
+        exit;
+    }
 }

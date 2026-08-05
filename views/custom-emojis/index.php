@@ -67,14 +67,14 @@ foreach ($customEmojis as $emoji) {
         <?php endif; ?>
     </section>
 
-    <section class="panel">
+    <section class="panel listing-panel">
         <div class="panel-header">
             <div>
                 <h2 class="panel-title">Thư viện riêng của tôi</h2>
                 <p class="panel-copy">Emoji trong thư viện này được phép sửa, bật/tắt hoặc xoá như bình thường.</p>
             </div>
         </div>
-        <div class="panel-body emoji-library-grid">
+        <div class="panel-body emoji-library-grid listing-body">
             <?php foreach ($customEmojis as $emoji): ?>
                 <?php
                 $token = '{{ce:' . $emoji['slug'] . '}}';
@@ -88,7 +88,18 @@ foreach ($customEmojis as $emoji) {
                 <article class="emoji-library-card">
                     <div class="emoji-library-head">
                         <div class="emoji-library-title">
-                            <span class="emoji-library-symbol"><?= e($emoji['fallback_emoji']) ?></span>
+                            <span class="emoji-library-symbol custom-emoji-preview">
+                                <span class="custom-emoji-fallback"><?= e($emoji['fallback_emoji']) ?></span>
+                                <img
+                                    class="custom-emoji-image"
+                                    src="<?= e(url('/custom-emojis/preview?id=' . (int) $emoji['id'])) ?>"
+                                    alt=""
+                                    loading="lazy"
+                                    decoding="async"
+                                    onload="this.parentElement.classList.add('is-loaded')"
+                                    onerror="this.remove()"
+                                >
+                            </span>
                             <div class="emoji-library-title-copy">
                                 <strong><?= e($emoji['name']) ?></strong>
                                 <div class="small muted mono"><?= e($token) ?></div>
@@ -131,7 +142,7 @@ foreach ($customEmojis as $emoji) {
     </section>
 
     <?php if (!$isSuperAdmin): ?>
-        <section class="panel">
+        <section class="panel listing-panel">
             <div class="panel-header">
                 <div>
                     <h2 class="panel-title">Thư viện dùng chung</h2>
@@ -141,7 +152,7 @@ foreach ($customEmojis as $emoji) {
                     <span class="badge info"><?= e((string) ($sharedEmojiSource['source_count'] ?? 0)) ?> emoji</span>
                 <?php endif; ?>
             </div>
-            <div class="panel-body emoji-library-grid">
+            <div class="panel-body emoji-library-grid listing-body">
                 <?php foreach ($sharedCustomEmojis as $emoji): ?>
                     <?php
                     $token = '{{ce:' . $emoji['slug'] . '}}';
@@ -156,7 +167,18 @@ foreach ($customEmojis as $emoji) {
                     <article class="emoji-library-card">
                         <div class="emoji-library-head">
                             <div class="emoji-library-title">
-                                <span class="emoji-library-symbol"><?= e($emoji['fallback_emoji']) ?></span>
+                                <span class="emoji-library-symbol custom-emoji-preview">
+                                    <span class="custom-emoji-fallback"><?= e($emoji['fallback_emoji']) ?></span>
+                                    <img
+                                        class="custom-emoji-image"
+                                        src="<?= e(url('/custom-emojis/preview?id=' . (int) $emoji['id'])) ?>"
+                                        alt=""
+                                        loading="lazy"
+                                        decoding="async"
+                                        onload="this.parentElement.classList.add('is-loaded')"
+                                        onerror="this.remove()"
+                                    >
+                                </span>
                                 <div class="emoji-library-title-copy">
                                     <strong><?= e($emoji['name']) ?></strong>
                                     <div class="small muted mono"><?= e($token) ?></div>

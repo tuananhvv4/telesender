@@ -191,6 +191,54 @@ class TelegramService
         return $groups;
     }
 
+    public function downloadCustomEmojiPreview(array $account, string $emojiIdentifier, string $targetPath): array
+    {
+        $api = $this->client($account);
+        $api->start();
+
+        $result = $api->messages->getCustomEmojiDocuments(
+            document_id: [(int) $emojiIdentifier]
+        );
+        $documents = is_array($result['documents'] ?? null) ? $result['documents'] : $result;
+        $document = is_array($documents[0] ?? null) ? $documents[0] : null;
+
+        if ($document === null || ($document['_'] ?? null) !== 'document') {
+            throw new RuntimeException('Telegram không trả về document cho custom emoji này.');
+        }
+
+        $downloadSource = $document;
+        $expectedMime = (string) ($document['mime_type'] ?? 'application/octet-stream');
+        $thumb = $this->largestDocumentThumb((array) ($document['thumbs'] ?? []));
+
+        if ($thumb !== null && !empty($thumb['type'])) {
+            $downloadSource = $api->getDownloadInfo($document);
+            $downloadSource['InputFileLocation']['thumb_size'] = (string) $thumb['type'];
+            $downloadSource['size'] = $this->thumbSize($thumb);
+            $downloadSource['ext'] = '.webp';
+            $downloadSource['mime'] = 'image/webp';
+            $expectedMime = 'image/webp';
+        }
+
+        if ($thumb === null && !str_starts_with($expectedMime, 'image/')) {
+            throw new RuntimeException('Custom emoji động này không có thumbnail tĩnh để hiển thị.');
+        }
+
+        $api->downloadToFile($downloadSource, $targetPath);
+
+        if (!is_file($targetPath) || filesize($targetPath) === 0) {
+            throw new RuntimeException('Không tải được asset custom emoji từ Telegram.');
+        }
+
+        $detectedMime = function_exists('finfo_open')
+            ? (string) (new \finfo(FILEINFO_MIME_TYPE))->file($targetPath)
+            : '';
+
+        return [
+            'path' => $targetPath,
+            'mime' => $detectedMime !== '' ? $detectedMime : $expectedMime,
+        ];
+    }
+
     private function resolveDialogAccessInfo(object $api, int $dialogId): array
     {
         try {
@@ -206,6 +254,34 @@ class TelegramService
             'username' => $this->normalizeUsername($chat['username'] ?? null),
             'invite_link' => $this->normalizeInviteLink($chat['invite'] ?? null),
         ];
+    }
+
+    private function largestDocumentThumb(array $thumbs): ?array
+    {
+        $available = array_values(array_filter(
+            $thumbs,
+            static fn (mixed $thumb): bool => is_array($thumb)
+                && in_array((string) ($thumb['_'] ?? ''), ['photoSize', 'photoSizeProgressive'], true)
+        ));
+
+        if ($available === []) {
+            return null;
+        }
+
+        usort($available, fn (array $left, array $right): int => $this->thumbSize($right) <=> $this->thumbSize($left));
+
+        return $available[0];
+    }
+
+    private function thumbSize(array $thumb): int
+    {
+        if (isset($thumb['size'])) {
+            return max(0, (int) $thumb['size']);
+        }
+
+        $sizes = (array) ($thumb['sizes'] ?? []);
+
+        return $sizes !== [] ? max(0, (int) end($sizes)) : 0;
     }
 
     public function getSessionFile(array $account): string

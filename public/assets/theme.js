@@ -96,3 +96,87 @@
 
     syncThemeButtons(getCurrentTheme());
 })();
+
+(function () {
+    const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const spotlightSelector = [
+        '.card',
+        '.panel',
+        '.builder-block',
+        '.group-card',
+        '.admin-user-card',
+        '.quick-card',
+        '.emoji-library-card',
+        '.log-card',
+        '.list-item',
+    ].join(',');
+
+    function bindSpotlights(scope) {
+        scope.querySelectorAll(spotlightSelector).forEach((element) => {
+            if (element.dataset.spotlightBound === '1') {
+                return;
+            }
+
+            element.dataset.spotlightBound = '1';
+            element.classList.add('interactive-surface');
+            element.addEventListener('pointermove', (event) => {
+                const bounds = element.getBoundingClientRect();
+                element.style.setProperty('--spotlight-x', `${event.clientX - bounds.left}px`);
+                element.style.setProperty('--spotlight-y', `${event.clientY - bounds.top}px`);
+            });
+        });
+    }
+
+    function bindReveals(scope) {
+        const elements = scope.querySelectorAll('.main-content > .stack > *, .auth-card > *');
+
+        elements.forEach((element, index) => {
+            if (element.dataset.revealBound === '1') {
+                return;
+            }
+
+            element.dataset.revealBound = '1';
+            element.classList.add('ui-reveal');
+            element.style.setProperty('--reveal-delay', `${Math.min(index * 55, 330)}ms`);
+        });
+
+        if (reduceMotion || !('IntersectionObserver' in window)) {
+            elements.forEach((element) => element.classList.add('is-visible'));
+            return;
+        }
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.08 });
+
+        elements.forEach((element) => observer.observe(element));
+    }
+
+    function initializeVisualEffects() {
+        bindSpotlights(document);
+        bindReveals(document);
+
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                mutation.addedNodes.forEach((node) => {
+                    if (node instanceof HTMLElement) {
+                        bindSpotlights(node.matches(spotlightSelector) ? node.parentElement : node);
+                    }
+                });
+            });
+        });
+
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeVisualEffects, { once: true });
+    } else {
+        initializeVisualEffects();
+    }
+})();

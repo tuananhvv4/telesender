@@ -23,7 +23,10 @@ class MessageTemplate extends Model
     public function listForUser(int $userId): array
     {
         return $this->db()->fetchAll(
-            'SELECT mt.*, ml.name AS label_name, ml.color AS label_color
+            'SELECT mt.*, ml.name AS label_name, ml.color AS label_color,
+                    (SELECT COUNT(*)
+                     FROM schedule_jobs sj
+                     WHERE sj.message_template_id = mt.id) AS schedules_count
              FROM message_templates mt
              LEFT JOIN message_labels ml ON ml.id = mt.label_id
              WHERE mt.user_id = :user_id
@@ -54,7 +57,10 @@ class MessageTemplate extends Model
              FROM message_templates mt
              LEFT JOIN message_labels ml ON ml.id = mt.label_id
              WHERE mt.user_id = :user_id' . $searchSql,
-            'SELECT mt.*, ml.name AS label_name, ml.color AS label_color
+            'SELECT mt.*, ml.name AS label_name, ml.color AS label_color,
+                    (SELECT COUNT(*)
+                     FROM schedule_jobs sj
+                     WHERE sj.message_template_id = mt.id) AS schedules_count
              FROM message_templates mt
              LEFT JOIN message_labels ml ON ml.id = mt.label_id
              WHERE mt.user_id = :user_id' . $searchSql . '

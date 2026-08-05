@@ -59,6 +59,7 @@ $router->post('/templates/update', [MessageTemplateController::class, 'update'],
 $router->post('/templates/delete', [MessageTemplateController::class, 'delete'], ['auth', 'subscription_active']);
 
 $router->get('/custom-emojis', [CustomEmojiController::class, 'index'], ['auth', 'subscription_active']);
+$router->get('/custom-emojis/preview', [CustomEmojiController::class, 'preview'], ['auth', 'subscription_active']);
 $router->post('/custom-emojis', [CustomEmojiController::class, 'store'], ['auth', 'subscription_active']);
 $router->post('/custom-emojis/import-bulk', [CustomEmojiController::class, 'bulkImport'], ['auth', 'subscription_active']);
 $router->post('/custom-emojis/update', [CustomEmojiController::class, 'update'], ['auth', 'subscription_active']);

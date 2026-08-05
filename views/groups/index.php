@@ -32,7 +32,7 @@ foreach ($groups as $group) {
         </div>
     </div>
 
-    <section class="panel group-library-panel" data-live-region="groups-panel">
+    <section class="panel group-library-panel listing-panel" data-live-region="groups-panel">
         <script type="application/json" data-group-records><?= json_encode($groupRecords, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?></script>
         <div class="panel-header">
             <div>
@@ -68,7 +68,7 @@ foreach ($groups as $group) {
                 </div>
             </form>
         </div>
-        <div class="panel-body groups-feed">
+        <div class="panel-body groups-feed listing-body">
             <?php foreach ($groups as $group): ?>
                 <article class="group-card">
                     <div class="group-card-head">

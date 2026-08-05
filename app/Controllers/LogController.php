@@ -7,11 +7,14 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Core\Request;
 use App\Models\DispatchLog;
+use App\Services\CustomEmojiService;
 
 class LogController extends Controller
 {
-    public function __construct(private readonly DispatchLog $logs = new DispatchLog())
-    {
+    public function __construct(
+        private readonly DispatchLog $logs = new DispatchLog(),
+        private readonly CustomEmojiService $customEmojiService = new CustomEmojiService()
+    ) {
     }
 
     public function index(Request $request): void
@@ -23,6 +26,7 @@ class LogController extends Controller
         $this->render('logs/index', [
             'title' => 'Nhật ký gửi tin',
             'logs' => $result['items'],
+            'customEmojis' => $this->customEmojiService->pickerLibrary((int) auth()->id()),
             'pagination' => $result['pagination'],
             'searchQuery' => $searchQuery,
         ]);

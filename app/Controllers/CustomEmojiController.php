@@ -6,10 +6,12 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Core\Request;
+use App\Core\Response;
 use App\Core\Session;
 use App\Models\CustomEmoji;
 use App\Models\MessageTemplate;
 use App\Services\SharedCustomEmojiService;
+use App\Services\CustomEmojiPreviewService;
 use RuntimeException;
 
 class CustomEmojiController extends Controller
@@ -17,7 +19,8 @@ class CustomEmojiController extends Controller
     public function __construct(
         private readonly CustomEmoji $customEmojis = new CustomEmoji(),
         private readonly MessageTemplate $templates = new MessageTemplate(),
-        private readonly SharedCustomEmojiService $sharedEmojis = new SharedCustomEmojiService()
+        private readonly SharedCustomEmojiService $sharedEmojis = new SharedCustomEmojiService(),
+        private readonly CustomEmojiPreviewService $previews = new CustomEmojiPreviewService()
     ) {
     }
 
@@ -39,6 +42,36 @@ class CustomEmojiController extends Controller
             'importRowsState' => flash('custom_emoji_import_rows') ?? [],
             'importShouldOpen' => (bool) (flash('custom_emoji_import_open') ?? false),
         ]);
+    }
+
+    public function preview(Request $request): never
+    {
+        $emojiId = (int) $request->query('id', 0);
+        $userId = (int) auth()->id();
+        $emoji = $this->customEmojis->findForUser($emojiId, $userId);
+
+        if ($emoji === null) {
+            foreach ($this->sharedEmojis->sharedActiveForUser($userId) as $sharedEmoji) {
+                if ((int) ($sharedEmoji['id'] ?? 0) === $emojiId) {
+                    $emoji = $sharedEmoji;
+                    break;
+                }
+            }
+        }
+
+        if ($emoji === null) {
+            http_response_code(404);
+            exit;
+        }
+
+        $preview = $this->previews->resolve($emoji, $userId);
+
+        if ($preview === null) {
+            http_response_code(404);
+            exit;
+        }
+
+        Response::file((string) $preview['path'], (string) $preview['mime']);
     }
 
     public function bulkImport(Request $request): void

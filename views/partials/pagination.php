@@ -15,7 +15,7 @@ $perPage = (int) ($pagination['per_page'] ?? 20);
 $perPageOptions = $perPageOptions ?? [10, 15, 20, 30, 50, 100];
 $currentQuery = request()->queryParams();
 ?>
-<div class="pagination-shell">
+<div class="pagination-shell listing-pagination">
     <div class="pagination-meta">
         Hiển thị <?= e((string) ($pagination['from'] ?? 0)) ?>-<?= e((string) ($pagination['to'] ?? 0)) ?>
         / <?= e((string) ($pagination['total'] ?? 0)) ?> mục

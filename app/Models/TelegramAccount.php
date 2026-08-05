@@ -57,4 +57,20 @@ class TelegramAccount extends Model
             $perPage
         );
     }
+
+    public function firstConnectedForUser(int $userId): ?array
+    {
+        return $this->db()->fetch(
+            'SELECT *
+             FROM telegram_accounts
+             WHERE user_id = :user_id
+               AND session_status = :session_status
+             ORDER BY is_active DESC, last_connected_at DESC, id DESC
+             LIMIT 1',
+            [
+                'user_id' => $userId,
+                'session_status' => 'active',
+            ]
+        );
+    }
 }

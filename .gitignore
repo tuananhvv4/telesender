@@ -4,8 +4,10 @@
 /storage/sessions/*
 /storage/telegram/*
 /storage/cache/*
+/storage/custom-emojis/*
 /public/MadelineProto.log
 !/storage/logs/.gitkeep
 !/storage/sessions/.gitkeep
 !/storage/telegram/.gitkeep
 !/storage/cache/.gitkeep
+!/storage/custom-emojis/.gitkeep

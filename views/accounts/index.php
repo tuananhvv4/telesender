@@ -9,12 +9,12 @@
         </div>
     </div>
 
-    <section class="panel" data-live-region="accounts-panel">
+    <section class="panel listing-panel" data-live-region="accounts-panel">
         <div class="panel-header">
             <h2 class="panel-title">Danh sách tài khoản</h2>
         </div>
-        <div class="panel-body table-wrap">
-            <table>
+        <div class="panel-body table-wrap listing-body">
+            <table class="data-table">
 	                <thead>
 	                    <tr>
 	                        <th>Tài khoản</th>

@@ -15,6 +15,9 @@ class DispatchLog extends Model
         'telegram_account_id',
         'telegram_group_id',
         'message_template_id',
+        'template_name_snapshot',
+        'message_body_snapshot',
+        'parse_mode_snapshot',
         'label_id',
         'request_id',
         'status',
@@ -28,7 +31,11 @@ class DispatchLog extends Model
     public function recentForUser(int $userId, int $limit = 50): array
     {
         $logs = $this->db()->fetchAll(
-            "SELECT dl.*, ta.name AS account_name, tg.title AS group_title, mt.name AS template_name, ml.name AS label_name
+            "SELECT dl.*, ta.name AS account_name, tg.title AS group_title,
+                    COALESCE(mt.name, dl.template_name_snapshot) AS template_name,
+                    COALESCE(dl.message_body_snapshot, dl.message_preview) AS rendered_message_body,
+                    COALESCE(dl.parse_mode_snapshot, 'HTML') AS message_parse_mode,
+                    ml.name AS label_name
                     , tg.topic_id AS target_topic_id, tg.topic_title AS target_topic_title
              FROM dispatch_logs dl
              LEFT JOIN telegram_accounts ta ON ta.id = dl.telegram_account_id
@@ -60,6 +67,7 @@ class DispatchLog extends Model
                 OR ta.name LIKE :search
                 OR tg.title LIKE :search
                 OR mt.name LIKE :search
+                OR dl.template_name_snapshot LIKE :search
                 OR ml.name LIKE :search
             )';
         }
@@ -72,7 +80,11 @@ class DispatchLog extends Model
              LEFT JOIN message_templates mt ON mt.id = dl.message_template_id
              LEFT JOIN message_labels ml ON ml.id = dl.label_id
              WHERE dl.user_id = :user_id' . $searchSql,
-            "SELECT dl.*, ta.name AS account_name, tg.title AS group_title, mt.name AS template_name, ml.name AS label_name
+            "SELECT dl.*, ta.name AS account_name, tg.title AS group_title,
+                    COALESCE(mt.name, dl.template_name_snapshot) AS template_name,
+                    COALESCE(dl.message_body_snapshot, dl.message_preview) AS rendered_message_body,
+                    COALESCE(dl.parse_mode_snapshot, 'HTML') AS message_parse_mode,
+                    ml.name AS label_name
                     , tg.topic_id AS target_topic_id, tg.topic_title AS target_topic_title
              FROM dispatch_logs dl
              LEFT JOIN telegram_accounts ta ON ta.id = dl.telegram_account_id

@@ -35,7 +35,7 @@ foreach ($schedules as $schedule) {
 
     <div data-live-region="schedules-shell">
     <script type="application/json" data-schedule-records><?= json_encode($scheduleRecords, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?></script>
-    <section class="panel">
+    <section class="panel listing-panel">
         <div class="panel-header">
             <div>
                 <h2 class="panel-title">Danh sách lịch gửi</h2>
@@ -79,8 +79,8 @@ foreach ($schedules as $schedule) {
                 </div>
             </form>
         </div>
-        <div class="panel-body table-wrap">
-            <table>
+        <div class="panel-body table-wrap listing-body">
+            <table class="data-table">
                 <thead>
                     <tr>
                         <th>Mẫu tin</th>

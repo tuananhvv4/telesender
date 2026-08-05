@@ -26,7 +26,7 @@ foreach ($templates as $template) {
         </div>
     </div>
 
-    <section class="panel template-library-panel" data-live-region="templates-panel">
+    <section class="panel template-library-panel listing-panel" data-live-region="templates-panel">
         <script type="application/json" data-template-records><?= json_encode($templateRecords, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?></script>
         <div class="panel-header">
             <div>
@@ -45,22 +45,32 @@ foreach ($templates as $template) {
                 </div>
             </form>
         </div>
-        <div class="panel-body list">
+        <div class="panel-body list listing-body">
             <?php foreach ($templates as $template): ?>
-                <article class="list-item template-library-item">
+                <article class="list-item template-library-item entity-list-item">
                     <div class="template-library-head">
                         <div>
                             <strong><?= e($template['name']) ?></strong>
                             <div class="small muted mono"><?= e($template['parse_mode']) ?></div>
                         </div>
                         <div class="inline-actions">
+                            <a
+                                class="badge info template-usage-badge"
+                                href="<?= e(url('/schedules?message_template_id=' . (int) $template['id'])) ?>"
+                                title="Xem các lịch gửi đang sử dụng mẫu này"
+                            >
+                                <i class="fa-regular fa-paper-plane" aria-hidden="true"></i>
+                                <?= e((string) ((int) ($template['schedules_count'] ?? 0))) ?> lịch gửi
+                            </a>
                             <?php if (!empty($template['label_name'])): ?>
                                 <span class="badge"><?= e($template['label_name']) ?></span>
                             <?php endif; ?>
                             <span class="badge <?= (int) $template['is_active'] === 1 ? 'success' : 'warning' ?>"><?= (int) $template['is_active'] === 1 ? 'Đang bật' : 'Tạm tắt' ?></span>
                         </div>
                     </div>
-                    <p class="template-library-preview"><?= nl2br(e(mb_substr($templatePreviewBodies[(int) $template['id']] ?? $template['body'], 0, 240))) ?></p>
+                    <div class="template-library-preview" data-template-listing-preview="<?= e((string) $template['id']) ?>">
+                        <?= nl2br(e(mb_substr(strip_tags($templatePreviewBodies[(int) $template['id']] ?? $template['body']), 0, 240))) ?>
+                    </div>
                     <div class="inline-actions">
                         <button class="button secondary" type="button" data-template-edit="<?= e((string) $template['id']) ?>">Sửa</button>
                         <form method="post" action="<?= e(url('/templates/delete')) ?>" data-ajax-form data-ajax-refresh="templates-panel">
@@ -86,11 +96,11 @@ foreach ($templates as $template) {
             <section class="builder-block template-preset-block">
                 <div class="builder-block-head">
                     <div>
-                        <h3 class="builder-block-title">Preset nhanh</h3>
+                    <h3 class="builder-block-title">Mẫu soạn nhanh</h3>
                     </div>
                 </div>
                 <div class="field">
-                    <label for="template_modal_preset">Mẫu cài sẵn</label>
+                    <label for="template_modal_preset">Chọn nội dung mẫu</label>
                     <select class="select" id="template_modal_preset" data-template-preset>
                         <option value="">Chọn mẫu cài sẵn để tự động điền form</option>
                         <?php foreach ($templatePresets as $preset): ?>
@@ -130,45 +140,76 @@ foreach ($templates as $template) {
                                 <option value="<?= e($mode) ?>" <?= $mode === 'HTML' ? 'selected' : '' ?>><?= e($mode) ?></option>
                             <?php endforeach; ?>
                         </select>
-                        <div class="small muted">Dùng <span class="mono">HTML</span> để gửi custom emoji Premium.</div>
+                        <div class="small muted">Chọn HTML khi nội dung có Premium Emoji.</div>
                     </div>
                 </div>
 
                 <div class="field template-editor-field">
                     <label for="template_modal_body">Nội dung</label>
-                    <textarea class="textarea template-editor-textarea" id="template_modal_body" name="body" required data-template-body></textarea>
-                </div>
-
-                <section class="builder-block template-emoji-studio">
-                    <div class="builder-block-head">
-                        <div>
-                            <h3 class="builder-block-title">Chọn nhanh Premium Emoji</h3>
+                    <div class="template-rich-editor" data-template-rich-editor>
+                        <div class="template-editor-toolbar" role="toolbar" aria-label="Định dạng nội dung">
+                            <button class="template-editor-tool" type="button" data-editor-command="bold" aria-label="In đậm" title="In đậm"><strong>B</strong></button>
+                            <button class="template-editor-tool" type="button" data-editor-command="italic" aria-label="In nghiêng" title="In nghiêng"><em>I</em></button>
+                            <button class="template-editor-tool" type="button" data-editor-command="underline" aria-label="Gạch chân" title="Gạch chân"><u>U</u></button>
+                            <button class="template-editor-tool" type="button" data-editor-command="strikeThrough" aria-label="Gạch ngang" title="Gạch ngang"><s>S</s></button>
+                            <span class="template-editor-toolbar-separator" aria-hidden="true"></span>
+                            <button class="template-editor-tool template-editor-tool-wide" type="button" data-editor-block="blockquote" aria-label="Trích dẫn" title="Trích dẫn"><i class="fa-solid fa-quote-left" aria-hidden="true"></i><span>Trích dẫn</span></button>
+                            <button class="template-editor-tool template-editor-tool-wide" type="button" data-editor-command="removeFormat" aria-label="Xóa định dạng" title="Xóa định dạng"><i class="fa-solid fa-eraser" aria-hidden="true"></i><span>Xóa định dạng</span></button>
+                            <span class="template-editor-toolbar-separator" aria-hidden="true"></span>
+                            <button
+                                class="template-editor-tool template-editor-tool-wide template-editor-emoji-toggle"
+                                type="button"
+                                aria-label="Chọn Premium Emoji"
+                                aria-expanded="false"
+                                data-editor-emoji-toggle
+                            >
+                                <i class="fa-regular fa-face-smile" aria-hidden="true"></i>
+                                <span>Premium Emoji</span>
+                            </button>
                         </div>
-                        <a class="button secondary" href="<?= e(url('/custom-emojis')) ?>">Quản lý thư viện</a>
+                        <div
+                            class="template-editor-surface"
+                            id="template_modal_body"
+                            contenteditable="true"
+                            role="textbox"
+                            aria-multiline="true"
+                            data-placeholder="Nhập nội dung tin nhắn..."
+                            data-template-editor-surface
+                        ></div>
+
+                        <div class="template-emoji-popover" hidden data-template-emoji-popover>
+                            <div class="template-emoji-popover-head">
+                                <div>
+                                    <strong>Premium Emoji</strong>
+                                    <span>Chèn icon tại vị trí con trỏ</span>
+                                </div>
+                                <div class="inline-actions">
+                                    <a class="template-emoji-manage-link" href="<?= e(url('/custom-emojis')) ?>">Quản lý</a>
+                                    <button class="template-emoji-popover-close" type="button" aria-label="Đóng bộ chọn emoji" data-editor-emoji-close>
+                                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <?php if ($customEmojis !== []): ?>
+                                <input class="input template-emoji-search" type="text" placeholder="Tìm theo tên hoặc từ khóa..." aria-label="Tìm Premium Emoji" data-emoji-picker-search>
+                                <div class="chip-row template-emoji-filters">
+                                    <button class="chip active" type="button" data-emoji-filter="all">Tất cả</button>
+                                    <button class="chip" type="button" data-emoji-filter="recent">Gần đây</button>
+                                </div>
+                                <div class="template-emoji-grid" data-template-emoji-grid></div>
+                            <?php else: ?>
+                                <div class="template-emoji-empty muted small">Chưa có emoji tùy chỉnh trong thư viện.</div>
+                            <?php endif; ?>
+                        </div>
                     </div>
-
-                    <?php if ($customEmojis !== []): ?>
-                        <div class="field">
-                            <label for="template_modal_emoji_search">Tìm Premium Emoji</label>
-                            <input class="input" id="template_modal_emoji_search" type="text" placeholder="Tìm theo tên, slug hoặc từ khóa..." data-emoji-picker-search>
-                        </div>
-
-                        <div class="chip-row">
-                            <button class="chip active" type="button" data-emoji-filter="all">Tất cả</button>
-                            <button class="chip" type="button" data-emoji-filter="favorites">Yêu thích</button>
-                            <button class="chip" type="button" data-emoji-filter="recent">Gần đây</button>
-                        </div>
-
-                        <div class="template-emoji-grid" data-template-emoji-grid></div>
-                    <?php else: ?>
-                        <div class="small muted">Chưa có emoji tùy chỉnh trong thư viện.</div>
-                    <?php endif; ?>
+                    <textarea name="body" hidden data-template-body></textarea>
 
                     <div class="field" hidden data-template-used-tokens-field>
                         <label>Emoji đang dùng</label>
                         <div class="chip-row" data-template-used-tokens></div>
                     </div>
-                </section>
+                </div>
                 <label class="checkbox-row">
                     <input type="checkbox" name="is_active" value="1" checked data-template-active>
                     <span>Cho phép sử dụng mẫu tin nhắn này</span>
@@ -180,28 +221,22 @@ foreach ($templates as $template) {
             </form>
         </section>
 
-        <section class="card template-preview-card">
-            <div class="builder-block-head">
-                <div>
-                    <h2 class="section-title">Xem trước khi gửi</h2>
+        <aside class="template-preview-rail">
+            <section class="card template-preview-card">
+                <div class="template-preview-head">
+                    <div>
+                        <h2 class="section-title">Bản xem trước</h2>
+                        <p class="section-copy">Nội dung và Premium Emoji sẽ hiển thị gần giống khi gửi trên Telegram.</p>
+                    </div>
                 </div>
-            </div>
 
-            <div class="list template-preview-list">
-                <div class="list-item" hidden data-template-preview-issues-item>
-                    <strong>Lưu ý</strong>
+                <div class="template-preview-issues" hidden data-template-preview-issues-item>
                     <div class="stack" data-template-preview-issues></div>
                 </div>
-                <div class="list-item">
-                    <strong>Xem trước nội dung</strong>
-                    <div class="template-preview-surface" data-template-preview-surface>Nhập nội dung hoặc chèn emoji tùy chỉnh để xem trước.</div>
-                </div>
-                <div class="list-item">
-                    <strong>HTML gửi lên Telegram</strong>
-                    <pre class="template-preview-code mono" data-template-preview-compiled>-</pre>
-                </div>
-            </div>
-        </section>
+
+                <div class="template-preview-surface" data-template-preview-surface>Nhập nội dung để xem trước tin nhắn.</div>
+            </section>
+        </aside>
     </div>
 </template>
 
@@ -221,8 +256,10 @@ document.addEventListener('DOMContentLoaded', () => {
         'library_scope' => $emoji['library_scope'] ?? 'owned',
         'scope_label' => $emoji['scope_label'] ?? 'Riêng',
         'source_user_name' => $emoji['source_user_name'] ?? '',
+        'preview_url' => url('/custom-emojis/preview?id=' . (int) $emoji['id']),
         'token' => '{{ce:' . $emoji['slug'] . '}}',
     ], $customEmojis), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    const customEmojiMap = new Map(customEmojiLibrary.map((emoji) => [String(emoji.slug).toLowerCase(), emoji]));
     const csrfToken = <?= json_encode(csrf_token(), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
     const previewUrl = <?= json_encode(url('/templates/preview'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
     const createUrl = <?= json_encode(url('/templates'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
@@ -235,7 +272,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    const favoriteStorageKey = 'tele_sender_custom_emoji_favorites';
     const recentStorageKey = 'tele_sender_custom_emoji_recent';
 
     function escapeHtml(value) {
@@ -260,8 +296,203 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem(key, JSON.stringify(values.slice(0, 24)));
     }
 
-    function getFavorites() {
-        return readStoredList(favoriteStorageKey);
+    function emojiVisualMarkup(emoji, extraClass = '') {
+        const fallback = escapeHtml(String(emoji?.fallback_emoji || ''));
+        const previewUrl = escapeHtml(String(emoji?.preview_url || ''));
+        const className = ['custom-emoji-preview', extraClass].filter(Boolean).join(' ');
+        const image = previewUrl !== ''
+            ? `<img class="custom-emoji-image" src="${previewUrl}" alt="" loading="lazy" decoding="async" data-custom-emoji-image>`
+            : '';
+
+        return `<span class="${className}"><span class="custom-emoji-fallback">${fallback}</span>${image}</span>`;
+    }
+
+    function bindCustomEmojiPreviews(scope) {
+        scope.querySelectorAll('[data-custom-emoji-image]').forEach((image) => {
+            if (image.dataset.previewBound === '1') {
+                return;
+            }
+
+            image.dataset.previewBound = '1';
+            const container = image.closest('.custom-emoji-preview');
+
+            const showImage = () => container?.classList.add('is-loaded');
+            const removeImage = () => image.remove();
+
+            image.addEventListener('load', showImage, { once: true });
+            image.addEventListener('error', removeImage, { once: true });
+
+            if (image.complete) {
+                if (image.naturalWidth > 0) {
+                    showImage();
+                } else {
+                    removeImage();
+                }
+            }
+        });
+    }
+
+    function renderSafeTelegramPreview(value, emojiMap) {
+        const tokenized = String(value || '').replace(/\{\{ce:([a-z0-9._-]+)\}\}/ig, (token, slug) => (
+            `<span data-preview-emoji="${String(slug).toLowerCase()}"></span>`
+        ));
+        const source = document.createElement('template');
+        const output = document.createElement('div');
+        const allowedTags = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'INS', 'S', 'STRIKE', 'DEL', 'CODE', 'PRE', 'BLOCKQUOTE', 'A', 'BR']);
+        source.innerHTML = tokenized;
+
+        function cleanNode(node) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                return document.createTextNode(node.textContent || '');
+            }
+
+            if (!(node instanceof HTMLElement)) {
+                return document.createDocumentFragment();
+            }
+
+            const emojiSlug = node.getAttribute('data-preview-emoji');
+
+            if (node.tagName === 'SPAN' && emojiSlug) {
+                const emoji = emojiMap.get(emojiSlug);
+                const holder = document.createElement('template');
+
+                if (emoji) {
+                    holder.innerHTML = emojiVisualMarkup(emoji, 'template-inline-emoji');
+                    return holder.content.firstElementChild || document.createTextNode('');
+                }
+
+                const missing = document.createElement('span');
+                missing.className = 'template-token-missing';
+                missing.textContent = `Token thiếu: {{ce:${emojiSlug}}}`;
+                return missing;
+            }
+
+            if (!allowedTags.has(node.tagName)) {
+                const fragment = document.createDocumentFragment();
+                node.childNodes.forEach((child) => fragment.appendChild(cleanNode(child)));
+                return fragment;
+            }
+
+            const clean = document.createElement(node.tagName.toLowerCase());
+
+            if (node.tagName === 'A') {
+                const href = (node.getAttribute('href') || '').trim();
+
+                if (/^(https?:|tg:)/i.test(href)) {
+                    clean.setAttribute('href', href);
+                    clean.setAttribute('target', '_blank');
+                    clean.setAttribute('rel', 'noreferrer');
+                }
+            }
+
+            node.childNodes.forEach((child) => clean.appendChild(cleanNode(child)));
+            return clean;
+        }
+
+        source.content.childNodes.forEach((node) => output.appendChild(cleanNode(node)));
+
+        return output.innerHTML.replace(/\n/g, '<br>');
+    }
+
+    function renderTemplateContent(value, emojiMap, parseMode = 'HTML') {
+        if (String(parseMode || '').toUpperCase() === 'HTML') {
+            return renderSafeTelegramPreview(value, emojiMap);
+        }
+
+        return escapeHtml(String(value || ''))
+            .replace(/\{\{ce:([a-z0-9._-]+)\}\}/ig, (token, slug) => {
+                const emoji = emojiMap.get(String(slug).toLowerCase());
+
+                if (!emoji) {
+                    return `<span class="template-token-missing">${escapeHtml(token)}</span>`;
+                }
+
+                return emojiVisualMarkup(emoji, 'template-inline-emoji');
+            })
+            .replace(/\n/g, '<br>');
+    }
+
+    function renderTemplateListingPreviews() {
+        document.querySelectorAll('[data-template-listing-preview]').forEach((preview) => {
+            const templateId = preview.getAttribute('data-template-listing-preview') || '';
+            const record = templateRecords[String(templateId)];
+
+            if (!record) {
+                return;
+            }
+
+            preview.innerHTML = renderTemplateContent(record.body || '', customEmojiMap, record.parse_mode || 'HTML');
+            bindCustomEmojiPreviews(preview);
+        });
+    }
+
+    function renderEditorContent(value, emojiMap, parseMode) {
+        if (String(parseMode || '').toUpperCase() !== 'HTML') {
+            return escapeHtml(String(value || ''))
+                .replace(/\{\{ce:([a-z0-9._-]+)\}\}/ig, (token, slug) => {
+                    const emoji = emojiMap.get(String(slug).toLowerCase());
+                    return emoji
+                        ? `<span class="template-editor-emoji" data-editor-emoji-token="${escapeHtml(token)}" contenteditable="false">${emojiVisualMarkup(emoji, 'template-inline-emoji')}</span>`
+                        : escapeHtml(token);
+                })
+                .replace(/\n/g, '<br>');
+        }
+
+        const tokenized = String(value || '').replace(/\{\{ce:([a-z0-9._-]+)\}\}/ig, (token, slug) => (
+            `<span data-editor-emoji="${String(slug).toLowerCase()}" data-editor-token="${escapeHtml(token)}"></span>`
+        ));
+        const source = document.createElement('template');
+        const output = document.createElement('div');
+        const allowedTags = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'INS', 'S', 'STRIKE', 'DEL', 'CODE', 'PRE', 'BLOCKQUOTE', 'A', 'BR']);
+        source.innerHTML = tokenized;
+
+        function cleanNode(node) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                return document.createTextNode(node.textContent || '');
+            }
+
+            if (!(node instanceof HTMLElement)) {
+                return document.createDocumentFragment();
+            }
+
+            const emojiSlug = node.getAttribute('data-editor-emoji');
+
+            if (node.tagName === 'SPAN' && emojiSlug) {
+                const emoji = emojiMap.get(emojiSlug);
+
+                if (!emoji) {
+                    return document.createTextNode(node.getAttribute('data-editor-token') || '');
+                }
+
+                const holder = document.createElement('span');
+                holder.className = 'template-editor-emoji';
+                holder.contentEditable = 'false';
+                holder.dataset.editorEmojiToken = node.getAttribute('data-editor-token') || emoji.token;
+                holder.innerHTML = emojiVisualMarkup(emoji, 'template-inline-emoji');
+                return holder;
+            }
+
+            if (!allowedTags.has(node.tagName)) {
+                const fragment = document.createDocumentFragment();
+                node.childNodes.forEach((child) => fragment.appendChild(cleanNode(child)));
+                return fragment;
+            }
+
+            const clean = document.createElement(node.tagName.toLowerCase());
+
+            if (node.tagName === 'A') {
+                const href = (node.getAttribute('href') || '').trim();
+                if (/^(https?:|tg:)/i.test(href)) {
+                    clean.setAttribute('href', href);
+                }
+            }
+
+            node.childNodes.forEach((child) => clean.appendChild(cleanNode(child)));
+            return clean;
+        }
+
+        source.content.childNodes.forEach((node) => output.appendChild(cleanNode(node)));
+        return output.innerHTML.replace(/\n/g, '<br>');
     }
 
     function getRecents() {
@@ -276,11 +507,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const form = wrapper.querySelector('[data-template-form]');
         const nameInput = wrapper.querySelector('[data-template-name]');
         const bodyInput = wrapper.querySelector('[data-template-body]');
+        const richEditor = wrapper.querySelector('[data-template-rich-editor]');
+        const editorSurface = wrapper.querySelector('[data-template-editor-surface]');
+        const editorCommandButtons = wrapper.querySelectorAll('[data-editor-command]');
+        const editorBlockButtons = wrapper.querySelectorAll('[data-editor-block]');
         const parseModeInput = wrapper.querySelector('[data-template-parse-mode]');
         const labelInput = wrapper.querySelector('[data-template-label]');
         const activeInput = wrapper.querySelector('[data-template-active]');
         const submitButton = wrapper.querySelector('[data-template-submit]');
         const templatePresetSelect = wrapper.querySelector('[data-template-preset]');
+        const emojiPickerToggle = wrapper.querySelector('[data-editor-emoji-toggle]');
+        const emojiPickerPopover = wrapper.querySelector('[data-template-emoji-popover]');
+        const emojiPickerClose = wrapper.querySelector('[data-editor-emoji-close]');
         const emojiPickerSearch = wrapper.querySelector('[data-emoji-picker-search]');
         const emojiGrid = wrapper.querySelector('[data-template-emoji-grid]');
         const usedTokensWrap = wrapper.querySelector('[data-template-used-tokens]');
@@ -288,15 +526,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const previewIssuesWrap = wrapper.querySelector('[data-template-preview-issues]');
         const previewIssuesItem = wrapper.querySelector('[data-template-preview-issues-item]');
         const previewSurface = wrapper.querySelector('[data-template-preview-surface]');
-        const previewCompiled = wrapper.querySelector('[data-template-preview-compiled]');
         const emojiFilterButtons = wrapper.querySelectorAll('[data-emoji-filter]');
         const templateChipButtons = wrapper.querySelectorAll('[data-template-chip]');
         let templatePreviewTimer = null;
         let activeEmojiFilter = 'all';
+        let lastEditorRange = null;
+        let emojiInsertionMarker = null;
+        const emojiPickerMobileQuery = window.matchMedia('(max-width: 760px)');
+        const emojiMap = customEmojiMap;
 
         if (
-            !form || !nameInput || !bodyInput || !parseModeInput || !labelInput || !activeInput || !submitButton
-            || !usedTokensWrap || !usedTokensField || !previewIssuesWrap || !previewIssuesItem || !previewSurface || !previewCompiled
+            !form || !nameInput || !bodyInput || !richEditor || !editorSurface || !emojiPickerToggle || !emojiPickerPopover
+            || !parseModeInput || !labelInput || !activeInput || !submitButton
+            || !usedTokensWrap || !usedTokensField || !previewIssuesWrap || !previewIssuesItem || !previewSurface
         ) {
             return;
         }
@@ -332,20 +574,7 @@ document.addEventListener('DOMContentLoaded', () => {
             submitButton.textContent = 'Tạo mẫu';
         }
 
-        function toggleFavorite(slug) {
-            const favorites = getFavorites();
-            const index = favorites.indexOf(slug);
-
-            if (index >= 0) {
-                favorites.splice(index, 1);
-            } else {
-                favorites.unshift(slug);
-            }
-
-            writeStoredList(favoriteStorageKey, favorites);
-            syncEmojiTileState();
-            renderEmojiGrid();
-        }
+        setEditorContent(bodyInput.value);
 
         function pushRecent(slug) {
             const recents = getRecents().filter((item) => item !== slug);
@@ -353,16 +582,41 @@ document.addEventListener('DOMContentLoaded', () => {
             writeStoredList(recentStorageKey, recents);
         }
 
+        function setEmojiPickerOpen(open) {
+            if (open && !emojiInsertionMarker?.isConnected) {
+                placeEmojiInsertionMarker();
+            }
+
+            emojiPickerPopover.hidden = !open;
+            emojiPickerToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            emojiPickerToggle.classList.toggle('active', open);
+            richEditor.classList.toggle('emoji-picker-open', open);
+
+            if (open) {
+                positionEmojiPicker();
+                renderEmojiGrid();
+                requestAnimationFrame(() => emojiPickerSearch?.focus());
+            } else {
+                removeEmojiInsertionMarker();
+
+                if (emojiPickerPopover.parentElement !== richEditor) {
+                    richEditor.appendChild(emojiPickerPopover);
+                }
+            }
+        }
+
+        function positionEmojiPicker() {
+            if (emojiPickerPopover.hidden) {
+                return;
+            }
+
+            const parent = emojiPickerMobileQuery.matches ? document.body : richEditor;
+            if (emojiPickerPopover.parentElement !== parent) {
+                parent.appendChild(emojiPickerPopover);
+            }
+        }
+
         function syncEmojiTileState() {
-            const favorites = getFavorites();
-
-            wrapper.querySelectorAll('[data-toggle-favorite]').forEach((star) => {
-                const slug = star.getAttribute('data-toggle-favorite');
-                const active = favorites.includes(slug);
-                star.textContent = active ? '★' : '☆';
-                star.classList.toggle('active', active);
-            });
-
             emojiFilterButtons.forEach((button) => {
                 button.classList.toggle('active', button.getAttribute('data-emoji-filter') === activeEmojiFilter);
             });
@@ -370,7 +624,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function filteredEmojiLibrary() {
             const search = (emojiPickerSearch?.value || '').trim().toLowerCase();
-            const favorites = getFavorites();
             const recents = getRecents();
 
             return customEmojiLibrary.filter((emoji) => {
@@ -379,10 +632,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (!matchesSearch) {
                     return false;
-                }
-
-                if (activeEmojiFilter === 'favorites') {
-                    return favorites.includes(String(emoji.slug));
                 }
 
                 if (activeEmojiFilter === 'recent') {
@@ -403,39 +652,300 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        function insertTokenAtCursor(token) {
-            const start = bodyInput.selectionStart ?? bodyInput.value.length;
-            const end = bodyInput.selectionEnd ?? bodyInput.value.length;
-            const before = bodyInput.value.slice(0, start);
-            const after = bodyInput.value.slice(end);
-            bodyInput.value = before + token + after;
-            const nextCursor = start + token.length;
-            bodyInput.focus();
-            bodyInput.setSelectionRange(nextCursor, nextCursor);
+        function setEditorContent(value) {
+            editorSurface.innerHTML = renderEditorContent(value, emojiMap, parseModeInput.value);
+            bindCustomEmojiPreviews(editorSurface);
+            lastEditorRange = null;
+        }
+
+        function serializeEditorNode(node) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                return escapeHtml((node.textContent || '').replaceAll('\u200B', ''));
+            }
+
+            if (!(node instanceof HTMLElement)) {
+                return '';
+            }
+
+            if (node.hasAttribute('data-editor-emoji-token')) {
+                return node.getAttribute('data-editor-emoji-token') || '';
+            }
+
+            if (node.hasAttribute('data-editor-emoji-marker')) {
+                return '';
+            }
+
+            if (node.tagName === 'BR') {
+                return '<br>';
+            }
+
+            const children = Array.from(node.childNodes).map(serializeEditorNode).join('');
+            const tagMap = {
+                B: 'b', STRONG: 'b', I: 'i', EM: 'i', U: 'u', INS: 'u',
+                S: 's', STRIKE: 's', DEL: 's', CODE: 'code', PRE: 'pre', BLOCKQUOTE: 'blockquote',
+            };
+            const tag = tagMap[node.tagName];
+
+            if (tag) {
+                return `<${tag}>${children}</${tag}>`;
+            }
+
+            if (node.tagName === 'A') {
+                const href = (node.getAttribute('href') || '').trim();
+                return /^(https?:|tg:)/i.test(href)
+                    ? `<a href="${escapeHtml(href)}">${children}</a>`
+                    : children;
+            }
+
+            if (node.tagName === 'DIV' || node.tagName === 'P') {
+                return `${children}<br>`;
+            }
+
+            return children;
+        }
+
+        function syncBodyFromEditor() {
+            let value = Array.from(editorSurface.childNodes).map(serializeEditorNode).join('')
+                .replace(/(?:<br>){2,}$/g, '<br>')
+                .replace(/<br>$/g, '');
+
+            if ((parseModeInput.value || '').toUpperCase() !== 'HTML') {
+                const plain = document.createElement('div');
+                plain.innerHTML = value.replace(/<br>/g, '\n');
+                value = plain.textContent || '';
+            }
+
+            bodyInput.value = value;
+            return value;
+        }
+
+        function rememberEditorSelection() {
+            const selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0) {
+                return;
+            }
+
+            const range = selection.getRangeAt(0);
+            if (editorSurface.contains(range.commonAncestorContainer)) {
+                lastEditorRange = range.cloneRange();
+            }
+        }
+
+        function focusEditorRange() {
+            editorSurface.focus();
+            const selection = window.getSelection();
+            if (!selection) {
+                return null;
+            }
+
+            selection.removeAllRanges();
+            const range = lastEditorRange && editorSurface.contains(lastEditorRange.commonAncestorContainer)
+                ? lastEditorRange
+                : document.createRange();
+
+            if (!lastEditorRange || !editorSurface.contains(range.commonAncestorContainer)) {
+                range.selectNodeContents(editorSurface);
+                range.collapse(false);
+            }
+
+            selection.addRange(range);
+            return range;
+        }
+
+        function removeEmojiInsertionMarker() {
+            if (!emojiInsertionMarker?.isConnected) {
+                emojiInsertionMarker = null;
+                return;
+            }
+
+            const range = document.createRange();
+            range.setStartBefore(emojiInsertionMarker);
+            range.collapse(true);
+            emojiInsertionMarker.remove();
+            lastEditorRange = range.cloneRange();
+            emojiInsertionMarker = null;
+        }
+
+        function placeEmojiInsertionMarker() {
+            removeEmojiInsertionMarker();
+            const selection = window.getSelection();
+            let range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
+
+            if (!range || !editorSurface.contains(range.commonAncestorContainer)) {
+                range = lastEditorRange && editorSurface.contains(lastEditorRange.commonAncestorContainer)
+                    ? lastEditorRange.cloneRange()
+                    : document.createRange();
+
+                if (!lastEditorRange || !editorSurface.contains(range.commonAncestorContainer)) {
+                    range.selectNodeContents(editorSurface);
+                    range.collapse(false);
+                }
+            }
+
+            range.collapse(false);
+            emojiInsertionMarker = document.createElement('span');
+            emojiInsertionMarker.dataset.editorEmojiMarker = '1';
+            emojiInsertionMarker.setAttribute('aria-hidden', 'true');
+            range.insertNode(emojiInsertionMarker);
+        }
+
+        function insertEmojiAtCursor(emoji) {
+            let range = null;
+
+            if (emojiInsertionMarker?.isConnected) {
+                range = document.createRange();
+                range.setStartBefore(emojiInsertionMarker);
+                range.collapse(true);
+                emojiInsertionMarker.remove();
+                emojiInsertionMarker = null;
+            } else {
+                range = focusEditorRange();
+            }
+
+            if (!range) {
+                return;
+            }
+
+            range.deleteContents();
+            const holder = document.createElement('span');
+            holder.className = 'template-editor-emoji';
+            holder.contentEditable = 'false';
+            holder.dataset.editorEmojiToken = emoji.token;
+            holder.innerHTML = emojiVisualMarkup(emoji, 'template-inline-emoji');
+            const spacer = document.createTextNode('\u200B');
+            range.insertNode(spacer);
+            range.insertNode(holder);
+            range.setStartAfter(spacer);
+            range.collapse(true);
+
+            editorSurface.focus();
+            const selection = window.getSelection();
+            selection?.removeAllRanges();
+            selection?.addRange(range);
+            lastEditorRange = range.cloneRange();
+            bindCustomEmojiPreviews(holder);
+            parseModeInput.value = 'HTML';
+            syncBodyFromEditor();
+        }
+
+        function applyEditorCommand(command) {
+            const range = focusEditorRange();
+            if (!range) {
+                return;
+            }
+
+            if (range.collapsed) {
+                document.execCommand(command, false);
+                rememberEditorSelection();
+                return;
+            }
+
+            if (command === 'removeFormat') {
+                const extracted = range.extractContents();
+                const cleanFragment = document.createDocumentFragment();
+
+                function appendWithoutFormatting(source, target) {
+                    source.childNodes.forEach((node) => {
+                        if (node.nodeType === Node.TEXT_NODE) {
+                            target.appendChild(node.cloneNode(true));
+                            return;
+                        }
+
+                        if (!(node instanceof HTMLElement)) {
+                            return;
+                        }
+
+                        if (node.hasAttribute('data-editor-emoji-token') || node.tagName === 'BR') {
+                            target.appendChild(node.cloneNode(true));
+                            return;
+                        }
+
+                        appendWithoutFormatting(node, target);
+                    });
+                }
+
+                appendWithoutFormatting(extracted, cleanFragment);
+                const insertedNodes = Array.from(cleanFragment.childNodes);
+                range.insertNode(cleanFragment);
+
+                if (insertedNodes.length > 0) {
+                    range.setStartBefore(insertedNodes[0]);
+                    range.setEndAfter(insertedNodes[insertedNodes.length - 1]);
+                }
+            } else {
+                const tagMap = { bold: 'b', italic: 'i', underline: 'u', strikeThrough: 's' };
+                const tagName = tagMap[command];
+
+                if (!tagName) {
+                    return;
+                }
+
+                const startElement = range.startContainer instanceof HTMLElement
+                    ? range.startContainer
+                    : range.startContainer.parentElement;
+                const existingFormat = startElement?.closest(tagName);
+
+                if (existingFormat && editorSurface.contains(existingFormat) && existingFormat.contains(range.endContainer)) {
+                    const firstChild = existingFormat.firstChild;
+                    const lastChild = existingFormat.lastChild;
+                    existingFormat.replaceWith(...existingFormat.childNodes);
+
+                    if (firstChild && lastChild) {
+                        range.setStartBefore(firstChild);
+                        range.setEndAfter(lastChild);
+                    }
+                } else {
+                    const formatted = document.createElement(tagName);
+                    formatted.appendChild(range.extractContents());
+                    range.insertNode(formatted);
+                    range.selectNodeContents(formatted);
+                }
+            }
+
+            const selection = window.getSelection();
+            selection?.removeAllRanges();
+            selection?.addRange(range);
+            lastEditorRange = range.cloneRange();
+        }
+
+        function applyEditorBlock(tagName) {
+            const range = focusEditorRange();
+            if (!range) {
+                return;
+            }
+
+            if (range.collapsed) {
+                document.execCommand('formatBlock', false, tagName);
+                rememberEditorSelection();
+                return;
+            }
+
+            const block = document.createElement(tagName);
+            block.appendChild(range.extractContents());
+            range.insertNode(block);
+            range.selectNodeContents(block);
+
+            const selection = window.getSelection();
+            selection?.removeAllRanges();
+            selection?.addRange(range);
+            lastEditorRange = range.cloneRange();
         }
 
         function bindEmojiGridEvents() {
-            wrapper.querySelectorAll('.template-emoji-tile').forEach((button) => {
-                button.addEventListener('click', (event) => {
-                    const favoriteButton = event.target.closest('[data-toggle-favorite]');
-                    if (favoriteButton) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        toggleFavorite(favoriteButton.getAttribute('data-toggle-favorite'));
-                        return;
-                    }
-
-                    const token = button.getAttribute('data-emoji-token');
+            emojiGrid?.querySelectorAll('.template-emoji-tile').forEach((button) => {
+                button.addEventListener('click', () => {
                     const slug = button.getAttribute('data-emoji-slug');
+                    const emoji = emojiMap.get(String(slug || '').toLowerCase());
 
-                    if (token) {
-                        insertTokenAtCursor(token);
+                    if (emoji) {
+                        insertEmojiAtCursor(emoji);
                         if (slug) {
                             pushRecent(slug);
                         }
                         syncEmojiTileState();
                         renderEmojiGrid();
-                        renderTemplatePreview();
+                        setEmojiPickerOpen(false);
+                        scheduleTemplatePreview();
                     }
                 });
             });
@@ -458,22 +968,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     class="template-emoji-tile"
                     type="button"
                     data-emoji-slug="${escapeHtml(String(emoji.slug))}"
-                    data-emoji-token="${escapeHtml(String(emoji.token))}"
                 >
-                    <span class="template-emoji-star ${getFavorites().includes(String(emoji.slug)) ? 'active' : ''}" data-toggle-favorite="${escapeHtml(String(emoji.slug))}" title="Đánh dấu yêu thích">${getFavorites().includes(String(emoji.slug)) ? '★' : '☆'}</span>
-                    <div class="template-emoji-top">
-                        <span class="template-emoji-symbol">${escapeHtml(String(emoji.fallback_emoji))}</span>
-                        <span class="template-emoji-name">${escapeHtml(String(emoji.name))}</span>
-                    </div>
-                    <span class="template-emoji-origin">${escapeHtml(String(emoji.scope_label || 'Riêng'))}</span>
-                    <span class="template-emoji-token mono">${escapeHtml(String(emoji.token))}</span>
+                    ${emojiVisualMarkup(emoji, 'template-emoji-symbol')}
+                    <span class="template-emoji-name">${escapeHtml(String(emoji.name))}</span>
                 </button>
             `).join('');
 
             bindEmojiGridEvents();
+            bindCustomEmojiPreviews(emojiGrid);
         }
 
         async function renderTemplatePreview() {
+            syncBodyFromEditor();
             const formData = new URLSearchParams();
             formData.set('_token', csrfToken);
             formData.set('body', bodyInput.value);
@@ -488,11 +994,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: formData.toString(),
                 });
 
-                previewSurface.innerHTML = escapeHtml(payload.fallback_preview || '')
-                    .replace(/\{\{ce:([a-z0-9._-]+)\}\}/ig, '<span class="template-token-missing">Token thiếu: {{$1}}</span>')
-                    .replace(/\n/g, '<br>');
-                previewCompiled.textContent = payload.compiled_html || '-';
-
+                previewSurface.innerHTML = renderSafeTelegramPreview(bodyInput.value, emojiMap);
                 const issues = Array.isArray(payload.issues) ? payload.issues : [];
                 previewIssuesItem.hidden = issues.length === 0;
                 previewIssuesWrap.innerHTML = issues.length > 0
@@ -502,8 +1004,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const used = Array.isArray(payload.used_emojis) ? payload.used_emojis : [];
                 usedTokensField.hidden = used.length === 0;
                 usedTokensWrap.innerHTML = used.length > 0
-                    ? used.map((emoji) => `<span class="chip">${escapeHtml(String(emoji.fallback_emoji || ''))} ${escapeHtml(String(emoji.name || ''))} <span class="mono">${escapeHtml('{{ce:' + String(emoji.slug || '') + '}}')}</span></span>`).join('')
+                    ? used.map((emoji) => {
+                        const libraryEmoji = emojiMap.get(String(emoji.slug || '').toLowerCase()) || emoji;
+                        return `<span class="chip template-used-emoji-chip">${emojiVisualMarkup(libraryEmoji, 'template-used-emoji')} <span>${escapeHtml(String(emoji.name || ''))}</span> <span class="mono">${escapeHtml('{{ce:' + String(emoji.slug || '') + '}}')}</span></span>`;
+                    }).join('')
                     : '';
+
+                bindCustomEmojiPreviews(wrapper);
             } catch (error) {
                 previewIssuesItem.hidden = false;
                 previewIssuesWrap.innerHTML = `<div class="badge danger">${escapeHtml(error.message || 'Preview thất bại.')}</div>`;
@@ -529,6 +1036,7 @@ document.addEventListener('DOMContentLoaded', () => {
             nameInput.value = preset.name;
             bodyInput.value = preset.body;
             parseModeInput.value = preset.parse_mode;
+            setEditorContent(bodyInput.value);
 
             const labelMatch = labelOptions.find((item) => item.slug === preset.label_slug);
             labelInput.value = labelMatch ? String(labelMatch.id) : '';
@@ -551,8 +1059,82 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        bodyInput.addEventListener('input', scheduleTemplatePreview);
-        parseModeInput.addEventListener('change', scheduleTemplatePreview);
+        editorSurface.addEventListener('input', () => {
+            syncBodyFromEditor();
+            queueMicrotask(rememberEditorSelection);
+            requestAnimationFrame(rememberEditorSelection);
+            scheduleTemplatePreview();
+        });
+        editorSurface.addEventListener('keyup', rememberEditorSelection);
+        editorSurface.addEventListener('mouseup', rememberEditorSelection);
+        editorSurface.addEventListener('focus', rememberEditorSelection);
+        editorSurface.addEventListener('paste', (event) => {
+            event.preventDefault();
+            document.execCommand('insertText', false, event.clipboardData?.getData('text/plain') || '');
+        });
+        document.addEventListener('selectionchange', rememberEditorSelection);
+
+        editorCommandButtons.forEach((button) => {
+            button.addEventListener('mousedown', (event) => event.preventDefault());
+            button.addEventListener('click', () => {
+                applyEditorCommand(button.getAttribute('data-editor-command') || '');
+                parseModeInput.value = 'HTML';
+                syncBodyFromEditor();
+                scheduleTemplatePreview();
+            });
+        });
+
+        editorBlockButtons.forEach((button) => {
+            button.addEventListener('mousedown', (event) => event.preventDefault());
+            button.addEventListener('click', () => {
+                applyEditorBlock(button.getAttribute('data-editor-block') || 'blockquote');
+                parseModeInput.value = 'HTML';
+                syncBodyFromEditor();
+                scheduleTemplatePreview();
+            });
+        });
+
+        emojiPickerToggle.addEventListener('pointerdown', (event) => {
+            event.preventDefault();
+            rememberEditorSelection();
+            placeEmojiInsertionMarker();
+        });
+        emojiPickerToggle.addEventListener('click', () => {
+            setEmojiPickerOpen(emojiPickerPopover.hidden);
+        });
+        emojiPickerClose?.addEventListener('click', () => setEmojiPickerOpen(false));
+
+        function handleEmojiPickerOutsideClick(event) {
+            const target = event.target;
+
+            if (
+                emojiPickerPopover.hidden
+                || !(target instanceof Node)
+                || emojiPickerPopover.contains(target)
+                || emojiPickerToggle.contains(target)
+            ) {
+                return;
+            }
+
+            setEmojiPickerOpen(false);
+        }
+
+        function handleEmojiPickerEscape(event) {
+            if (event.key === 'Escape' && !emojiPickerPopover.hidden) {
+                setEmojiPickerOpen(false);
+                editorSurface.focus();
+            }
+        }
+
+        document.addEventListener('pointerdown', handleEmojiPickerOutsideClick);
+        document.addEventListener('keydown', handleEmojiPickerEscape);
+        emojiPickerMobileQuery.addEventListener('change', positionEmojiPicker);
+
+        parseModeInput.addEventListener('change', () => {
+            syncBodyFromEditor();
+            setEditorContent(bodyInput.value);
+            scheduleTemplatePreview();
+        });
         emojiPickerSearch?.addEventListener('input', renderEmojiGrid);
 
         emojiFilterButtons.forEach((button) => {
@@ -565,6 +1147,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         form.addEventListener('submit', async (event) => {
             event.preventDefault();
+            syncBodyFromEditor();
 
             await window.TeleSenderApp.submitAjaxForm(form, {
                 closeCrudModalOnSuccess: true,
@@ -578,13 +1161,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         window.TeleSenderCrudModal.open({
             title: mode === 'edit' ? 'Cập nhật mẫu tin nhắn' : 'Tạo mẫu tin nhắn mới',
-            description: 'Giữ nguyên editor, preset, emoji picker và preview realtime trong modal để thao tác tập trung hơn.',
+            description: 'Soạn nội dung, chèn Premium Emoji và kiểm tra bản xem trước trước khi lưu.',
             size: 'full',
             content: wrapper,
             onClose() {
                 if (templatePreviewTimer !== null) {
                     clearTimeout(templatePreviewTimer);
                 }
+                document.removeEventListener('selectionchange', rememberEditorSelection);
+                document.removeEventListener('pointerdown', handleEmojiPickerOutsideClick);
+                document.removeEventListener('keydown', handleEmojiPickerEscape);
+                emojiPickerMobileQuery.removeEventListener('change', positionEmojiPicker);
+                emojiPickerPopover.remove();
             },
         });
     }
@@ -605,7 +1193,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('app:regions:refreshed', () => {
         templateRecords = window.TeleSenderApp.readJsonScript('[data-template-records]', {});
+        renderTemplateListingPreviews();
     });
+
+    renderTemplateListingPreviews();
 })();
 });
 </script>
