@@ -4033,6 +4033,12 @@ tbody tr:hover {
   box-shadow: var(--shadow);
 }
 
+/* Long production listings may never satisfy a percentage-based reveal threshold. */
+.listing-panel.ui-reveal {
+  opacity: 1;
+  transform: none;
+}
+
 .listing-panel > .panel-header {
   display: grid;
   gap: 16px;

@@ -152,9 +152,26 @@
                     observer.unobserve(entry.target);
                 }
             });
-        }, { threshold: 0.08 });
+        }, { threshold: 0 });
 
-        elements.forEach((element) => observer.observe(element));
+        elements.forEach((element) => {
+            const bounds = element.getBoundingClientRect();
+
+            if (bounds.bottom >= 0 && bounds.top <= window.innerHeight) {
+                element.classList.add('is-visible');
+                return;
+            }
+
+            observer.observe(element);
+        });
+
+        // Visual effects must never leave application content permanently hidden.
+        window.setTimeout(() => {
+            elements.forEach((element) => {
+                element.classList.add('is-visible');
+                observer.unobserve(element);
+            });
+        }, 1200);
     }
 
     function initializeVisualEffects() {
