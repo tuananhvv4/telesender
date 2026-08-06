@@ -29,9 +29,9 @@ foreach ($labels as $label) {
         <div class="panel-header">
             <h2 class="panel-title">Danh sách nhãn</h2>
         </div>
-        <div class="panel-body list listing-body">
+        <div class="panel-body list listing-body listing-card-grid label-listing-grid">
             <?php foreach ($labels as $label): ?>
-                <article class="list-item entity-list-item">
+                <article class="list-item entity-list-item label-library-item">
                     <div class="inline-actions">
                         <span class="badge" style="background: <?= e($label['color']) ?>20; color: <?= e($label['color']) ?>;">
                             <?= e($label['name']) ?>

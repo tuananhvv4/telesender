@@ -77,12 +77,6 @@ foreach ($customEmojis as $emoji) {
         <div class="panel-body emoji-library-grid listing-body">
             <?php foreach ($customEmojis as $emoji): ?>
                 <?php
-                $token = '{{ce:' . $emoji['slug'] . '}}';
-                $emojiIdentifier = (string) $emoji['emoji_identifier'];
-                $shortIdentifier = strlen($emojiIdentifier) > 14
-                    ? substr($emojiIdentifier, 0, 8) . '...' . substr($emojiIdentifier, -4)
-                    : $emojiIdentifier;
-                $keywordSummary = trim((string) ($emoji['keywords'] ?? ''));
                 $noteSummary = trim((string) ($emoji['notes'] ?? ''));
                 ?>
                 <article class="emoji-library-card">
@@ -102,19 +96,13 @@ foreach ($customEmojis as $emoji) {
                             </span>
                             <div class="emoji-library-title-copy">
                                 <strong><?= e($emoji['name']) ?></strong>
-                                <div class="small muted mono"><?= e($token) ?></div>
                             </div>
                         </div>
                         <span class="badge <?= (int) $emoji['is_active'] === 1 ? 'success' : 'warning' ?>"><?= (int) $emoji['is_active'] === 1 ? 'Đang bật' : 'Tạm tắt' ?></span>
                     </div>
 
                     <div class="emoji-library-meta">
-                        <span class="emoji-meta-chip mono" title="<?= e($emojiIdentifier) ?>">ID: <?= e($shortIdentifier) ?></span>
                         <span class="emoji-meta-chip">Đang dùng: <?= e((string) ($emoji['usage_count'] ?? 0)) ?></span>
-                        <span class="emoji-meta-chip">Riêng</span>
-                        <?php if ($keywordSummary !== ''): ?>
-                            <span class="emoji-meta-chip" title="<?= e($keywordSummary) ?>">#<?= e(mb_strimwidth($keywordSummary, 0, 26, '...')) ?></span>
-                        <?php endif; ?>
                     </div>
 
                     <?php if ($noteSummary !== ''): ?>
@@ -122,7 +110,6 @@ foreach ($customEmojis as $emoji) {
                     <?php endif; ?>
 
                     <div class="inline-actions emoji-library-actions">
-                        <button class="button secondary sm" type="button" data-copy-token="<?= e($token) ?>">Chép token</button>
                         <button class="button secondary sm" type="button" data-emoji-edit="<?= e((string) $emoji['id']) ?>">Sửa</button>
                         <form method="post" action="<?= e(url('/custom-emojis/delete')) ?>" data-ajax-form data-ajax-refresh="custom-emojis-shell">
                             <?= csrf_field() ?>
@@ -146,7 +133,7 @@ foreach ($customEmojis as $emoji) {
             <div class="panel-header">
                 <div>
                     <h2 class="panel-title">Thư viện dùng chung</h2>
-                    <p class="panel-copy">Chỉ xem và dùng token. Các emoji này thuộc super admin nên bạn không thể sửa trực tiếp.</p>
+                    <p class="panel-copy">Các emoji này thuộc super admin và có thể chọn trực tiếp khi soạn mẫu tin nhắn.</p>
                 </div>
                 <?php if (!empty($sharedEmojiSource['source_available'])): ?>
                     <span class="badge info"><?= e((string) ($sharedEmojiSource['source_count'] ?? 0)) ?> emoji</span>
@@ -155,12 +142,6 @@ foreach ($customEmojis as $emoji) {
             <div class="panel-body emoji-library-grid listing-body">
                 <?php foreach ($sharedCustomEmojis as $emoji): ?>
                     <?php
-                    $token = '{{ce:' . $emoji['slug'] . '}}';
-                    $emojiIdentifier = (string) $emoji['emoji_identifier'];
-                    $shortIdentifier = strlen($emojiIdentifier) > 14
-                        ? substr($emojiIdentifier, 0, 8) . '...' . substr($emojiIdentifier, -4)
-                        : $emojiIdentifier;
-                    $keywordSummary = trim((string) ($emoji['keywords'] ?? ''));
                     $noteSummary = trim((string) ($emoji['notes'] ?? ''));
                     $isOverridden = (int) ($emoji['is_overridden'] ?? 0) === 1;
                     ?>
@@ -181,18 +162,13 @@ foreach ($customEmojis as $emoji) {
                                 </span>
                                 <div class="emoji-library-title-copy">
                                     <strong><?= e($emoji['name']) ?></strong>
-                                    <div class="small muted mono"><?= e($token) ?></div>
                                 </div>
                             </div>
                             <span class="badge info">Dùng chung</span>
                         </div>
 
                         <div class="emoji-library-meta">
-                            <span class="emoji-meta-chip mono" title="<?= e($emojiIdentifier) ?>">ID: <?= e($shortIdentifier) ?></span>
                             <span class="emoji-meta-chip">Nguồn: <?= e((string) ($emoji['source_user_name'] ?? 'Super admin')) ?></span>
-                            <?php if ($keywordSummary !== ''): ?>
-                                <span class="emoji-meta-chip" title="<?= e($keywordSummary) ?>">#<?= e(mb_strimwidth($keywordSummary, 0, 26, '...')) ?></span>
-                            <?php endif; ?>
                             <?php if ($isOverridden): ?>
                                 <span class="emoji-meta-chip emoji-meta-chip-warning">Đang bị emoji riêng ghi đè</span>
                             <?php endif; ?>
@@ -201,10 +177,6 @@ foreach ($customEmojis as $emoji) {
                         <?php if ($noteSummary !== ''): ?>
                             <div class="emoji-library-note small muted" title="<?= e($noteSummary) ?>"><?= e(mb_strimwidth($noteSummary, 0, 88, '...')) ?></div>
                         <?php endif; ?>
-
-                        <div class="inline-actions emoji-library-actions">
-                            <button class="button secondary sm" type="button" data-copy-token="<?= e($token) ?>">Chép token</button>
-                        </div>
                     </article>
                 <?php endforeach; ?>
 
@@ -222,48 +194,56 @@ foreach ($customEmojis as $emoji) {
 </section>
 
 <template id="custom_emoji_form_template">
-    <form class="form-grid" method="post" action="<?= e(url('/custom-emojis')) ?>">
+    <form class="form-grid emoji-compact-form" method="post" action="<?= e(url('/custom-emojis')) ?>">
         <?= csrf_field() ?>
         <div class="form-feedback" data-form-feedback hidden></div>
 
-        <div class="field">
-            <label for="emoji_modal_name">Tên gợi nhớ</label>
-            <input class="input" id="emoji_modal_name" type="text" name="name" placeholder="Ví dụ: Fire Cat" required data-emoji-field="name">
-        </div>
-
-        <div class="field">
-            <label for="emoji_modal_slug">Slug chèn vào mẫu tin nhắn</label>
-            <input class="input mono" id="emoji_modal_slug" type="text" name="slug" placeholder="Ví dụ: fire-cat" required data-emoji-field="slug" data-touched="0">
-            <div class="small muted">Token dùng trong mẫu: <span class="mono">{{ce:slug}}</span></div>
-        </div>
-
-        <div class="grid grid-2">
-            <div class="field">
-                <label for="emoji_modal_identifier">Emoji ID</label>
-                <small>Lấy Id của emoji từ bot @emojiid_get_bot</small>
-                <input class="input mono" id="emoji_modal_identifier" type="text" name="emoji_identifier" placeholder="5318779098686826724" required data-emoji-field="emoji_identifier">
+        <div class="emoji-form-core">
+            <div class="field emoji-form-name-field">
+                <label for="emoji_modal_name">Tên gợi nhớ</label>
+                <input class="input" id="emoji_modal_name" type="text" name="name" placeholder="Ví dụ: Fire Cat" required data-emoji-field="name">
             </div>
+
+            <div class="field emoji-form-id-field">
+                <label for="emoji_modal_identifier">Emoji ID</label>
+                <input class="input mono" id="emoji_modal_identifier" type="text" name="emoji_identifier" placeholder="Lấy ID từ @emojiid_get_bot" required data-emoji-field="emoji_identifier">
+            </div>
+
             <div class="field">
                 <label for="emoji_modal_fallback">Icon dự phòng</label>
-                <small>Icon này sẽ hiển thị khi emoji không khả dụng (hết premium hoặc lỗi)</small>
-                <input class="input" id="emoji_modal_fallback" type="text" name="fallback_emoji" placeholder="Có thể lấy từ getemoji.com hoặc điện thoại" required data-emoji-field="fallback_emoji">
+                <input class="input emoji-fallback-input" id="emoji_modal_fallback" type="text" name="fallback_emoji" placeholder="🔥" required data-emoji-field="fallback_emoji">
             </div>
-        </div>
-
-        <div class="field">
-            <label for="emoji_modal_keywords">Từ khóa tìm kiếm</label>
-            <input class="input" id="emoji_modal_keywords" type="text" name="keywords" placeholder="fire, cat, promo" data-emoji-field="keywords">
-        </div>
-
-        <div class="field">
-            <label for="emoji_modal_notes">Ghi chú</label>
-            <textarea class="textarea" id="emoji_modal_notes" name="notes" rows="4" placeholder="Mô tả để nhận biết nhanh emoji này dùng trong trường hợp nào." data-emoji-field="notes"></textarea>
         </div>
 
         <label class="checkbox-row">
             <input type="checkbox" name="is_active" value="1" checked data-emoji-field="is_active">
             <span>Kích hoạt emoji này để dùng trong bộ chọn</span>
         </label>
+
+        <details class="emoji-form-advanced">
+            <summary>
+                <span>Thông tin nâng cao</span>
+                <small>Slug, từ khóa và ghi chú</small>
+            </summary>
+            <div class="emoji-form-advanced-body">
+                <div class="emoji-form-advanced-grid">
+                    <div class="field">
+                        <label for="emoji_modal_slug">Slug nội bộ</label>
+                        <input class="input mono" id="emoji_modal_slug" type="text" name="slug" placeholder="Ví dụ: fire-cat" required data-emoji-field="slug" data-touched="0">
+                    </div>
+
+                    <div class="field">
+                        <label for="emoji_modal_keywords">Từ khóa tìm kiếm</label>
+                        <input class="input" id="emoji_modal_keywords" type="text" name="keywords" placeholder="fire, cat, promo" data-emoji-field="keywords">
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="emoji_modal_notes">Ghi chú</label>
+                    <textarea class="textarea" id="emoji_modal_notes" name="notes" rows="2" placeholder="Mô tả ngắn để dễ nhận biết." data-emoji-field="notes"></textarea>
+                </div>
+            </div>
+        </details>
 
         <div class="actions">
             <button class="button primary" type="submit" data-loading-text="Đang lưu...">Lưu emoji</button>
@@ -278,7 +258,7 @@ foreach ($customEmojis as $emoji) {
         <div class="app-modal-head">
             <div>
                 <h2 class="app-modal-title" id="emoji_import_title">Import nhanh custom emoji</h2>
-                <div class="small muted">Thêm hàng loạt.</div>
+                <div class="small muted">Slug được tự tạo theo tên.</div>
             </div>
             <button class="app-modal-dismiss" type="button" data-emoji-import-close aria-label="Đóng popup">
                 <i class="fa-solid fa-xmark" aria-hidden="true"></i>
@@ -292,15 +272,20 @@ foreach ($customEmojis as $emoji) {
 
                 <div class="table-wrap emoji-import-table-wrap">
                     <table class="emoji-import-table">
+                        <colgroup>
+                            <col class="emoji-import-col-index">
+                            <col>
+                            <col class="emoji-import-col-id">
+                            <col class="emoji-import-col-fallback">
+                            <col class="emoji-import-col-check">
+                            <col class="emoji-import-col-action">
+                        </colgroup>
                         <thead>
                         <tr>
                             <th>#</th>
                             <th>Tên gợi nhớ</th>
-                            <th>Slug</th>
                             <th>Emoji ID</th>
-                            <th>Fallback</th>
-                            <th>Từ khóa</th>
-                            <th>Ghi chú</th>
+                            <th>Icon dự phòng</th>
                             <th>Bật</th>
                             <th>Xóa</th>
                         </tr>
@@ -441,9 +426,9 @@ document.addEventListener('DOMContentLoaded', () => {
         window.TeleSenderCrudModal.open({
             title: mode === 'edit' ? 'Cập nhật emoji riêng' : 'Thêm emoji riêng mới',
             description: mode === 'edit'
-                ? 'Sửa thông tin emoji và hệ thống sẽ tiếp tục giữ nguyên các logic validate hiện có.'
-                : 'Bạn có thể thêm thủ công từng emoji riêng trước khi dùng trong template.',
-            size: 'lg',
+                ? 'Cập nhật thông tin hiển thị và trạng thái emoji.'
+                : 'Thêm emoji để sử dụng trong bộ chọn của mẫu tin nhắn.',
+            size: 'md',
             content: wrapper,
         });
     }
@@ -453,7 +438,7 @@ document.addEventListener('DOMContentLoaded', () => {
             name: String(row.name || ''),
             slug: String(row.slug || ''),
             emoji_identifier: String(row.emoji_identifier || ''),
-            fallback_emoji: String(row.fallback_emoji || ''),
+            fallback_emoji: String(row.fallback_emoji || '🔥'),
             keywords: String(row.keywords || ''),
             notes: String(row.notes || ''),
             is_active: row.is_active === 0 || row.is_active === '0' || row.is_active === false ? 0 : 1,
@@ -467,12 +452,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return `
             <tr data-import-row="${index}">
                 <td class="emoji-import-index" data-row-number></td>
-                <td><input class="input" type="text" name="rows[${index}][name]" value="${escapeHtml(item.name)}" placeholder="Fire Cat" data-import-name></td>
-                <td><input class="input mono" type="text" name="rows[${index}][slug]" value="${escapeHtml(item.slug)}" placeholder="fire-cat" data-import-slug data-touched="${item.slug.trim() === '' ? '0' : '1'}"></td>
-                <td><input class="input mono" type="text" name="rows[${index}][emoji_identifier]" value="${escapeHtml(item.emoji_identifier)}" placeholder="5318779098686826724"></td>
-                <td><input class="input" type="text" name="rows[${index}][fallback_emoji]" value="${escapeHtml(item.fallback_emoji)}" placeholder="🔥"></td>
-                <td><input class="input" type="text" name="rows[${index}][keywords]" value="${escapeHtml(item.keywords)}" placeholder="fire, promo"></td>
-                <td><textarea class="textarea emoji-import-textarea" name="rows[${index}][notes]" rows="2" placeholder="Ghi chú dùng nhanh">${escapeHtml(item.notes)}</textarea></td>
+                <td>
+                    <input class="input" type="text" name="rows[${index}][name]" value="${escapeHtml(item.name)}" placeholder="Fire Cat" required data-import-name>
+                    <input type="hidden" name="rows[${index}][slug]" value="${escapeHtml(item.slug)}" data-import-slug>
+                    <input type="hidden" name="rows[${index}][keywords]" value="${escapeHtml(item.keywords)}">
+                    <input type="hidden" name="rows[${index}][notes]" value="${escapeHtml(item.notes)}">
+                </td>
+                <td><input class="input mono" type="text" name="rows[${index}][emoji_identifier]" value="${escapeHtml(item.emoji_identifier)}" placeholder="5318779098686826724" required></td>
+                <td><input class="input emoji-import-fallback" type="text" name="rows[${index}][fallback_emoji]" value="${escapeHtml(item.fallback_emoji)}" placeholder="🔥" required data-import-fallback></td>
                 <td class="emoji-import-check-cell">
                     <input type="checkbox" name="rows[${index}][is_active]" value="1" ${item.is_active ? 'checked' : ''} data-import-active>
                 </td>
@@ -507,7 +494,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function resetImportRow(row) {
-        row.querySelectorAll('input[type="text"], textarea').forEach((field) => {
+        row.querySelectorAll('input:not([type="checkbox"]), textarea').forEach((field) => {
             field.value = '';
         });
 
@@ -516,9 +503,9 @@ document.addEventListener('DOMContentLoaded', () => {
             activeField.checked = true;
         }
 
-        const slugField = row.querySelector('[data-import-slug]');
-        if (slugField) {
-            slugField.dataset.touched = '0';
+        const fallbackField = row.querySelector('[data-import-fallback]');
+        if (fallbackField) {
+            fallbackField.value = '🔥';
         }
     }
 
@@ -560,31 +547,12 @@ document.addEventListener('DOMContentLoaded', () => {
         openEmojiModal('create');
     });
 
-    document.addEventListener('click', async (event) => {
+    document.addEventListener('click', (event) => {
         const target = event.target instanceof Element ? event.target : null;
         const editButton = target ? target.closest('[data-emoji-edit]') : null;
 
         if (editButton) {
             openEmojiModal('edit', editButton.getAttribute('data-emoji-edit'));
-            return;
-        }
-
-        const copyButton = target ? target.closest('[data-copy-token]') : null;
-
-        if (!copyButton) {
-            return;
-        }
-
-        const token = copyButton.getAttribute('data-copy-token') || '';
-
-        try {
-            await navigator.clipboard.writeText(token);
-            copyButton.textContent = 'Đã sao chép';
-            setTimeout(() => {
-                copyButton.textContent = 'Chép token';
-            }, 1200);
-        } catch (error) {
-            copyButton.textContent = token;
         }
     });
 
@@ -637,15 +605,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const row = target.closest('tr');
             const slugField = row ? row.querySelector('[data-import-slug]') : null;
 
-            if (slugField && slugField.dataset.touched !== '1') {
+            if (slugField) {
                 slugField.value = slugifyEmojiName(target.value);
             }
-
-            return;
-        }
-
-        if (target.matches('[data-import-slug]')) {
-            target.dataset.touched = target.value.trim() === '' ? '0' : '1';
         }
     });
 

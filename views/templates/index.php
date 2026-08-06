@@ -45,7 +45,7 @@ foreach ($templates as $template) {
                 </div>
             </form>
         </div>
-        <div class="panel-body list listing-body">
+        <div class="panel-body list listing-body listing-card-grid template-listing-grid">
             <?php foreach ($templates as $template): ?>
                 <article class="list-item template-library-item entity-list-item">
                     <div class="template-library-head">

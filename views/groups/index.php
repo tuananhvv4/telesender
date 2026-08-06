@@ -144,10 +144,13 @@ foreach ($groups as $group) {
                                 </option>
                             <?php endforeach; ?>
                         </select>
-                        <button class="button secondary" type="button" data-group-load-dialogs>Tải danh sách nhóm</button>
+                        <button class="button secondary" type="button" data-group-load-dialogs>
+                            <i class="fa-solid fa-cloud-arrow-down" aria-hidden="true"></i>
+                            <span>Tải danh sách nhóm</span>
+                        </button>
                     </div>
                     <div class="helper-row group-account-feedback">
-                        <span class="group-dialog-status helper-text" data-group-dialogs-status>Chọn account rồi bấm tải danh sách nhóm.</span>
+                        <span class="group-dialog-status helper-text" data-group-dialogs-status role="status" aria-live="polite">Chọn account rồi bấm tải danh sách nhóm.</span>
                     </div>
                 </div>
 
@@ -176,10 +179,12 @@ foreach ($groups as $group) {
                 <div class="field group-field-span-2">
                     <div class="group-topic-head">
                         <div>
-                            <label for="group_modal_topic_selector">Topic (tùy chọn)</label>
-                            <div class="small muted group-form-hint">Chỉ cần tải topic sau khi đã chọn đúng nhóm ở dropdown phía trên.</div>
+                            <div class="small muted group-form-hint">Tải topic sau khi đã chọn nhóm ở phía trên.</div>
                         </div>
-                        <button class="button secondary sm" type="button" data-group-load-topics>Tải topic từ Telegram</button>
+                        <button class="button secondary sm" type="button" data-group-load-topics>
+                            <i class="fa-solid fa-comments" aria-hidden="true"></i>
+                            <span>Tải topic từ Telegram</span>
+                        </button>
                     </div>
                     <select
                         class="select"
@@ -188,9 +193,12 @@ foreach ($groups as $group) {
                         data-current-topic-title=""
                         data-group-topic-selector
                     >
-                        <option value="">Topic chung / mặc định</option>
+                        <option value="">Hãy tải topic từ Telegram trước</option>
                     </select>
                     <input type="hidden" name="topic_id" value="" data-group-topic-id>
+                    <div class="helper-row group-topic-feedback">
+                        <span class="helper-text" data-group-topics-status role="status" aria-live="polite">Chọn nhóm rồi tải topic để xác nhận đích gửi.</span>
+                    </div>
                 </div>
 
                 <div class="field group-field-span-2">
@@ -205,7 +213,11 @@ foreach ($groups as $group) {
             </label>
 
             <div class="actions">
-                <button class="button primary" type="submit" data-group-submit data-loading-text="Đang lưu...">Lưu nhóm</button>
+                <div class="group-save-requirement" data-group-save-requirement aria-live="polite">
+                    <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                    <span>Cần tải danh sách nhóm và topic trước khi lưu.</span>
+                </div>
+                <button class="button primary" type="submit" data-group-submit data-loading-text="Đang lưu..." disabled>Lưu nhóm</button>
                 <button class="button secondary" type="button" data-crud-modal-close>Hủy</button>
             </div>
         </form>
@@ -235,10 +247,13 @@ foreach ($groups as $group) {
                                 </option>
                             <?php endforeach; ?>
                         </select>
-                        <button class="button secondary" type="button" data-group-load-dialogs>Tải danh sách nhóm</button>
+                        <button class="button secondary" type="button" data-group-load-dialogs>
+                            <i class="fa-solid fa-cloud-arrow-down" aria-hidden="true"></i>
+                            <span>Tải danh sách nhóm</span>
+                        </button>
                     </div>
                     <div class="helper-row group-account-feedback">
-                        <span class="group-dialog-status helper-text" data-group-dialogs-status>Chọn account rồi bấm tải danh sách nhóm.</span>
+                        <span class="group-dialog-status helper-text" data-group-dialogs-status role="status" aria-live="polite">Chọn account rồi bấm tải danh sách nhóm.</span>
                     </div>
                 </div>
 
@@ -354,7 +369,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const generalOption = document.createElement('option');
         generalOption.value = '';
-        generalOption.textContent = 'Topic chung / mặc định';
+        generalOption.textContent = record.topic_id === null
+            ? 'Hãy tải topic từ Telegram trước'
+            : 'Topic chung / mặc định';
         topicSelector.appendChild(generalOption);
 
         if (record.topic_id !== null) {
@@ -380,6 +397,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function normalizeTopicTitle(value) {
         return String(value || '').trim().toLowerCase();
+    }
+
+    function setAsyncButtonState(button, isLoading, loadingLabel) {
+        if (!button) {
+            return;
+        }
+
+        if (!button.dataset.originalHtml) {
+            button.dataset.originalHtml = button.innerHTML;
+        }
+
+        button.disabled = isLoading;
+        button.classList.toggle('is-loading', isLoading);
+        button.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+        button.innerHTML = isLoading
+            ? `<i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i><span>${escapeHtml(loadingLabel)}</span>`
+            : button.dataset.originalHtml;
     }
 
     function dialogTypeLabel(type) {
@@ -481,7 +515,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             groupDialogsStatus.textContent = message;
-            groupDialogsStatus.classList.remove('muted', 'text-success', 'text-danger');
+            groupDialogsStatus.classList.remove('muted', 'text-success', 'text-danger', 'is-loading');
+
+            if (tone === 'loading') {
+                groupDialogsStatus.classList.add('muted', 'is-loading');
+                return;
+            }
 
             if (tone === 'success') {
                 groupDialogsStatus.classList.add('text-success');
@@ -863,13 +902,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            loadDialogsButton.disabled = true;
-            loadDialogsButton.textContent = 'Đang tải...';
-            setGroupDialogsStatus('Đang tải danh sách nhóm từ Telegram...');
+            if (typeof options.onDialogsLoading === 'function') {
+                options.onDialogsLoading();
+            }
+
+            setAsyncButtonState(loadDialogsButton, true, 'Đang tải nhóm...');
+            setGroupDialogsStatus('Đang tải danh sách nhóm từ Telegram...', 'loading');
             setGroupDialogsMeta('Đang đồng bộ dữ liệu nhóm từ Telegram.');
 
             try {
                 const payload = await window.TeleSenderApp.fetchJson(`${dialogsUrl}?account_id=${encodeURIComponent(accountId)}`);
+
+                if (String(accountField?.value || '') !== String(accountId)) {
+                    return;
+                }
+
                 loadedDialogs = mapLoadedDialogs(payload.dialogs);
                 activeDialogFilter = 'all';
                 activePickedPeer = String(peerField?.value || '').trim();
@@ -898,6 +945,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     setGroupDialogsStatus('Telegram không trả về group nào cho account này.', 'danger');
                     setGroupDialogsMeta('Không tìm thấy group nào để hiển thị.');
                     renderDialogList();
+
+                    if (typeof options.onDialogsLoaded === 'function') {
+                        options.onDialogsLoaded(loadedDialogs);
+                    }
+
                     return;
                 }
 
@@ -917,10 +969,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 renderDialogList();
+
+                if (typeof options.onDialogsLoaded === 'function') {
+                    options.onDialogsLoaded(loadedDialogs);
+                }
             } catch (error) {
+                if (String(accountField?.value || '') !== String(accountId)) {
+                    return;
+                }
+
                 const message = error.message || 'Không tải được danh sách nhóm.';
                 setGroupDialogsStatus(message, 'danger');
                 setGroupDialogsMeta('Không tải được danh sách nhóm.');
+
+                if (typeof options.onDialogsFailed === 'function') {
+                    options.onDialogsFailed(error);
+                }
 
                 await requestAppModal('alert', {
                     title: 'Không tải được nhóm',
@@ -929,8 +993,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     confirmClass: 'primary',
                 });
             } finally {
-                loadDialogsButton.disabled = false;
-                loadDialogsButton.textContent = 'Tải danh sách nhóm';
+                setAsyncButtonState(loadDialogsButton, false, 'Đang tải nhóm...');
             }
         });
 
@@ -1089,9 +1152,76 @@ document.addEventListener('DOMContentLoaded', () => {
         const topicSelector = root.querySelector('[data-group-topic-selector]');
         const topicIdField = root.querySelector('[data-group-topic-id]');
         const topicTitleField = root.querySelector('[data-group-topic-title]');
+        const topicsStatus = root.querySelector('[data-group-topics-status]');
+        const submitButton = root.querySelector('[data-group-submit]');
+        const saveRequirement = root.querySelector('[data-group-save-requirement]');
 
-        if (!form || !accountField || !titleField || !peerField || !topicButton || !topicSelector || !topicIdField || !topicTitleField) {
+        if (!form || !accountField || !titleField || !peerField || !topicButton || !topicSelector || !topicIdField || !topicTitleField || !submitButton) {
             return;
+        }
+
+        let dialogsLoaded = false;
+        let topicsLoaded = false;
+
+        function setTopicsStatus(message, tone = 'muted') {
+            if (!topicsStatus) {
+                return;
+            }
+
+            topicsStatus.textContent = message;
+            topicsStatus.classList.remove('muted', 'text-success', 'text-danger', 'is-loading');
+
+            if (tone === 'loading') {
+                topicsStatus.classList.add('muted', 'is-loading');
+            } else if (tone === 'success') {
+                topicsStatus.classList.add('text-success');
+            } else if (tone === 'danger') {
+                topicsStatus.classList.add('text-danger');
+            } else {
+                topicsStatus.classList.add('muted');
+            }
+        }
+
+        function updateSaveAvailability() {
+            const hasAccount = accountField.value !== '';
+            const hasPeer = peerField.value.trim() !== '';
+            const isReady = hasAccount && hasPeer && dialogsLoaded && topicsLoaded;
+            const topicIsLoading = topicButton.getAttribute('aria-busy') === 'true';
+
+            submitButton.disabled = !isReady;
+            submitButton.title = isReady ? '' : 'Hãy tải danh sách nhóm và topic trước khi lưu.';
+            topicButton.disabled = topicIsLoading || !hasAccount || !hasPeer || !dialogsLoaded;
+            topicButton.title = topicButton.disabled && !topicIsLoading
+                ? 'Hãy tải danh sách nhóm và chọn nhóm trước.'
+                : '';
+
+            if (!saveRequirement) {
+                return;
+            }
+
+            saveRequirement.classList.toggle('is-ready', isReady);
+            const icon = saveRequirement.querySelector('i');
+            const label = saveRequirement.querySelector('span');
+
+            if (icon) {
+                icon.className = isReady ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-info';
+            }
+
+            if (!label) {
+                return;
+            }
+
+            if (!hasAccount) {
+                label.textContent = 'Chọn tài khoản Telegram để bắt đầu.';
+            } else if (!dialogsLoaded) {
+                label.textContent = 'Bước 1/2: Tải danh sách nhóm từ Telegram.';
+            } else if (!hasPeer) {
+                label.textContent = 'Chọn một nhóm trong danh sách vừa tải.';
+            } else if (!topicsLoaded) {
+                label.textContent = 'Bước 2/2: Tải topic của nhóm đã chọn.';
+            } else {
+                label.textContent = 'Đã tải đủ nhóm và topic. Có thể lưu cấu hình.';
+            }
         }
 
         function syncTopicFields() {
@@ -1100,12 +1230,13 @@ document.addEventListener('DOMContentLoaded', () => {
             topicTitleField.value = topicSelector.value === '' ? '' : selected.text.replace(/^Topic:\s*/, '').trim();
         }
 
-        function resetTopicSelection() {
+        function resetTopicSelection(message = 'Chọn nhóm rồi tải topic để xác nhận đích gửi.') {
+            topicsLoaded = false;
             topicSelector.innerHTML = '';
 
             const generalOption = document.createElement('option');
             generalOption.value = '';
-            generalOption.textContent = 'Topic chung / mặc định';
+            generalOption.textContent = 'Hãy tải topic từ Telegram trước';
             topicSelector.appendChild(generalOption);
 
             topicSelector.value = '';
@@ -1113,17 +1244,49 @@ document.addEventListener('DOMContentLoaded', () => {
             topicSelector.dataset.currentTopicTitle = '';
             topicIdField.value = '';
             topicTitleField.value = '';
+            setTopicsStatus(message);
+            updateSaveAvailability();
         }
 
         initGroupDialogLoader(root, {
             accountField,
             peerField,
             titleField,
-            onAccountChanged: resetTopicSelection,
-            onPeerChanged: resetTopicSelection,
+            onAccountChanged() {
+                dialogsLoaded = false;
+                resetTopicSelection('Đã đổi tài khoản. Hãy tải lại nhóm, sau đó tải topic.');
+            },
+            onPeerChanged() {
+                resetTopicSelection('Đã đổi nhóm. Hãy tải topic của nhóm này trước khi lưu.');
+            },
+            onDialogsLoading() {
+                dialogsLoaded = false;
+                resetTopicSelection('Đang chờ tải nhóm hoàn tất...');
+                updateSaveAvailability();
+            },
+            onDialogsLoaded(dialogs) {
+                dialogsLoaded = true;
+                updateSaveAvailability();
+
+                if (dialogs.length > 0) {
+                    window.TeleSenderApp.showFlash('success', `Đã tải xong ${dialogs.length} nhóm từ Telegram.`);
+                } else {
+                    window.TeleSenderApp.showFlash('error', 'Đã tải xong nhưng tài khoản này không có nhóm khả dụng.');
+                }
+            },
+            onDialogsFailed(error) {
+                dialogsLoaded = false;
+                updateSaveAvailability();
+                window.TeleSenderApp.showFlash('error', error.message || 'Không tải được danh sách nhóm từ Telegram.');
+            },
         });
 
-        topicSelector.addEventListener('change', syncTopicFields);
+        topicSelector.addEventListener('change', () => {
+            syncTopicFields();
+            updateSaveAvailability();
+        });
+
+        peerField.addEventListener('change', updateSaveAvailability);
 
         topicButton.addEventListener('click', async () => {
             const accountId = accountField.value || '';
@@ -1139,11 +1302,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            topicButton.disabled = true;
-            topicButton.textContent = 'Đang tải...';
+            topicsLoaded = false;
+            updateSaveAvailability();
+            setAsyncButtonState(topicButton, true, 'Đang tải topic...');
+            setTopicsStatus('Đang tải danh sách topic từ Telegram...', 'loading');
 
             try {
                 const payload = await window.TeleSenderApp.fetchJson(`${topicsUrl}?account_id=${encodeURIComponent(accountId)}&peer_identifier=${encodeURIComponent(peerIdentifier)}`);
+
+                if (accountField.value !== accountId || peerField.value.trim() !== peerIdentifier) {
+                    return;
+                }
+
                 const currentTopicId = topicSelector.dataset.currentTopicId || topicIdField.value;
                 const currentTopicTitle = topicSelector.dataset.currentTopicTitle || topicTitleField.value;
                 const currentGeneral = topicSelector.value === '';
@@ -1179,7 +1349,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 syncTopicFields();
+                topicsLoaded = true;
+                updateSaveAvailability();
+
+                const topicCount = Array.isArray(payload.topics) ? payload.topics.length : 0;
+                const successMessage = topicCount > 0
+                    ? `Đã tải xong ${topicCount} topic từ Telegram.`
+                    : 'Nhóm không có topic riêng. Hệ thống sẽ dùng Topic chung / mặc định.';
+
+                setTopicsStatus(successMessage, 'success');
+                window.TeleSenderApp.showFlash('success', successMessage);
             } catch (error) {
+                if (accountField.value !== accountId || peerField.value.trim() !== peerIdentifier) {
+                    return;
+                }
+
+                topicsLoaded = false;
+                updateSaveAvailability();
+                setTopicsStatus(error.message || 'Không tải được danh sách topic.', 'danger');
+                window.TeleSenderApp.showFlash('error', error.message || 'Không tải được danh sách topic.');
+
                 await requestAppModal('alert', {
                     title: 'Không tải được topic',
                     message: error.message || 'Không tải được danh sách topic.',
@@ -1187,19 +1376,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     confirmClass: 'primary',
                 });
             } finally {
-                topicButton.disabled = false;
-                topicButton.textContent = 'Tải topic từ Telegram';
+                setAsyncButtonState(topicButton, false, 'Đang tải topic...');
+                updateSaveAvailability();
             }
         });
 
         form.addEventListener('submit', async (event) => {
             event.preventDefault();
 
+            if (!dialogsLoaded || !topicsLoaded || !accountField.value || !peerField.value.trim()) {
+                updateSaveAvailability();
+                window.TeleSenderApp.showFlash('error', 'Hãy tải danh sách nhóm và topic trước khi lưu.');
+                return;
+            }
+
             await window.TeleSenderApp.submitAjaxForm(form, {
                 closeCrudModalOnSuccess: true,
                 refreshRegionsOnSuccess: ['[data-live-region="groups-panel"]'],
             });
         });
+
+        updateSaveAvailability();
     }
 
     function initGroupImport(root) {
