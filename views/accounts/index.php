@@ -40,7 +40,7 @@
                             'active' => 'Đã kết nối',
                             'password_required' => 'Cần mật khẩu 2FA',
                             'code_sent' => 'Đã gửi OTP',
-                            'draft' => 'Chưa bắt đầu',
+                            'draft' => 'Chưa kết nối',
                             default => ucfirst(str_replace('_', ' ', $status)),
                         };
                         ?>
@@ -59,17 +59,17 @@
 	                        <td><?= e((string) $account['schedules_count']) ?></td>
 	                        <td>
 	                            <div class="status-block">
-                                    <form method="post" action="<?= e(url('/accounts/toggle-active')) ?>" data-ajax-form data-ajax-refresh="accounts-panel">
-                                        <?= csrf_field() ?>
-                                        <input type="hidden" name="account_id" value="<?= e((string) $account['id']) ?>">
-                                        <button class="button <?= $isActive ? 'danger' : 'accent' ?>" type="submit">
-                                            <?= $isActive ? 'Tạm dừng tài khoản' : 'Bật lại tài khoản' ?>
-                                        </button>
-                                    </form>
                                     <?php if ($status === 'active'): ?>
+                                        <form method="post" action="<?= e(url('/accounts/toggle-active')) ?>" data-ajax-form data-ajax-refresh="accounts-panel">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="account_id" value="<?= e((string) $account['id']) ?>">
+                                            <button class="button <?= $isActive ? 'danger' : 'accent' ?>" type="submit">
+                                                <?= $isActive ? 'Tạm dừng tài khoản' : 'Bật lại tài khoản' ?>
+                                            </button>
+                                        </form>
                                         <div class="status-card success">
                                             <div class="status-title"><?= $isActive ? 'Đăng nhập thành công và sẵn sàng hoạt động' : 'Tài khoản đang được tạm dừng' ?></div>
-                                            <div class="small muted">Kết nối gần nhất: <?= e(fmt_datetime($account['last_connected_at'])) ?></div>
+                                            <div class="small muted">Thời gian: <?= e(fmt_datetime($account['last_connected_at'])) ?></div>
                                             <?php if (!$isActive): ?>
                                                 <div class="small muted">Tài khoản đang tạm dừng, các hoạt động sẽ bị bỏ qua.</div>
                                             <?php endif; ?>
@@ -137,8 +137,47 @@
             <input class="input" id="account_modal_name" type="text" name="name" placeholder="Ví dụ: Tài khoản Sale #2" required>
         </div>
         <div class="field">
-            <label for="account_modal_phone">Số điện thoại Telegram</label>
-            <input class="input" id="account_modal_phone" type="text" name="phone_number" placeholder="+8490xxxxxxx" required>
+            <label for="account_modal_phone">Số điện thoại đăng nhập Telegram</label>
+            <div class="phone-input-group">
+                <select class="select" name="country_code" aria-label="Mã quốc gia" required>
+                    <option value="+84" selected>VN +84</option>
+                    <option value="+1">US/CA +1</option>
+                    <option value="+86">CN +86</option>
+                    <option value="+852">HK +852</option>
+                    <option value="+853">MO +853</option>
+                    <option value="+886">TW +886</option>
+                    <option value="+65">SG +65</option>
+                    <option value="+66">TH +66</option>
+                    <option value="+60">MY +60</option>
+                    <option value="+62">ID +62</option>
+                    <option value="+63">PH +63</option>
+                    <option value="+856">LA +856</option>
+                    <option value="+855">KH +855</option>
+                    <option value="+95">MM +95</option>
+                    <option value="+81">JP +81</option>
+                    <option value="+82">KR +82</option>
+                    <option value="+91">IN +91</option>
+                    <option value="+61">AU +61</option>
+                    <option value="+64">NZ +64</option>
+                    <option value="+44">UK +44</option>
+                    <option value="+33">FR +33</option>
+                    <option value="+49">DE +49</option>
+                    <option value="+7">RU +7</option>
+                    <option value="+971">AE +971</option>
+                </select>
+                <input
+                    class="input"
+                    id="account_modal_phone"
+                    type="tel"
+                    name="phone_number"
+                    inputmode="numeric"
+                    autocomplete="tel-national"
+                    placeholder="987654321"
+                    aria-describedby="account_modal_phone_hint"
+                    required
+                >
+            </div>
+            <!-- <div class="small muted" id="account_modal_phone_hint">Có thể nhập 0987654321 hoặc 987654321. Hệ thống sẽ tự bỏ số 0 ở đầu.</div> -->
         </div>
         <div class="actions">
             <button class="button primary" type="submit" data-loading-text="Đang tạo...">Tạo tài khoản</button>
@@ -168,8 +207,41 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        const countryCodeInput = form.querySelector('[name="country_code"]');
+        const phoneInput = form.querySelector('[name="phone_number"]');
+        const phoneError = 'Số điện thoại chỉ được chứa chữ số, ví dụ: 0987654321 hoặc 987654321.';
+
+        const validatePhone = (normalizeInput = false) => {
+            if (!countryCodeInput || !phoneInput) {
+                return true;
+            }
+
+            const normalizedPhone = phoneInput.value.replace(/\s+/g, '').replace(/^0/, '');
+
+            if (normalizeInput && normalizedPhone !== '') {
+                phoneInput.value = normalizedPhone;
+            }
+
+            const fullPhone = `${countryCodeInput.value}${normalizedPhone}`;
+            const isValid = normalizedPhone === '' || (
+                /^[1-9]\d+$/.test(normalizedPhone)
+                && /^\+[1-9]\d{7,14}$/.test(fullPhone)
+            );
+            phoneInput.setCustomValidity(isValid ? '' : phoneError);
+
+            return isValid;
+        };
+
+        countryCodeInput?.addEventListener('change', () => validatePhone());
+        phoneInput?.addEventListener('input', () => validatePhone());
+        phoneInput?.addEventListener('blur', () => validatePhone(true));
+
         form.addEventListener('submit', async (event) => {
             event.preventDefault();
+
+            if (!validatePhone(true) || !form.reportValidity()) {
+                return;
+            }
 
             await window.TeleSenderApp.submitAjaxForm(form, {
                 closeCrudModalOnSuccess: true,
@@ -179,7 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         window.TeleSenderCrudModal.open({
             title: 'Tạo tài khoản Telegram',
-            description: 'Tạo trước tên hiển thị và số điện thoại, sau đó bạn có thể xác thực OTP hoặc 2FA ngay trong danh sách.',
+            description: 'Vui lòng điền chính xác thông tin tài khoản của bạn.',
             size: 'md',
             content: wrapper,
         });

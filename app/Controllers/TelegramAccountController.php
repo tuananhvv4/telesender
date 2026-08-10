@@ -31,11 +31,36 @@ class TelegramAccountController extends Controller
     public function store(Request $request): void
     {
         $name = trim((string) $request->input('name'));
+        $countryCode = trim((string) $request->input('country_code'));
         $phone = trim((string) $request->input('phone_number'));
         $user = auth()->user() ?? [];
 
-        if ($name === '' || $phone === '') {
-            $this->redirectWith('/accounts', error: 'Tên account và số điện thoại là bắt buộc.');
+        if ($name === '' || $countryCode === '' || $phone === '') {
+            $this->redirectWith('/accounts', error: 'Tên account, mã quốc gia và số điện thoại là bắt buộc.');
+        }
+
+        $phone = preg_replace('/\s+/', '', $phone) ?? '';
+        $phone = preg_replace('/^0/', '', $phone) ?? '';
+        $allowedCountryCodes = [
+            '+1', '+7', '+33', '+44', '+49', '+60', '+61', '+62', '+63', '+64', '+65', '+66',
+            '+81', '+82', '+84', '+86', '+91', '+95', '+852', '+853', '+855', '+856', '+886', '+971',
+        ];
+
+        if (!in_array($countryCode, $allowedCountryCodes, true)) {
+            $this->redirectWith('/accounts', error: 'Mã quốc gia không hợp lệ.');
+        }
+
+        if (preg_match('/^[1-9]\d+$/', $phone) !== 1) {
+            $this->redirectWith(
+                '/accounts',
+                error: 'Phần số điện thoại chỉ được chứa chữ số. Ví dụ: chọn +84 rồi nhập 0987654321 hoặc 987654321.',
+            );
+        }
+
+        $phone = $countryCode . $phone;
+
+        if (preg_match('/^\+[1-9]\d{7,14}$/', $phone) !== 1) {
+            $this->redirectWith('/accounts', error: 'Số điện thoại không đúng độ dài quốc tế.');
         }
 
         $limit = auth()->access()->accountLimit($user);

@@ -1078,6 +1078,12 @@ body.sidebar-collapsed .sidebar-logout {
   font-weight: 700;
 }
 
+.phone-input-group {
+  display: grid;
+  grid-template-columns: minmax(112px, 0.32fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
 .builder-block {
   display: grid;
   gap: 16px;
