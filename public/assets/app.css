@@ -547,7 +547,7 @@ body.sidebar-collapsed .sidebar-logout {
   position: fixed;
   top: calc(20px + env(safe-area-inset-top, 0px));
   right: calc(20px + env(safe-area-inset-right, 0px));
-  z-index: 320;
+  z-index: 1000;
   width: min(420px, calc(100vw - 32px));
   display: grid;
   gap: 12px;
@@ -600,7 +600,7 @@ body.sidebar-collapsed .sidebar-logout {
 .app-modal {
   position: fixed;
   inset: 0;
-  z-index: 120;
+  z-index: 900;
   display: grid;
   place-items: center;
   padding: 20px;
@@ -673,7 +673,7 @@ body.sidebar-collapsed .sidebar-logout {
 .crud-modal {
   position: fixed;
   inset: 0;
-  z-index: 130;
+  z-index: 800;
   display: grid;
   place-items: center;
   padding: 24px;
@@ -3741,7 +3741,7 @@ body {
 
 body > .toast-stack {
   position: fixed;
-  z-index: 320;
+  z-index: 1000;
 }
 
 .shell {

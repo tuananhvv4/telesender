@@ -191,38 +191,6 @@ if ($isSuperAdmin) {
             </header>
 
             <div class="main-content">
-                <div class="toast-stack" id="app_toast_stack" aria-live="polite" aria-atomic="true">
-                    <?php if ($success = flash('success')): ?>
-                        <div class="toast success" role="status">
-                            <div class="toast-icon" aria-hidden="true"><i class="fa-solid fa-circle-check"></i></div>
-                            <div class="toast-content">
-                                <strong class="toast-title">Thành công</strong>
-                                <div class="toast-message"><?= e($success) ?></div>
-                            </div>
-                            <button class="toast-dismiss" type="button" data-toast-close aria-label="Đóng thông báo">
-                                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                            </button>
-                            <div class="toast-progress" aria-hidden="true">
-                                <div class="toast-progress-bar" data-toast-progress-bar></div>
-                            </div>
-                        </div>
-                    <?php endif; ?>
-                    <?php if ($error = flash('error')): ?>
-                        <div class="toast error" role="alert">
-                            <div class="toast-icon" aria-hidden="true"><i class="fa-solid fa-circle-exclamation"></i></div>
-                            <div class="toast-content">
-                                <strong class="toast-title">Có lỗi xảy ra</strong>
-                                <div class="toast-message"><?= e($error) ?></div>
-                            </div>
-                            <button class="toast-dismiss" type="button" data-toast-close aria-label="Đóng thông báo">
-                                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                            </button>
-                            <div class="toast-progress" aria-hidden="true">
-                                <div class="toast-progress-bar" data-toast-progress-bar></div>
-                            </div>
-                        </div>
-                    <?php endif; ?>
-                </div>
                 <?= $content ?>
             </div>
 
@@ -259,6 +227,39 @@ if ($isSuperAdmin) {
                 </div>
             </footer>
         </main>
+    </div>
+
+    <div class="toast-stack" id="app_toast_stack" aria-live="polite" aria-atomic="true">
+        <?php if ($success = flash('success')): ?>
+            <div class="toast success" role="status">
+                <div class="toast-icon" aria-hidden="true"><i class="fa-solid fa-circle-check"></i></div>
+                <div class="toast-content">
+                    <strong class="toast-title">Thành công</strong>
+                    <div class="toast-message"><?= e($success) ?></div>
+                </div>
+                <button class="toast-dismiss" type="button" data-toast-close aria-label="Đóng thông báo">
+                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                </button>
+                <div class="toast-progress" aria-hidden="true">
+                    <div class="toast-progress-bar" data-toast-progress-bar></div>
+                </div>
+            </div>
+        <?php endif; ?>
+        <?php if ($error = flash('error')): ?>
+            <div class="toast error" role="alert">
+                <div class="toast-icon" aria-hidden="true"><i class="fa-solid fa-circle-exclamation"></i></div>
+                <div class="toast-content">
+                    <strong class="toast-title">Có lỗi xảy ra</strong>
+                    <div class="toast-message"><?= e($error) ?></div>
+                </div>
+                <button class="toast-dismiss" type="button" data-toast-close aria-label="Đóng thông báo">
+                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                </button>
+                <div class="toast-progress" aria-hidden="true">
+                    <div class="toast-progress-bar" data-toast-progress-bar></div>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
 
     <div class="app-modal" id="app_modal" hidden aria-hidden="true">

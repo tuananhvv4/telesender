@@ -508,6 +508,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let loadedDialogs = [];
         let activeDialogFilter = 'all';
         let activePickedPeer = String(peerField?.value || '').trim();
+        let dialogsRequestSequence = 0;
 
         function setGroupDialogsStatus(message, tone = 'muted') {
             if (!groupDialogsStatus) {
@@ -819,6 +820,7 @@ document.addEventListener('DOMContentLoaded', () => {
         function clearLoadedDialogs(emptyMessage, statusMessage = 'Chọn account rồi bấm tải danh sách nhóm.', config = {}) {
             loadedDialogs = [];
             activeDialogFilter = 'all';
+            setLoadDialogsButtonLabel(false);
 
             if (groupDialogsSearch) {
                 groupDialogsSearch.value = '';
@@ -889,32 +891,88 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        loadDialogsButton?.addEventListener('click', async () => {
+        function setLoadDialogsButtonLabel(hasLoadedDialogs) {
+            if (!loadDialogsButton) {
+                return;
+            }
+
+            const label = hasLoadedDialogs ? 'Tải lại danh sách nhóm' : 'Tải danh sách nhóm';
+            const icon = hasLoadedDialogs ? 'fa-arrows-rotate' : 'fa-cloud-arrow-down';
+            const html = `<i class="fa-solid ${icon}" aria-hidden="true"></i><span>${label}</span>`;
+            loadDialogsButton.dataset.originalHtml = html;
+
+            if (loadDialogsButton.getAttribute('aria-busy') !== 'true') {
+                loadDialogsButton.innerHTML = html;
+            }
+        }
+
+        function cacheRemainingMinutes(expiresAt) {
+            const expiresAtMs = Date.parse(String(expiresAt || ''));
+
+            if (!Number.isFinite(expiresAtMs)) {
+                return 5;
+            }
+
+            return Math.max(1, Math.ceil((expiresAtMs - Date.now()) / 60000));
+        }
+
+        async function loadDialogs(config = {}) {
             const accountId = accountField?.value || '';
+            const cacheOnly = config.cacheOnly === true;
+            const forceRefresh = config.forceRefresh === true;
+            const quiet = config.quiet === true;
+            const requestSequence = ++dialogsRequestSequence;
 
             if (!accountId) {
+                if (quiet) {
+                    return false;
+                }
+
                 await requestAppModal('alert', {
                     title: 'Thiếu tài khoản',
                     message: 'Hãy chọn tài khoản Telegram trước khi tải danh sách nhóm.',
                     confirmText: 'Đã hiểu',
                     confirmClass: 'primary',
                 });
-                return;
+                return false;
             }
 
-            if (typeof options.onDialogsLoading === 'function') {
+            if (!cacheOnly && typeof options.onDialogsLoading === 'function') {
                 options.onDialogsLoading();
             }
 
-            setAsyncButtonState(loadDialogsButton, true, 'Đang tải nhóm...');
-            setGroupDialogsStatus('Đang tải danh sách nhóm từ Telegram...', 'loading');
-            setGroupDialogsMeta('Đang đồng bộ dữ liệu nhóm từ Telegram.');
+            setAsyncButtonState(loadDialogsButton, true, cacheOnly ? 'Đang kiểm tra cache...' : 'Đang tải nhóm...');
+            setGroupDialogsStatus(
+                cacheOnly ? 'Đang kiểm tra danh sách nhóm đã tải gần đây...' : 'Đang tải danh sách nhóm mới nhất từ Telegram...',
+                'loading'
+            );
+            setGroupDialogsMeta(cacheOnly ? 'Đang kiểm tra cache 5 phút của tài khoản.' : 'Đang đồng bộ dữ liệu nhóm từ Telegram.');
 
             try {
-                const payload = await window.TeleSenderApp.fetchJson(`${dialogsUrl}?account_id=${encodeURIComponent(accountId)}`);
+                const query = new URLSearchParams({ account_id: accountId });
+
+                if (cacheOnly) {
+                    query.set('cache_only', '1');
+                }
+
+                if (forceRefresh) {
+                    query.set('refresh', '1');
+                    query.set('_', String(Date.now()));
+                }
+
+                const payload = await window.TeleSenderApp.fetchJson(`${dialogsUrl}?${query.toString()}`, {
+                    cache: 'no-store',
+                });
 
                 if (String(accountField?.value || '') !== String(accountId)) {
-                    return;
+                    return false;
+                }
+
+                if (cacheOnly && payload.cache_available === false) {
+                    setLoadDialogsButtonLabel(false);
+                    setGroupDialogsStatus('Chưa có danh sách nhóm được cache cho tài khoản này. Bấm "Tải danh sách nhóm" để lấy từ Telegram.');
+                    setGroupDialogsMeta('Cache sẽ được giữ trong 5 phút sau lần tải đầu tiên.');
+                    return false;
                 }
 
                 loadedDialogs = mapLoadedDialogs(payload.dialogs);
@@ -944,57 +1002,81 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     setGroupDialogsStatus('Telegram không trả về group nào cho account này.', 'danger');
                     setGroupDialogsMeta('Không tìm thấy group nào để hiển thị.');
+                    setLoadDialogsButtonLabel(true);
                     renderDialogList();
 
                     if (typeof options.onDialogsLoaded === 'function') {
-                        options.onDialogsLoaded(loadedDialogs);
+                        options.onDialogsLoaded(loadedDialogs, {
+                            cacheHit: Boolean(payload.cache_hit),
+                            announce: !quiet,
+                        });
                     }
 
-                    return;
+                    return true;
                 }
+
+                const cacheMessage = payload.cache_hit
+                    ? `Đang dùng dữ liệu tạm thời còn khoảng ${cacheRemainingMinutes(payload.expires_at)} phút. Bấm "Tải lại danh sách nhóm" để lấy dữ liệu mới nhất.`
+                    : 'Đã lấy dữ liệu mới nhất từ Telegram và lưu tạm thời trong 5 phút.';
 
                 if (peerField) {
                     populatePeerSelector();
                     syncPeerSummary();
                     setGroupDialogsStatus(
                         activePickedPeer !== '' && loadedDialogs.some((dialog) => dialog.peer_identifier === activePickedPeer)
-                            ? `Đã tải ${loadedDialogs.length} nhóm và giữ nguyên nhóm đang chọn.`
+                            ? `Đã tải ${loadedDialogs.length} nhóm và giữ nguyên nhóm đang chọn. ${cacheMessage}`
                             : activePickedPeer !== ''
-                                ? `Đã tải ${loadedDialogs.length} nhóm. Nhóm hiện tại không còn trong danh sách Telegram, bạn có thể chọn lại nếu cần.`
-                                : `Đã tải ${loadedDialogs.length} nhóm. Chọn một nhóm trong dropdown phía trên.`,
+                                ? `Đã tải ${loadedDialogs.length} nhóm. Nhóm hiện tại không còn trong danh sách Telegram, bạn có thể chọn lại nếu cần. ${cacheMessage}`
+                                : `Đã tải ${loadedDialogs.length} nhóm. Chọn một nhóm trong dropdown phía trên. ${cacheMessage}`,
                         'success'
                     );
                 } else {
-                    setGroupDialogsStatus(`Đã tải ${loadedDialogs.length} nhóm. Tick các nhóm cần import nhanh.`, 'success');
+                    setGroupDialogsStatus(`Đã tải ${loadedDialogs.length} nhóm. Tick các nhóm cần import nhanh. ${cacheMessage}`, 'success');
                 }
 
+                setLoadDialogsButtonLabel(true);
                 renderDialogList();
 
                 if (typeof options.onDialogsLoaded === 'function') {
-                    options.onDialogsLoaded(loadedDialogs);
+                    options.onDialogsLoaded(loadedDialogs, {
+                        cacheHit: Boolean(payload.cache_hit),
+                        announce: !quiet,
+                    });
                 }
+
+                return true;
             } catch (error) {
                 if (String(accountField?.value || '') !== String(accountId)) {
-                    return;
+                    return false;
                 }
 
                 const message = error.message || 'Không tải được danh sách nhóm.';
                 setGroupDialogsStatus(message, 'danger');
                 setGroupDialogsMeta('Không tải được danh sách nhóm.');
 
-                if (typeof options.onDialogsFailed === 'function') {
+                if (!quiet && typeof options.onDialogsFailed === 'function') {
                     options.onDialogsFailed(error);
                 }
 
-                await requestAppModal('alert', {
-                    title: 'Không tải được nhóm',
-                    message,
-                    confirmText: 'Đã hiểu',
-                    confirmClass: 'primary',
-                });
+                if (!quiet) {
+                    await requestAppModal('alert', {
+                        title: 'Không tải được nhóm',
+                        message,
+                        confirmText: 'Đã hiểu',
+                        confirmClass: 'primary',
+                    });
+                }
+
+                return false;
             } finally {
-                setAsyncButtonState(loadDialogsButton, false, 'Đang tải nhóm...');
+                if (requestSequence === dialogsRequestSequence) {
+                    setAsyncButtonState(loadDialogsButton, false, cacheOnly ? 'Đang kiểm tra cache...' : 'Đang tải nhóm...');
+                }
             }
+        }
+
+        loadDialogsButton?.addEventListener('click', () => {
+            void loadDialogs({ forceRefresh: true });
         });
 
         accountField?.addEventListener('change', () => {
@@ -1020,6 +1102,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         : 'Chọn account rồi bấm tải danh sách nhóm',
                 }
             );
+
+            if (accountField.value) {
+                void loadDialogs({ cacheOnly: true, quiet: true });
+            }
         });
 
         peerField?.addEventListener('change', () => {
@@ -1141,6 +1227,10 @@ document.addEventListener('DOMContentLoaded', () => {
             accountField?.value ? 'Sẵn sàng tải danh sách nhóm.' : 'Chọn account rồi bấm tải danh sách nhóm.'
         );
         syncPeerSummary();
+
+        if (accountField?.value) {
+            void loadDialogs({ cacheOnly: true, quiet: true });
+        }
     }
 
     function initGroupEditor(root) {
@@ -1264,14 +1354,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 resetTopicSelection('Đang chờ tải nhóm hoàn tất...');
                 updateSaveAvailability();
             },
-            onDialogsLoaded(dialogs) {
+            onDialogsLoaded(dialogs, metadata = {}) {
                 dialogsLoaded = true;
+                setTopicsStatus(
+                    peerField.value.trim() !== ''
+                        ? 'Danh sách nhóm đã sẵn sàng. Hãy tải topic của nhóm đang chọn.'
+                        : 'Danh sách nhóm đã sẵn sàng. Chọn một nhóm rồi tải topic.'
+                );
                 updateSaveAvailability();
 
-                if (dialogs.length > 0) {
-                    window.TeleSenderApp.showFlash('success', `Đã tải xong ${dialogs.length} nhóm từ Telegram.`);
-                } else {
-                    window.TeleSenderApp.showFlash('error', 'Đã tải xong nhưng tài khoản này không có nhóm khả dụng.');
+                if (metadata.announce !== false) {
+                    if (dialogs.length > 0) {
+                        window.TeleSenderApp.showFlash(
+                            'success',
+                            metadata.cacheHit
+                                ? `Đã dùng danh sách ${dialogs.length} nhóm trong cache.`
+                                : `Đã tải mới ${dialogs.length} nhóm từ Telegram.`
+                        );
+                    } else {
+                        window.TeleSenderApp.showFlash('error', 'Đã tải xong nhưng tài khoản này không có nhóm khả dụng.');
+                    }
                 }
             },
             onDialogsFailed(error) {

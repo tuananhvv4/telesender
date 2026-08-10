@@ -9,6 +9,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Models\TelegramAccount;
 use App\Models\TelegramGroup;
+use App\Services\TelegramGroupDialogCache;
 use App\Services\TelegramService;
 use RuntimeException;
 
@@ -16,7 +17,8 @@ class TelegramGroupController extends Controller
 {
     public function __construct(
         private readonly TelegramGroup $groups = new TelegramGroup(),
-        private readonly TelegramAccount $accounts = new TelegramAccount()
+        private readonly TelegramAccount $accounts = new TelegramAccount(),
+        private readonly TelegramGroupDialogCache $dialogCache = new TelegramGroupDialogCache()
     ) {
     }
 
@@ -130,6 +132,8 @@ class TelegramGroupController extends Controller
     {
         $userId = (int) auth()->id();
         $accountId = (int) $request->query('account_id');
+        $forceRefresh = (string) $request->query('refresh', '') === '1';
+        $cacheOnly = (string) $request->query('cache_only', '') === '1';
 
         if ($accountId <= 0) {
             Response::json([
@@ -142,8 +146,26 @@ class TelegramGroupController extends Controller
 
         try {
             $this->ensureReadyAccountSession($account);
+            $cached = $forceRefresh ? null : $this->dialogCache->get($userId, $accountId);
+            $cacheHit = $cached !== null;
 
-            $dialogs = (new TelegramService())->getAvailableGroups($account);
+            if ($cached === null && $cacheOnly) {
+                Response::json([
+                    'ok' => true,
+                    'dialogs' => [],
+                    'cache_hit' => false,
+                    'cache_available' => false,
+                    'cache_ttl_seconds' => TelegramGroupDialogCache::TTL_SECONDS,
+                ]);
+            }
+
+            if ($cached !== null) {
+                $dialogs = $cached['dialogs'];
+            } else {
+                $dialogs = (new TelegramService())->getAvailableGroups($account);
+                $cached = $this->dialogCache->put($userId, $accountId, $dialogs);
+            }
+
             $usageSummary = $this->groups->peerUsageSummaryForAccount($userId, $accountId);
 
             foreach ($dialogs as &$dialog) {
@@ -161,6 +183,11 @@ class TelegramGroupController extends Controller
             Response::json([
                 'ok' => true,
                 'dialogs' => $dialogs,
+                'cache_hit' => $cacheHit,
+                'cache_available' => true,
+                'cached_at' => gmdate(DATE_ATOM, (int) $cached['cached_at']),
+                'expires_at' => gmdate(DATE_ATOM, (int) $cached['expires_at']),
+                'cache_ttl_seconds' => TelegramGroupDialogCache::TTL_SECONDS,
             ]);
         } catch (\Throwable $exception) {
             Response::json([
