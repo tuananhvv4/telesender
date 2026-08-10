@@ -18,6 +18,10 @@ class SystemController extends Controller
     {
         $this->guardToken((string) $request->query('token'), (string) config('services.tokens.cron'));
 
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
+        }
+
         $service = new SchedulerService(app()->db(), new TelegramService(), new CronExpression());
         Response::json([
             'ok' => true,

@@ -9,6 +9,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Models\TelegramAccount;
 use App\Models\TelegramGroup;
+use App\Models\ScheduleJob;
 use App\Services\TelegramGroupDialogCache;
 use App\Services\TelegramService;
 use RuntimeException;
@@ -18,7 +19,8 @@ class TelegramGroupController extends Controller
     public function __construct(
         private readonly TelegramGroup $groups = new TelegramGroup(),
         private readonly TelegramAccount $accounts = new TelegramAccount(),
-        private readonly TelegramGroupDialogCache $dialogCache = new TelegramGroupDialogCache()
+        private readonly TelegramGroupDialogCache $dialogCache = new TelegramGroupDialogCache(),
+        private readonly ScheduleJob $schedules = new ScheduleJob()
     ) {
     }
 
@@ -76,12 +78,29 @@ class TelegramGroupController extends Controller
             abort404();
         }
 
+        if ($this->schedules->hasLockedSchedulesForGroup($groupId)) {
+            $this->redirectWith('/groups', error: 'Nhóm đang được sử dụng trong một lượt gửi. Hãy thử cập nhật lại sau vài phút.');
+        }
+
         $payload = $this->validatedGroupInput($request, $userId, '/groups', $groupId);
 
-        $this->groups->updateById($groupId, [
-            ...$payload,
-            'updated_at' => gmdate('Y-m-d H:i:s'),
-        ]);
+        if (
+            (int) $group['telegram_account_id'] !== (int) $payload['telegram_account_id']
+            && $this->schedules->hasSchedulesForGroup($groupId)
+        ) {
+            $this->redirectWith('/groups', error: 'Nhóm này đang được sử dụng trong lịch gửi. Hãy gỡ nhóm khỏi các lịch trước khi chuyển sang tài khoản khác.');
+        }
+
+        app()->db()->transaction(function () use ($groupId, $payload): void {
+            $this->groups->updateById($groupId, [
+                ...$payload,
+                'updated_at' => gmdate('Y-m-d H:i:s'),
+            ]);
+
+            if (!(bool) $payload['is_active']) {
+                $this->schedules->pauseSchedulesWithoutActiveGroupsForGroup($groupId);
+            }
+        });
 
         $this->redirectWith('/groups', success: 'Đã cập nhật nhóm Telegram.');
     }
@@ -94,7 +113,15 @@ class TelegramGroupController extends Controller
             abort404();
         }
 
-        $this->groups->deleteById((int) $group['id']);
+        if ($this->schedules->hasLockedSchedulesForGroup((int) $group['id'])) {
+            $this->redirectWith('/groups', error: 'Nhóm đang được sử dụng trong một lượt gửi. Hãy thử xóa lại sau vài phút.');
+        }
+
+        app()->db()->transaction(function () use ($group): void {
+            $groupId = (int) $group['id'];
+            $this->schedules->reassignPrimaryGroupBeforeDelete($groupId);
+            $this->groups->deleteById($groupId);
+        });
         $this->redirectWith('/groups', success: 'Đã xóa nhóm Telegram.');
     }
 

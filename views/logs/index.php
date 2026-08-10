@@ -36,14 +36,25 @@ foreach ($logs as $log) {
         <div class="panel-body logs-feed listing-body">
             <?php foreach ($logs as $log): ?>
                 <?php
-                $statusLabel = $log['status'] === 'success' ? 'Thành công' : 'Thất bại';
+                $statusLabel = match ((string) $log['status']) {
+                    'success' => 'Thành công',
+                    'processing' => 'Đang gửi',
+                    'guarded' => 'Tạm hoãn',
+                    default => 'Thất bại',
+                };
+                $statusClass = match ((string) $log['status']) {
+                    'success' => 'success',
+                    'processing' => 'info',
+                    'guarded' => 'warning',
+                    default => 'danger',
+                };
                 $messagePreview = trim((string) ($log['message_preview'] ?? ''));
                 $templateName = trim((string) ($log['template_name'] ?? ''));
                 ?>
                 <article class="log-card">
                     <div class="log-card-head">
                         <div class="inline-actions">
-                            <span class="badge <?= $log['status'] === 'success' ? 'success' : 'danger' ?>"><?= e($statusLabel) ?></span>
+                            <span class="badge <?= e($statusClass) ?>"><?= e($statusLabel) ?></span>
                             <span class="log-meta-pill"><?= e(fmt_datetime($log['sent_at'])) ?></span>
                             <!-- <span class="log-meta-pill mono"><?= e($log['request_id']) ?></span> -->
                         </div>

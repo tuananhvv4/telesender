@@ -36,18 +36,21 @@ class SchedulerService
             'SELECT sj.*, ta.name AS account_name, ta.phone_number, ta.session_name, ta.session_status,
                     ta.last_sent_at, ta.cooldown_until, ta.cooldown_reason, ta.is_active AS account_active,
                     u.role AS owner_role, u.status AS owner_status, u.subscription_expires_at AS owner_subscription_expires_at,
-                    tg.title AS group_title, tg.peer_identifier, tg.topic_id, tg.topic_title,
                     mt.name AS template_name, mt.body, mt.parse_mode, mt.label_id
              FROM schedule_jobs sj
              INNER JOIN users u ON u.id = sj.user_id
              INNER JOIN telegram_accounts ta ON ta.id = sj.telegram_account_id
-             INNER JOIN telegram_groups tg ON tg.id = sj.telegram_group_id
              INNER JOIN message_templates mt ON mt.id = sj.message_template_id
              WHERE sj.status = :status
                AND u.status = \'active\'
                AND (u.role = \'super_admin\' OR u.subscription_expires_at IS NULL OR u.subscription_expires_at >= UTC_TIMESTAMP())
                AND ta.is_active = 1
-               AND tg.is_active = 1
+               AND EXISTS (
+                   SELECT 1
+                   FROM schedule_job_groups sjg
+                   INNER JOIN telegram_groups target_group ON target_group.id = sjg.telegram_group_id
+                   WHERE sjg.schedule_job_id = sj.id AND target_group.is_active = 1
+               )
                AND mt.is_active = 1
                AND sj.next_run_at IS NOT NULL
                AND sj.next_run_at <= UTC_TIMESTAMP()
@@ -61,6 +64,7 @@ class SchedulerService
         $jobsByAccount = [];
 
         foreach ($jobs as $job) {
+            $job = $this->hydrateTargetGroups($job);
             $jobsByAccount[(int) $job['telegram_account_id']][] = $job;
         }
 
@@ -69,6 +73,15 @@ class SchedulerService
             $job = $accountJobs[0] ?? null;
 
             if ($job === null || !$this->isDueNow((string) ($job['next_run_at'] ?? ''), $now)) {
+                continue;
+            }
+
+            if (!$this->lockAccount((int) $job['telegram_account_id'])) {
+                continue;
+            }
+
+            if (!$this->lockJob((int) $job['id'])) {
+                $this->releaseAccountLock((int) $job['telegram_account_id']);
                 continue;
             }
 
@@ -84,12 +97,10 @@ class SchedulerService
             'SELECT sj.*, ta.name AS account_name, ta.phone_number, ta.session_name, ta.session_status,
                     ta.last_sent_at, ta.cooldown_until, ta.cooldown_reason, ta.is_active AS account_active,
                     u.role AS owner_role, u.status AS owner_status, u.subscription_expires_at AS owner_subscription_expires_at,
-                    tg.title AS group_title, tg.peer_identifier, tg.topic_id, tg.topic_title, tg.is_active AS group_active,
                     mt.name AS template_name, mt.body, mt.parse_mode, mt.label_id, mt.is_active AS template_active
              FROM schedule_jobs sj
              INNER JOIN users u ON u.id = sj.user_id
              INNER JOIN telegram_accounts ta ON ta.id = sj.telegram_account_id
-             INNER JOIN telegram_groups tg ON tg.id = sj.telegram_group_id
              INNER JOIN message_templates mt ON mt.id = sj.message_template_id
              WHERE sj.id = :id
                AND sj.user_id = :user_id
@@ -104,8 +115,10 @@ class SchedulerService
             throw new RuntimeException('Không tìm thấy schedule cần gửi.');
         }
 
-        if (!(bool) $job['group_active']) {
-            throw new RuntimeException('Nhóm Telegram này đang tắt, chưa thể gửi ngay.');
+        $job = $this->hydrateTargetGroups($job);
+
+        if (($job['target_groups'] ?? []) === []) {
+            throw new RuntimeException('Lịch này không còn nhóm Telegram đang hoạt động để gửi.');
         }
 
         if (!(bool) $job['template_active']) {
@@ -121,10 +134,22 @@ class SchedulerService
             throw new RuntimeException($ownerStateError);
         }
 
-        if (!$this->lockJob((int) $job['id'])) {
+        if (!$this->lockAccount((int) $job['telegram_account_id'])) {
             return [
                 'schedule_id' => (int) $job['id'],
-                'group' => $job['group_title'],
+                'group' => $this->targetGroupSummary($job),
+                'account' => $job['account_name'],
+                'status' => 'locked',
+                'next_run_at' => (string) ($job['next_run_at'] ?? ''),
+                'error' => 'Telegram account đang được sử dụng bởi một lượt gửi khác. Hãy thử lại sau ít phút.',
+            ];
+        }
+
+        if (!$this->lockJob((int) $job['id'])) {
+            $this->releaseAccountLock((int) $job['telegram_account_id']);
+            return [
+                'schedule_id' => (int) $job['id'],
+                'group' => $this->targetGroupSummary($job),
                 'account' => $job['account_name'],
                 'status' => 'locked',
                 'next_run_at' => (string) ($job['next_run_at'] ?? ''),
@@ -132,10 +157,16 @@ class SchedulerService
             ];
         }
 
-        return $this->dispatchOne($job, new DateTimeImmutable('now', new DateTimeZone('UTC')), true, $force);
+        return $this->dispatchOne(
+            $job,
+            new DateTimeImmutable('now', new DateTimeZone('UTC')),
+            true,
+            $force,
+            'manual_' . bin2hex(random_bytes(16))
+        );
     }
 
-    public function analyzeScheduleRisk(string $expression, string $timezone): array
+    public function analyzeScheduleRisk(string $expression, string $timezone, int $targetCount = 1): array
     {
         $localNow = new DateTimeImmutable('now', new DateTimeZone($timezone));
         $cursor = $localNow;
@@ -153,7 +184,27 @@ class SchedulerService
         $runsPerDay = count(array_filter(
             $occurrences,
             static fn (DateTimeImmutable $occurrence): bool => $occurrence <= $localNow->modify('+24 hours')
+        )) * max(1, $targetCount);
+        $occurrencesInDay = array_values(array_filter(
+            $occurrences,
+            static fn (DateTimeImmutable $occurrence): bool => $occurrence <= $localNow->modify('+24 hours')
         ));
+        $maxRunsPerHour = $occurrences !== [] ? max(1, $targetCount) : 0;
+        $windowStart = 0;
+
+        for ($windowEnd = 0, $length = count($occurrencesInDay); $windowEnd < $length; $windowEnd++) {
+            while (
+                $windowStart < $windowEnd
+                && ($occurrencesInDay[$windowEnd]->getTimestamp() - $occurrencesInDay[$windowStart]->getTimestamp()) >= 3600
+            ) {
+                $windowStart++;
+            }
+
+            $maxRunsPerHour = max(
+                $maxRunsPerHour,
+                ($windowEnd - $windowStart + 1) * max(1, $targetCount)
+            );
+        }
 
         $minGapMinutes = null;
         for ($i = 1, $length = count($occurrences); $i < $length; $i++) {
@@ -166,11 +217,16 @@ class SchedulerService
         $warnRuns = (int) config('safety.schedule_limits.warn_runs_per_day', 12);
         $highGap = (int) config('safety.schedule_limits.high_min_gap_minutes', 30);
         $warnGap = (int) config('safety.schedule_limits.warn_min_gap_minutes', 60);
+        $hourlyLimit = (int) config('safety.account_limits.max_success_per_hour', 6);
+        $dailyLimit = (int) config('safety.account_limits.max_success_per_day', 30);
 
         $risk = 'safe';
         $message = 'Mật độ lịch gửi đang ở mức an toàn.';
 
-        if ($runsPerDay > $blockRuns || ($minGapMinutes !== null && $minGapMinutes < $highGap)) {
+        if ($maxRunsPerHour > $hourlyLimit || $runsPerDay > $dailyLimit) {
+            $risk = 'blocked';
+            $message = 'Số lượt gửi theo nhóm vượt giới hạn an toàn của account theo giờ hoặc theo ngày. Hãy giảm số nhóm hoặc giãn lịch.';
+        } elseif ($runsPerDay > $blockRuns || ($minGapMinutes !== null && $minGapMinutes < $highGap)) {
             $risk = 'blocked';
             $message = 'Lịch này quá dày, dễ chạm anti-spam. Hãy giãn cách thêm trước khi lưu.';
         } elseif ($runsPerDay > $highRuns) {
@@ -184,6 +240,7 @@ class SchedulerService
         return [
             'risk' => $risk,
             'runs_per_day' => $runsPerDay,
+            'max_runs_per_hour' => $maxRunsPerHour,
             'min_gap_minutes' => $minGapMinutes,
             'message' => $message,
         ];
@@ -225,6 +282,13 @@ class SchedulerService
 
         for ($i = 1, $length = count($occurrences); $i < $length; $i++) {
             $gap = (int) floor(($occurrences[$i]['utc']->getTimestamp() - $occurrences[$i - 1]['utc']->getTimestamp()) / 60);
+            $sameBatch = (string) ($occurrences[$i]['batch_key'] ?? '') !== ''
+                && (string) ($occurrences[$i]['batch_key'] ?? '') === (string) ($occurrences[$i - 1]['batch_key'] ?? '');
+
+            if ($sameBatch) {
+                continue;
+            }
+
             $minGapMinutes = $minGapMinutes === null ? $gap : min($minGapMinutes, $gap);
 
             if ($gap < $minGapLimit) {
@@ -298,15 +362,81 @@ class SchedulerService
 
     private function lockJob(int $jobId): bool
     {
+        $lockMinutes = max(1, (int) config('safety.account_limits.dispatch_lock_minutes', 5));
         $statement = $this->db->query(
             'UPDATE schedule_jobs
-             SET dispatch_locked_until = DATE_ADD(UTC_TIMESTAMP(), INTERVAL 5 MINUTE)
+             SET dispatch_locked_until = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ' . $lockMinutes . ' MINUTE)
              WHERE id = :id
                AND (dispatch_locked_until IS NULL OR dispatch_locked_until < UTC_TIMESTAMP())',
             ['id' => $jobId]
         );
 
         return $statement->rowCount() === 1;
+    }
+
+    private function lockAccount(int $accountId): bool
+    {
+        $lockMinutes = max(1, (int) config('safety.account_limits.dispatch_lock_minutes', 5));
+        $statement = $this->db->query(
+            'UPDATE telegram_accounts
+             SET dispatch_locked_until = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ' . $lockMinutes . ' MINUTE)
+             WHERE id = :id
+               AND (dispatch_locked_until IS NULL OR dispatch_locked_until < UTC_TIMESTAMP())',
+            ['id' => $accountId]
+        );
+
+        return $statement->rowCount() === 1;
+    }
+
+    private function releaseAccountLock(int $accountId): void
+    {
+        $this->db->update('telegram_accounts', [
+            'dispatch_locked_until' => null,
+        ], 'id = :id', ['id' => $accountId]);
+    }
+
+    private function refreshJobLock(int $jobId): void
+    {
+        $lockMinutes = max(1, (int) config('safety.account_limits.dispatch_lock_minutes', 5));
+        $this->db->query(
+            'UPDATE schedule_jobs
+             SET dispatch_locked_until = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ' . $lockMinutes . ' MINUTE)
+             WHERE id = :id
+               AND dispatch_locked_until >= UTC_TIMESTAMP()',
+            ['id' => $jobId]
+        );
+
+        $lock = $this->db->fetch(
+            'SELECT dispatch_locked_until FROM schedule_jobs WHERE id = :id LIMIT 1',
+            ['id' => $jobId]
+        );
+        $lockedUntil = $this->nullableDate((string) ($lock['dispatch_locked_until'] ?? ''));
+
+        if ($lockedUntil === null || $lockedUntil < new DateTimeImmutable('now', new DateTimeZone('UTC'))) {
+            throw new RuntimeException('Schedule đã mất khóa xử lý; dừng lượt gửi để tránh gửi trùng.');
+        }
+    }
+
+    private function refreshAccountLock(int $accountId): void
+    {
+        $lockMinutes = max(1, (int) config('safety.account_limits.dispatch_lock_minutes', 5));
+        $this->db->query(
+            'UPDATE telegram_accounts
+             SET dispatch_locked_until = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ' . $lockMinutes . ' MINUTE)
+             WHERE id = :id
+               AND dispatch_locked_until >= UTC_TIMESTAMP()',
+            ['id' => $accountId]
+        );
+
+        $lock = $this->db->fetch(
+            'SELECT dispatch_locked_until FROM telegram_accounts WHERE id = :id LIMIT 1',
+            ['id' => $accountId]
+        );
+        $lockedUntil = $this->nullableDate((string) ($lock['dispatch_locked_until'] ?? ''));
+
+        if ($lockedUntil === null || $lockedUntil < new DateTimeImmutable('now', new DateTimeZone('UTC'))) {
+            throw new RuntimeException('Telegram account đã mất khóa xử lý; dừng lượt gửi để tránh gửi chồng nhau.');
+        }
     }
 
     private function collectAccountOccurrences(array $schedules): array
@@ -324,6 +454,9 @@ class SchedulerService
             }
 
             $cursor = $nowUtc;
+            $targetGroups = is_array($schedule['target_groups'] ?? null) && $schedule['target_groups'] !== []
+                ? $schedule['target_groups']
+                : [['title' => (string) ($schedule['group_title'] ?? '')]];
 
             for ($i = 0; $i < 120; $i++) {
                 $nextLocal = $this->cron->nextRun($expression, $cursor, $timezone);
@@ -333,13 +466,16 @@ class SchedulerService
                     break;
                 }
 
-                $occurrences[] = [
-                    'utc' => $nextUtc,
-                    'local' => $nextLocal,
-                    'group_title' => $schedule['group_title'] ?? null,
-                    'template_name' => $schedule['template_name'] ?? null,
-                    'timezone' => $timezone,
-                ];
+                foreach ($targetGroups as $targetGroup) {
+                    $occurrences[] = [
+                        'utc' => $nextUtc,
+                        'local' => $nextLocal,
+                        'batch_key' => (int) ($schedule['id'] ?? 0) . ':' . $nextUtc->format('Y-m-d H:i:s'),
+                        'group_title' => $targetGroup['title'] ?? null,
+                        'template_name' => $schedule['template_name'] ?? null,
+                        'timezone' => $timezone,
+                    ];
+                }
 
                 $cursor = $nextUtc;
             }
@@ -403,24 +539,36 @@ class SchedulerService
         return $jobs;
     }
 
-    private function dispatchOne(array $job, ?DateTimeImmutable $now = null, bool $manual = false, bool $force = false): array
+    private function dispatchOne(
+        array $job,
+        ?DateTimeImmutable $now = null,
+        bool $manual = false,
+        bool $force = false,
+        ?string $runKey = null
+    ): array
     {
         $now ??= new DateTimeImmutable('now', new DateTimeZone('UTC'));
         $scheduledAt = $this->nullableDate((string) ($job['next_run_at'] ?? '')) ?? $now;
+        $runKey ??= $this->automaticRunKey($job, $scheduledAt);
         $guard = $force ? null : $this->determineGuard($job, $now);
 
         if ($guard !== null) {
             return $this->guardDispatch($job, $guard['retry_at'], $guard['reason'], $now, $manual);
         }
 
-        $requestId = 'dispatch_' . bin2hex(random_bytes(6));
-        $status = 'success';
-        $payload = null;
-        $error = null;
-        $accountUpdates = [
-            'updated_at' => $now->format('Y-m-d H:i:s'),
-        ];
+        $targets = is_array($job['target_groups'] ?? null) ? $job['target_groups'] : [];
+
+        if ($targets === []) {
+            throw new RuntimeException('Lịch này không có nhóm Telegram đang hoạt động để gửi.');
+        }
+
+        $targetResults = [];
+        $accountUpdates = [];
         $retryAt = null;
+        $compiledMessage = null;
+        $globalError = null;
+        $lastSuccessfulSendAt = null;
+        $messagePreview = mb_substr((string) $job['body'], 0, 500);
 
         try {
             $ownerStateError = $this->ownerStateError($job, $now);
@@ -440,29 +588,172 @@ class SchedulerService
                 (string) $job['body'],
                 (int) $job['user_id']
             );
-
-            $payload = $this->telegram->sendMessage(
-                $job,
-                (string) $job['peer_identifier'],
-                $compiledMessage,
-                (string) $job['parse_mode'],
-                $job['topic_id'] !== null ? (int) $job['topic_id'] : null
+            $messagePreview = mb_substr(
+                $this->customEmojis()->replaceTokensWithFallback((string) $job['body'], (int) $job['user_id']),
+                0,
+                500
             );
-
-            $accountUpdates['last_sent_at'] = $now->format('Y-m-d H:i:s');
-            $accountUpdates['cooldown_until'] = $this->buildPostSendCooldown($now)->format('Y-m-d H:i:s');
-            $accountUpdates['cooldown_reason'] = 'Giãn cách an toàn sau lần gửi gần nhất.';
         } catch (\Throwable $exception) {
-            $status = 'error';
-            $error = $exception->getMessage();
+            $globalError = $exception->getMessage();
             $failureGuard = $this->buildFailureGuard($exception, $now);
 
             if ($failureGuard !== null) {
                 $retryAt = $failureGuard['retry_at'];
-                $accountUpdates['cooldown_until'] = $retryAt->format('Y-m-d H:i:s');
-                $accountUpdates['cooldown_reason'] = $failureGuard['reason'];
-                $error = $failureGuard['reason'] . ' | Chi tiết: ' . $exception->getMessage();
+                $globalError = $failureGuard['reason'] . ' | Chi tiết: ' . $globalError;
             }
+        }
+
+        if ($globalError !== null) {
+            foreach ($targets as $target) {
+                $targetResults[] = $this->existingTargetResult($job, $target, $runKey)
+                    ?? $this->recordTargetFailure($job, $target, $runKey, $messagePreview, $globalError, $now);
+            }
+        } else {
+            $stopReason = null;
+            $hasPreviousTarget = false;
+
+            foreach ($targets as $target) {
+                $existingResult = $this->existingTargetResult($job, $target, $runKey);
+                if ($existingResult !== null) {
+                    $targetResults[] = $existingResult;
+                    if ($existingResult['status'] === 'success') {
+                        $lastSuccessfulSendAt = $this->nullableDate((string) $existingResult['sent_at']) ?? $lastSuccessfulSendAt;
+                    }
+                    $hasPreviousTarget = true;
+                    continue;
+                }
+
+                if ($stopReason !== null) {
+                    $targetResults[] = $this->recordTargetFailure(
+                        $job,
+                        $target,
+                        $runKey,
+                        $messagePreview,
+                        $stopReason,
+                        new DateTimeImmutable('now', new DateTimeZone('UTC'))
+                    );
+                    $hasPreviousTarget = true;
+                    continue;
+                }
+
+                if (!$force && $hasPreviousTarget) {
+                    $volumeGuard = $this->determineVolumeGuard($job, new DateTimeImmutable('now', new DateTimeZone('UTC')));
+                    if ($volumeGuard !== null) {
+                        $retryAt = $volumeGuard['retry_at'];
+                        $stopReason = 'Bỏ qua nhóm còn lại vì account đã chạm giới hạn an toàn: ' . $volumeGuard['reason'];
+                        $targetResults[] = $this->recordTargetFailure(
+                            $job,
+                            $target,
+                            $runKey,
+                            $messagePreview,
+                            $volumeGuard['reason'],
+                            new DateTimeImmutable('now', new DateTimeZone('UTC'))
+                        );
+                        $hasPreviousTarget = true;
+                        continue;
+                    }
+                }
+
+                $this->refreshAccountLock((int) $job['telegram_account_id']);
+                $this->refreshJobLock((int) $job['id']);
+
+                if ($hasPreviousTarget) {
+                    $this->waitBetweenGroupSends();
+                    $this->refreshAccountLock((int) $job['telegram_account_id']);
+                    $this->refreshJobLock((int) $job['id']);
+                }
+
+                if (!$force) {
+                    $volumeGuard = $this->determineVolumeGuard($job, new DateTimeImmutable('now', new DateTimeZone('UTC')));
+                    if ($volumeGuard !== null) {
+                        $retryAt = $volumeGuard['retry_at'];
+                        $stopReason = 'Bỏ qua nhóm còn lại vì account đã chạm giới hạn an toàn: ' . $volumeGuard['reason'];
+                        $targetResults[] = $this->recordTargetFailure(
+                            $job,
+                            $target,
+                            $runKey,
+                            $messagePreview,
+                            $volumeGuard['reason'],
+                            new DateTimeImmutable('now', new DateTimeZone('UTC'))
+                        );
+                        $hasPreviousTarget = true;
+                        continue;
+                    }
+                }
+
+                $payload = null;
+                $targetError = null;
+                $attempt = $this->startTargetAttempt($job, $target, $runKey, $messagePreview);
+
+                try {
+                    $payload = $this->telegram->sendMessage(
+                        $job,
+                        (string) $target['peer_identifier'],
+                        (string) $compiledMessage,
+                        (string) $job['parse_mode'],
+                        $target['topic_id'] !== null ? (int) $target['topic_id'] : null
+                    );
+                } catch (\Throwable $exception) {
+                    $targetError = $exception->getMessage();
+                    $failureGuard = $this->buildFailureGuard(
+                        $exception,
+                        new DateTimeImmutable('now', new DateTimeZone('UTC'))
+                    );
+
+                    if ($failureGuard !== null) {
+                        $retryAt = $failureGuard['retry_at'];
+                        $targetError = $failureGuard['reason'] . ' | Chi tiết: ' . $targetError;
+                        $stopReason = 'Bỏ qua nhóm còn lại vì Telegram đang giới hạn account: ' . $failureGuard['reason'];
+                    }
+                }
+
+                $sentAt = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+                if ($targetError === null) {
+                    $lastSuccessfulSendAt = $sentAt;
+                }
+
+                $result = [
+                    'target' => $target,
+                    'request_id' => $attempt['request_id'],
+                    'status' => $targetError === null ? 'success' : 'error',
+                    'payload' => $payload,
+                    'error' => $targetError,
+                    'sent_at' => $sentAt->format('Y-m-d H:i:s'),
+                ];
+                $this->finishTargetAttempt((int) $attempt['id'], $result);
+                $targetResults[] = $result;
+                $hasPreviousTarget = true;
+            }
+        }
+
+        $successCount = count(array_filter(
+            $targetResults,
+            static fn (array $result): bool => $result['status'] === 'success'
+        ));
+        $targetCount = count($targetResults);
+        $status = $successCount === $targetCount ? 'success' : ($successCount > 0 ? 'partial' : 'error');
+        $errors = array_values(array_filter(array_map(
+            static function (array $result): ?string {
+                if ($result['status'] === 'success') {
+                    return null;
+                }
+
+                return (string) ($result['target']['title'] ?? 'Nhóm') . ': ' . (string) ($result['error'] ?? 'Gửi thất bại');
+            },
+            $targetResults
+        )));
+        $error = $errors !== [] ? implode(' | ', $errors) : null;
+
+        if ($successCount > 0) {
+            $lastSuccessfulSendAt ??= $now;
+            $accountUpdates['last_sent_at'] = $lastSuccessfulSendAt->format('Y-m-d H:i:s');
+            $accountUpdates['cooldown_until'] = $this->buildPostSendCooldown($lastSuccessfulSendAt)->format('Y-m-d H:i:s');
+            $accountUpdates['cooldown_reason'] = 'Giãn cách an toàn sau lần gửi gần nhất.';
+        }
+
+        if ($retryAt !== null) {
+            $accountUpdates['cooldown_until'] = $retryAt->format('Y-m-d H:i:s');
+            $accountUpdates['cooldown_reason'] = 'Telegram đang giới hạn account này do tín hiệu spam/rate limit.';
         }
 
         $nextRunAt = $manual
@@ -476,36 +767,17 @@ class SchedulerService
             $nextRunAt = $this->maxDateTimeString($nextRunAt, $retryAt->format('Y-m-d H:i:s'));
         }
 
-        $this->db->transaction(function (Database $db) use ($job, $requestId, $status, $payload, $error, $nextRunAt, $accountUpdates, $now): void {
-            $db->insert('dispatch_logs', [
-                'user_id' => (int) $job['user_id'],
-                'schedule_job_id' => (int) $job['id'],
-                'telegram_account_id' => (int) $job['telegram_account_id'],
-                'telegram_group_id' => (int) $job['telegram_group_id'],
-                'message_template_id' => (int) $job['message_template_id'],
-                'template_name_snapshot' => (string) ($job['template_name'] ?? ''),
-                'message_body_snapshot' => (string) $job['body'],
-                'parse_mode_snapshot' => (string) ($job['parse_mode'] ?? 'HTML'),
-                'label_id' => $job['label_id'] ? (int) $job['label_id'] : null,
-                'request_id' => $requestId,
-                'status' => $status,
-                'message_preview' => mb_substr(
-                    $this->customEmojis()->replaceTokensWithFallback((string) $job['body'], (int) $job['user_id']),
-                    0,
-                    500
-                ),
-                'response_payload' => $payload ? json_encode($payload, JSON_UNESCAPED_UNICODE) : null,
-                'error_message' => $error,
-                'sent_at' => $now->format('Y-m-d H:i:s'),
-                'created_at' => $now->format('Y-m-d H:i:s'),
-            ]);
+        $finishedAt = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $accountUpdates['updated_at'] = $finishedAt->format('Y-m-d H:i:s');
+        $accountUpdates['dispatch_locked_until'] = null;
 
+        $this->db->transaction(function (Database $db) use ($job, $error, $nextRunAt, $accountUpdates, $finishedAt): void {
             $db->update('schedule_jobs', [
                 'next_run_at' => $nextRunAt,
-                'last_run_at' => $now->format('Y-m-d H:i:s'),
+                'last_run_at' => $finishedAt->format('Y-m-d H:i:s'),
                 'last_error' => $error,
                 'dispatch_locked_until' => null,
-                'updated_at' => $now->format('Y-m-d H:i:s'),
+                'updated_at' => $finishedAt->format('Y-m-d H:i:s'),
             ], 'id = :id', ['id' => (int) $job['id']]);
 
             $db->update('telegram_accounts', $accountUpdates, 'id = :id', ['id' => (int) $job['telegram_account_id']]);
@@ -513,12 +785,219 @@ class SchedulerService
 
         return [
             'schedule_id' => (int) $job['id'],
-            'group' => $job['group_title'],
+            'group' => $this->targetGroupSummary($job),
             'account' => $job['account_name'],
             'status' => $status,
+            'success_count' => $successCount,
+            'target_count' => $targetCount,
             'next_run_at' => $nextRunAt,
             'error' => $error,
         ];
+    }
+
+    private function hydrateTargetGroups(array $job): array
+    {
+        $targets = $this->db->fetchAll(
+            'SELECT tg.id, tg.title, tg.peer_identifier, tg.topic_id, tg.topic_title
+             FROM schedule_job_groups sjg
+             INNER JOIN telegram_groups tg ON tg.id = sjg.telegram_group_id
+             WHERE sjg.schedule_job_id = :schedule_job_id
+               AND tg.is_active = 1
+             ORDER BY sjg.sort_order ASC, sjg.telegram_group_id ASC',
+            ['schedule_job_id' => (int) $job['id']]
+        );
+
+        if ($targets === [] && (int) ($job['telegram_group_id'] ?? 0) > 0) {
+            $legacyTarget = $this->db->fetch(
+                'SELECT id, title, peer_identifier, topic_id, topic_title
+                 FROM telegram_groups
+                 WHERE id = :id AND is_active = 1
+                 LIMIT 1',
+                ['id' => (int) $job['telegram_group_id']]
+            );
+
+            if ($legacyTarget !== null) {
+                $targets[] = $legacyTarget;
+            }
+        }
+
+        $job['target_groups'] = array_map(static fn (array $target): array => [
+            'id' => (int) $target['id'],
+            'title' => (string) $target['title'],
+            'peer_identifier' => (string) $target['peer_identifier'],
+            'topic_id' => $target['topic_id'] !== null ? (int) $target['topic_id'] : null,
+            'topic_title' => (string) ($target['topic_title'] ?? ''),
+        ], $targets);
+
+        return $job;
+    }
+
+    private function targetGroupSummary(array $job): string
+    {
+        $targets = is_array($job['target_groups'] ?? null) ? $job['target_groups'] : [];
+
+        if (count($targets) === 1) {
+            return (string) ($targets[0]['title'] ?? '1 nhóm');
+        }
+
+        return count($targets) . ' nhóm';
+    }
+
+    private function waitBetweenGroupSends(): void
+    {
+        $min = max(0, (int) config('safety.account_limits.inter_group_delay_seconds_min', 3));
+        $max = max(0, (int) config('safety.account_limits.inter_group_delay_seconds_max', 8));
+        $seconds = random_int(min($min, $max), max($min, $max));
+
+        if ($seconds > 0) {
+            sleep($seconds);
+        }
+    }
+
+    private function automaticRunKey(array $job, DateTimeImmutable $scheduledAt): string
+    {
+        return 'schedule_' . (int) $job['id'] . '_' . $scheduledAt->format('YmdHis');
+    }
+
+    private function existingTargetResult(array $job, array $target, string $runKey): ?array
+    {
+        $log = $this->db->fetch(
+            'SELECT id, request_id, status, response_payload, error_message, sent_at
+             FROM dispatch_logs
+             WHERE schedule_job_id = :schedule_job_id
+               AND schedule_run_key = :schedule_run_key
+               AND telegram_group_id = :telegram_group_id
+             LIMIT 1',
+            [
+                'schedule_job_id' => (int) $job['id'],
+                'schedule_run_key' => $runKey,
+                'telegram_group_id' => (int) $target['id'],
+            ]
+        );
+
+        if ($log === null) {
+            return null;
+        }
+
+        $status = (string) ($log['status'] ?? 'error');
+        $error = $log['error_message'] !== null ? (string) $log['error_message'] : null;
+        $sentAt = (string) ($log['sent_at'] ?? gmdate('Y-m-d H:i:s'));
+
+        if ($status === 'processing') {
+            $status = 'error';
+            $sentAt = gmdate('Y-m-d H:i:s');
+            $error = 'Lần gửi trước bị gián đoạn sau khi bắt đầu gọi Telegram. Hệ thống không tự gửi lại nhóm này để tránh trùng tin; hãy kiểm tra nhóm và nhật ký.';
+            $this->db->update('dispatch_logs', [
+                'status' => $status,
+                'error_message' => $error,
+                'sent_at' => $sentAt,
+            ], 'id = :id', ['id' => (int) $log['id']]);
+        }
+
+        $payload = null;
+        if (is_string($log['response_payload'] ?? null) && $log['response_payload'] !== '') {
+            $decoded = json_decode((string) $log['response_payload'], true);
+            $payload = is_array($decoded) ? $decoded : null;
+        }
+
+        return [
+            'target' => $target,
+            'request_id' => (string) $log['request_id'],
+            'status' => $status === 'success' ? 'success' : 'error',
+            'payload' => $payload,
+            'error' => $error,
+            'sent_at' => $sentAt,
+        ];
+    }
+
+    private function startTargetAttempt(array $job, array $target, string $runKey, string $messagePreview): array
+    {
+        $requestId = 'dispatch_' . bin2hex(random_bytes(6));
+        $startedAt = gmdate('Y-m-d H:i:s');
+        $id = $this->db->insert('dispatch_logs', [
+            'user_id' => (int) $job['user_id'],
+            'schedule_job_id' => (int) $job['id'],
+            'schedule_run_key' => $runKey,
+            'telegram_account_id' => (int) $job['telegram_account_id'],
+            'telegram_group_id' => (int) $target['id'],
+            'message_template_id' => (int) $job['message_template_id'],
+            'template_name_snapshot' => (string) ($job['template_name'] ?? ''),
+            'message_body_snapshot' => (string) $job['body'],
+            'parse_mode_snapshot' => (string) ($job['parse_mode'] ?? 'HTML'),
+            'label_id' => $job['label_id'] ? (int) $job['label_id'] : null,
+            'request_id' => $requestId,
+            'status' => 'processing',
+            'message_preview' => $messagePreview,
+            'response_payload' => null,
+            'error_message' => null,
+            'sent_at' => $startedAt,
+            'created_at' => $startedAt,
+        ]);
+
+        return ['id' => $id, 'request_id' => $requestId];
+    }
+
+    private function finishTargetAttempt(int $logId, array $result): void
+    {
+        $this->db->update('dispatch_logs', [
+            'status' => (string) $result['status'],
+            'response_payload' => $result['payload']
+                ? json_encode($result['payload'], JSON_UNESCAPED_UNICODE)
+                : null,
+            'error_message' => $result['error'],
+            'sent_at' => (string) $result['sent_at'],
+        ], 'id = :id', ['id' => $logId]);
+    }
+
+    private function recordTargetFailure(
+        array $job,
+        array $target,
+        string $runKey,
+        string $messagePreview,
+        string $error,
+        DateTimeImmutable $sentAt
+    ): array {
+        $attempt = $this->startTargetAttempt($job, $target, $runKey, $messagePreview);
+        $result = [
+            'target' => $target,
+            'request_id' => $attempt['request_id'],
+            'status' => 'error',
+            'payload' => null,
+            'error' => $error,
+            'sent_at' => $sentAt->format('Y-m-d H:i:s'),
+        ];
+        $this->finishTargetAttempt((int) $attempt['id'], $result);
+
+        return $result;
+    }
+
+    private function determineVolumeGuard(array $job, DateTimeImmutable $now): ?array
+    {
+        $guards = [];
+        $hourlyLimit = (int) config('safety.account_limits.max_success_per_hour', 6);
+        $hourly = $this->successWindow((int) $job['telegram_account_id'], '1 HOUR');
+        if ($hourly['count'] >= $hourlyLimit && $hourly['oldest_at'] !== null) {
+            $guards[] = [
+                'retry_at' => $hourly['oldest_at']->modify('+1 hour'),
+                'reason' => 'Account đã chạm giới hạn an toàn theo giờ. Hệ thống dừng các nhóm còn lại để tránh spam flag.',
+            ];
+        }
+
+        $dailyLimit = (int) config('safety.account_limits.max_success_per_day', 30);
+        $daily = $this->successWindow((int) $job['telegram_account_id'], '1 DAY');
+        if ($daily['count'] >= $dailyLimit && $daily['oldest_at'] !== null) {
+            $guards[] = [
+                'retry_at' => $daily['oldest_at']->modify('+1 day'),
+                'reason' => 'Account đã chạm giới hạn an toàn theo ngày. Hệ thống dừng các nhóm còn lại để tránh khóa tài khoản.',
+            ];
+        }
+
+        if ($guards === []) {
+            return null;
+        }
+
+        usort($guards, static fn (array $left, array $right): int => $left['retry_at'] <=> $right['retry_at']);
+        return $guards[count($guards) - 1];
     }
 
     private function determineGuard(array $job, DateTimeImmutable $now): ?array
@@ -573,9 +1052,9 @@ class SchedulerService
 
     private function guardDispatch(array $job, DateTimeImmutable $retryAt, string $reason, DateTimeImmutable $now, bool $manual = false): array
     {
-        $requestId = 'guard_' . bin2hex(random_bytes(6));
         $accountCooldownUntil = $retryAt->format('Y-m-d H:i:s');
         $nextRunAt = $accountCooldownUntil;
+        $targets = is_array($job['target_groups'] ?? null) ? $job['target_groups'] : [];
 
         if ($manual) {
             $currentNextRunAt = $this->nullableDate((string) ($job['next_run_at'] ?? ''));
@@ -584,25 +1063,27 @@ class SchedulerService
             }
         }
 
-        $this->db->transaction(function (Database $db) use ($job, $requestId, $reason, $now, $nextRunAt, $accountCooldownUntil): void {
-            $db->insert('dispatch_logs', [
-                'user_id' => (int) $job['user_id'],
-                'schedule_job_id' => (int) $job['id'],
-                'telegram_account_id' => (int) $job['telegram_account_id'],
-                'telegram_group_id' => (int) $job['telegram_group_id'],
-                'message_template_id' => (int) $job['message_template_id'],
-                'template_name_snapshot' => (string) ($job['template_name'] ?? ''),
-                'message_body_snapshot' => (string) $job['body'],
-                'parse_mode_snapshot' => (string) ($job['parse_mode'] ?? 'HTML'),
-                'label_id' => $job['label_id'] ? (int) $job['label_id'] : null,
-                'request_id' => $requestId,
-                'status' => 'guarded',
-                'message_preview' => mb_substr((string) $job['body'], 0, 500),
-                'response_payload' => null,
-                'error_message' => $reason,
-                'sent_at' => $now->format('Y-m-d H:i:s'),
-                'created_at' => $now->format('Y-m-d H:i:s'),
-            ]);
+        $this->db->transaction(function (Database $db) use ($job, $targets, $reason, $now, $nextRunAt, $accountCooldownUntil): void {
+            foreach ($targets as $target) {
+                $db->insert('dispatch_logs', [
+                    'user_id' => (int) $job['user_id'],
+                    'schedule_job_id' => (int) $job['id'],
+                    'telegram_account_id' => (int) $job['telegram_account_id'],
+                    'telegram_group_id' => (int) $target['id'],
+                    'message_template_id' => (int) $job['message_template_id'],
+                    'template_name_snapshot' => (string) ($job['template_name'] ?? ''),
+                    'message_body_snapshot' => (string) $job['body'],
+                    'parse_mode_snapshot' => (string) ($job['parse_mode'] ?? 'HTML'),
+                    'label_id' => $job['label_id'] ? (int) $job['label_id'] : null,
+                    'request_id' => 'guard_' . bin2hex(random_bytes(6)),
+                    'status' => 'guarded',
+                    'message_preview' => mb_substr((string) $job['body'], 0, 500),
+                    'response_payload' => null,
+                    'error_message' => $reason,
+                    'sent_at' => $now->format('Y-m-d H:i:s'),
+                    'created_at' => $now->format('Y-m-d H:i:s'),
+                ]);
+            }
 
             $db->update('schedule_jobs', [
                 'next_run_at' => $nextRunAt,
@@ -614,13 +1095,14 @@ class SchedulerService
             $db->update('telegram_accounts', [
                 'cooldown_until' => $accountCooldownUntil,
                 'cooldown_reason' => $reason,
+                'dispatch_locked_until' => null,
                 'updated_at' => $now->format('Y-m-d H:i:s'),
             ], 'id = :id', ['id' => (int) $job['telegram_account_id']]);
         });
 
         return [
             'schedule_id' => (int) $job['id'],
-            'group' => $job['group_title'],
+            'group' => $this->targetGroupSummary($job),
             'account' => $job['account_name'],
             'status' => 'guarded',
             'next_run_at' => $nextRunAt,

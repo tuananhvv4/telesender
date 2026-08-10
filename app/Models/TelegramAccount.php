@@ -22,6 +22,7 @@ class TelegramAccount extends Model
         'last_sent_at',
         'cooldown_until',
         'cooldown_reason',
+        'dispatch_locked_until',
         'meta_json',
         'created_at',
         'updated_at',

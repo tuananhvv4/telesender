@@ -16,6 +16,7 @@ foreach ($schedules as $schedule) {
         'id' => (int) $schedule['id'],
         'telegram_account_id' => (int) $schedule['telegram_account_id'],
         'telegram_group_id' => (int) $schedule['telegram_group_id'],
+        'telegram_group_ids' => array_values(array_map('intval', (array) ($schedule['telegram_group_ids'] ?? [$schedule['telegram_group_id']]))),
         'message_template_id' => (int) $schedule['message_template_id'],
         'status' => (string) $schedule['status'],
         'form_state' => $scheduleFormStates[(int) $schedule['id']] ?? $defaultFormScheduleState,
@@ -124,14 +125,21 @@ foreach ($schedules as $schedule) {
                         </td>
                         <td>
                             <div><?= e($schedule['account_name']) ?></div>
-                            <div class="small muted">
-                                <?= e($schedule['group_title']) ?>
-                                <?php if (!empty($schedule['topic_title'])): ?>
-                                    · Topic: <?= e($schedule['topic_title']) ?>
-                                <?php elseif (!empty($schedule['topic_id'])): ?>
-                                    · Topic ID: <?= e((string) $schedule['topic_id']) ?>
-                                <?php endif; ?>
+                            <div class="schedule-target-list">
+                                <?php foreach ((array) ($schedule['target_groups'] ?? []) as $targetGroup): ?>
+                                    <div class="small muted schedule-target-item">
+                                        <?= e((string) $targetGroup['title']) ?>
+                                        <?php if (!empty($targetGroup['topic_title'])): ?>
+                                            · Topic: <?= e((string) $targetGroup['topic_title']) ?>
+                                        <?php elseif (!empty($targetGroup['topic_id'])): ?>
+                                            · Topic ID: <?= e((string) $targetGroup['topic_id']) ?>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>
                             </div>
+                            <?php if ((int) ($schedule['group_count'] ?? 1) > 1): ?>
+                                <span class="badge info schedule-target-count"><?= e((string) $schedule['group_count']) ?> nhóm</span>
+                            <?php endif; ?>
                         </td>
                         <td>
                             <div><?= e($summary) ?></div>
@@ -310,28 +318,36 @@ foreach ($schedules as $schedule) {
                         </div>
 
                         <div class="field">
-                            <label for="schedule_modal_group">Nhóm Telegram</label>
-                            <select class="select" id="schedule_modal_group" name="telegram_group_id" required data-schedule-group>
-                                <option value="">Chọn tài khoản trước</option>
-                                <?php foreach ($groups as $group): ?>
-                                    <?php
-                                    $groupLabel = (string) $group['title'];
-                                    if (!empty($group['topic_title'])) {
-                                        $groupLabel .= ' · Topic: ' . (string) $group['topic_title'];
-                                    } elseif (!empty($group['topic_id'])) {
-                                        $groupLabel .= ' · Topic ID: ' . (string) $group['topic_id'];
-                                    }
-                                    $groupLabel .= ' (' . (string) $group['account_name'] . ')';
-                                    ?>
-                                    <option
-                                        value="<?= e((string) $group['id']) ?>"
-                                        data-group-account-id="<?= e((string) $group['telegram_account_id']) ?>"
-                                        data-group-label="<?= e($groupLabel) ?>"
-                                    >
-                                        <?= e($groupLabel) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                            <label>Nhóm Telegram</label>
+                            <div class="schedule-group-picker" data-schedule-group>
+                                <div class="schedule-group-picker-head" data-schedule-group-head hidden>
+                                    <span class="small muted" data-schedule-group-summary>Chọn tài khoản trước</span>
+                                    <div class="inline-actions">
+                                        <button class="button secondary sm" type="button" data-schedule-select-all-groups>Chọn tất cả</button>
+                                        <button class="button secondary sm" type="button" data-schedule-clear-groups>Bỏ chọn</button>
+                                    </div>
+                                </div>
+                                <div class="schedule-group-options" data-schedule-group-options>
+                                    <?php foreach ($groups as $group): ?>
+                                        <?php
+                                        $groupMeta = 'Peer: ' . (string) $group['peer_identifier'];
+                                        if (!empty($group['topic_title'])) {
+                                            $groupMeta = 'Topic: ' . (string) $group['topic_title'];
+                                        } elseif (!empty($group['topic_id'])) {
+                                            $groupMeta = 'Topic ID: ' . (string) $group['topic_id'];
+                                        }
+                                        ?>
+                                        <label class="schedule-group-option" data-group-account-id="<?= e((string) $group['telegram_account_id']) ?>" hidden>
+                                            <input type="checkbox" name="telegram_group_ids[]" value="<?= e((string) $group['id']) ?>">
+                                            <span>
+                                                <strong><?= e((string) $group['title']) ?></strong>
+                                                <small><?= e($groupMeta) ?></small>
+                                            </span>
+                                        </label>
+                                    <?php endforeach; ?>
+                                    <div class="schedule-group-empty" data-schedule-group-empty>Chọn tài khoản trước để hiển thị nhóm.</div>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="field schedule-field-span-2">
@@ -503,6 +519,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const cronInput = wrapper.querySelector('[data-schedule-cron]');
         const accountInput = wrapper.querySelector('[data-schedule-account]');
         const groupInput = wrapper.querySelector('[data-schedule-group]');
+        const groupHead = wrapper.querySelector('[data-schedule-group-head]');
+        const groupSummary = wrapper.querySelector('[data-schedule-group-summary]');
+        const groupEmpty = wrapper.querySelector('[data-schedule-group-empty]');
+        const selectAllGroupsButton = wrapper.querySelector('[data-schedule-select-all-groups]');
+        const clearGroupsButton = wrapper.querySelector('[data-schedule-clear-groups]');
         const templateInput = wrapper.querySelector('[data-schedule-template]');
         const submitButton = wrapper.querySelector('[data-schedule-submit]');
         const dailyTimesList = wrapper.querySelector('[data-daily-times-list]');
@@ -517,16 +538,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (
             !form || !presetSelect || !typeInput || !timezoneInput || !cronInput || !accountInput || !groupInput
+            || !groupHead || !groupSummary || !groupEmpty || !selectAllGroupsButton || !clearGroupsButton
             || !templateInput || !submitButton || !dailyTimesList || !weeklyTimesList || !previewCron
             || !previewSummary || !previewRuns || !previewRiskBadge || !previewRiskMessage || !copyPreviewCronButton
         ) {
             return;
         }
 
-        const allGroupOptions = Array.from(groupInput.querySelectorAll('option[data-group-account-id]')).map((option) => ({
-            value: option.value,
-            accountId: option.getAttribute('data-group-account-id') || '',
-            label: option.getAttribute('data-group-label') || option.textContent.trim(),
+        const allGroupOptions = Array.from(groupInput.querySelectorAll('[data-group-account-id]')).map((element) => ({
+            element,
+            input: element.querySelector('input[type="checkbox"]'),
+            accountId: element.getAttribute('data-group-account-id') || '',
         }));
 
         function toggleScheduleSections() {
@@ -536,40 +558,55 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        function syncGroupOptions(preferredGroupId = null) {
+        function selectedGroupIds() {
+            return allGroupOptions
+                .filter((option) => option.input?.checked && !option.element.hidden)
+                .map((option) => String(option.input.value));
+        }
+
+        function updateGroupSummary() {
             const selectedAccountId = String(accountInput.value || '');
-            const fallbackGroupId = preferredGroupId === null ? String(groupInput.value || '') : String(preferredGroupId || '');
             const matchingGroups = selectedAccountId === ''
                 ? []
                 : allGroupOptions.filter((option) => option.accountId === selectedAccountId);
-
-            groupInput.innerHTML = '';
-
-            const placeholderOption = document.createElement('option');
-            placeholderOption.value = '';
+            const selectedCount = selectedGroupIds().length;
 
             if (selectedAccountId === '') {
-                placeholderOption.textContent = 'Chọn tài khoản trước';
-                groupInput.disabled = true;
+                groupSummary.textContent = 'Chọn tài khoản trước';
             } else if (matchingGroups.length === 0) {
-                placeholderOption.textContent = 'Tài khoản này chưa có nhóm đã lưu';
-                groupInput.disabled = false;
+                groupSummary.textContent = 'Tài khoản này chưa có nhóm đã lưu';
+            } else if (selectedCount === 0) {
+                groupSummary.textContent = `Có ${matchingGroups.length} nhóm. Chọn ít nhất một nhóm.`;
             } else {
-                placeholderOption.textContent = 'Chọn nhóm';
-                groupInput.disabled = false;
+                groupSummary.textContent = `Đã chọn ${selectedCount}/${matchingGroups.length} nhóm cho lịch này.`;
             }
 
-            groupInput.appendChild(placeholderOption);
+            groupEmpty.hidden = matchingGroups.length > 0;
+            groupHead.hidden = matchingGroups.length === 0;
+            groupEmpty.textContent = selectedAccountId === ''
+                ? 'Chọn tài khoản trước để hiển thị nhóm.'
+                : 'Tài khoản này chưa có nhóm đã lưu.';
+            selectAllGroupsButton.disabled = matchingGroups.length === 0;
+            clearGroupsButton.disabled = selectedCount === 0;
+        }
 
-            matchingGroups.forEach((option) => {
-                const element = document.createElement('option');
-                element.value = option.value;
-                element.textContent = option.label;
-                groupInput.appendChild(element);
+        function syncGroupOptions(preferredGroupIds = null) {
+            const selectedAccountId = String(accountInput.value || '');
+            const preferredIds = preferredGroupIds === null
+                ? selectedGroupIds()
+                : (Array.isArray(preferredGroupIds) ? preferredGroupIds : [preferredGroupIds]).map(String);
+            const preferredSet = new Set(preferredIds);
+
+            allGroupOptions.forEach((option) => {
+                const matchesAccount = selectedAccountId !== '' && option.accountId === selectedAccountId;
+                option.element.hidden = !matchesAccount;
+
+                if (option.input) {
+                    option.input.checked = matchesAccount && preferredSet.has(String(option.input.value));
+                }
             });
 
-            const nextGroupId = matchingGroups.some((option) => option.value === fallbackGroupId) ? fallbackGroupId : '';
-            groupInput.value = nextGroupId;
+            updateGroupSummary();
         }
 
         function bindRemoveTimeButtons(scope = wrapper) {
@@ -733,7 +770,7 @@ document.addEventListener('DOMContentLoaded', () => {
         submitButton.textContent = mode === 'edit' ? 'Cập nhật lịch gửi' : 'Tạo lịch gửi';
         applyFormState(record ? record.form_state : defaultScheduleState);
         accountInput.value = record ? String(record.telegram_account_id || '') : '';
-        syncGroupOptions(record ? String(record.telegram_group_id || '') : '');
+        syncGroupOptions(record ? (record.telegram_group_ids || [record.telegram_group_id]) : []);
         templateInput.value = record ? String(record.message_template_id || '') : '';
 
         if (mode === 'edit' && record) {
@@ -760,7 +797,33 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         accountInput.addEventListener('change', () => {
-            syncGroupOptions();
+            syncGroupOptions([]);
+            triggerPreview();
+        });
+
+        groupInput.addEventListener('change', () => {
+            updateGroupSummary();
+            triggerPreview();
+        });
+
+        selectAllGroupsButton.addEventListener('click', () => {
+            allGroupOptions.forEach((option) => {
+                if (!option.element.hidden && option.input) {
+                    option.input.checked = true;
+                }
+            });
+            updateGroupSummary();
+            triggerPreview();
+        });
+
+        clearGroupsButton.addEventListener('click', () => {
+            allGroupOptions.forEach((option) => {
+                if (option.input) {
+                    option.input.checked = false;
+                }
+            });
+            updateGroupSummary();
+            triggerPreview();
         });
 
         presetSelect.addEventListener('change', (event) => {
@@ -804,6 +867,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         form.addEventListener('submit', async (event) => {
             event.preventDefault();
+
+            if (selectedGroupIds().length === 0) {
+                window.TeleSenderApp.showFlash('error', 'Hãy chọn ít nhất một nhóm Telegram cho lịch này.');
+                groupInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
+            }
 
             await window.TeleSenderApp.submitAjaxForm(form, {
                 closeCrudModalOnSuccess: true,
