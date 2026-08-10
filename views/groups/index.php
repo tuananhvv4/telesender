@@ -946,7 +946,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 cacheOnly ? 'Đang kiểm tra danh sách nhóm đã tải gần đây...' : 'Đang tải danh sách nhóm mới nhất từ Telegram...',
                 'loading'
             );
-            setGroupDialogsMeta(cacheOnly ? 'Đang kiểm tra cache 5 phút của tài khoản.' : 'Đang đồng bộ dữ liệu nhóm từ Telegram.');
+            setGroupDialogsMeta(cacheOnly ? 'Đang kiểm tra cache 30 phút của tài khoản.' : 'Đang đồng bộ dữ liệu nhóm từ Telegram.');
 
             try {
                 const query = new URLSearchParams({ account_id: accountId });
@@ -971,7 +971,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (cacheOnly && payload.cache_available === false) {
                     setLoadDialogsButtonLabel(false);
                     setGroupDialogsStatus('Chưa có danh sách nhóm được cache cho tài khoản này. Bấm "Tải danh sách nhóm" để lấy từ Telegram.');
-                    setGroupDialogsMeta('Cache sẽ được giữ trong 5 phút sau lần tải đầu tiên.');
+                    setGroupDialogsMeta('Cache sẽ được giữ trong 30 phút sau lần tải đầu tiên.');
                     return false;
                 }
 
@@ -1017,7 +1017,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const cacheMessage = payload.cache_hit
                     ? `Đang dùng dữ liệu tạm thời còn khoảng ${cacheRemainingMinutes(payload.expires_at)} phút. Bấm "Tải lại danh sách nhóm" để lấy dữ liệu mới nhất.`
-                    : 'Đã lấy dữ liệu mới nhất từ Telegram và lưu tạm thời trong 5 phút.';
+                    : 'Đã lấy dữ liệu mới nhất từ Telegram và lưu tạm thời trong 30 phút.';
 
                 if (peerField) {
                     populatePeerSelector();

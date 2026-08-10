@@ -6,7 +6,7 @@ namespace App\Services;
 
 final class TelegramGroupDialogCache
 {
-    public const TTL_SECONDS = 300;
+    public const TTL_SECONDS = 1800;
 
     public function get(int $userId, int $accountId): ?array
     {
