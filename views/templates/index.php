@@ -1324,7 +1324,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 usedTokensWrap.innerHTML = used.length > 0
                     ? used.map((emoji) => {
                         const libraryEmoji = emojiMap.get(String(emoji.slug || '').toLowerCase()) || emoji;
-                        return `<span class="chip template-used-emoji-chip">${emojiVisualMarkup(libraryEmoji, 'template-used-emoji')} <span>${escapeHtml(String(emoji.name || ''))}</span> <span class="mono">${escapeHtml('{{ce:' + String(emoji.slug || '') + '}}')}</span></span>`;
+                        return `<span class="chip template-used-emoji-chip">${emojiVisualMarkup(libraryEmoji, 'template-used-emoji')} <span>${escapeHtml(String(emoji.name || ''))}</span></span>`;
                     }).join('')
                     : '';
 
