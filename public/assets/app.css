@@ -2099,6 +2099,19 @@ body.sidebar-collapsed .sidebar-logout {
   color: var(--primary);
 }
 
+.template-editor-tool.active {
+  border-color: var(--accent-border-strong);
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.template-editor-tool.mixed {
+  border-color: var(--border-strong);
+  background: linear-gradient(135deg, var(--accent-soft) 50%, transparent 50%);
+  color: var(--accent);
+}
+
 .template-editor-emoji-toggle.active {
   border-color: var(--accent-border-strong);
   background: var(--accent-soft);
@@ -2245,12 +2258,45 @@ body.sidebar-collapsed .sidebar-logout {
   background: var(--surface-muted-2);
 }
 
+.template-editor-surface ul,
+.template-editor-surface ol {
+  margin: 8px 0;
+  padding-left: 28px;
+}
+
+.template-editor-surface li {
+  margin: 3px 0;
+}
+
+.template-editor-surface code {
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: var(--surface-muted-3);
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+
 .template-editor-surface pre {
   padding: 12px;
   overflow-x: auto;
   border-radius: 9px;
   background: var(--code-bg);
   color: var(--code-fg);
+}
+
+.template-editor-surface pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.template-editor-surface tg-spoiler {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface-muted-3);
+  text-decoration: underline dotted;
+  text-decoration-color: var(--muted-2);
+  text-underline-offset: 3px;
 }
 
 .template-editor-emoji {
@@ -2359,6 +2405,80 @@ body.sidebar-collapsed .sidebar-logout {
   font-size: 0.92rem;
   line-height: 1.7;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.template-preview-surface b,
+.template-preview-surface strong {
+  color: var(--foreground);
+  font-weight: 750;
+}
+
+.template-preview-surface blockquote {
+  margin: 8px 0;
+  padding: 7px 11px;
+  border-left: 3px solid var(--primary);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface-muted-2);
+}
+
+.template-preview-surface pre,
+.template-preview-surface code {
+  font-family: var(--font-mono);
+}
+
+.template-preview-surface code {
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: var(--surface-muted-3);
+  color: var(--accent);
+}
+
+.template-preview-surface pre {
+  margin: 8px 0;
+  padding: 10px;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: var(--code-bg);
+  color: var(--code-fg);
+  white-space: pre-wrap;
+}
+
+.template-preview-surface pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.template-preview-surface a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.template-preview-surface tg-spoiler,
+.template-library-preview tg-spoiler,
+.log-preview tg-spoiler {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface-muted-4);
+  color: transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.16s ease, background-color 0.16s ease;
+}
+
+.template-preview-surface tg-spoiler.is-revealed,
+.template-preview-surface tg-spoiler:hover,
+.template-preview-surface tg-spoiler:focus-visible,
+.template-library-preview tg-spoiler.is-revealed,
+.template-library-preview tg-spoiler:hover,
+.template-library-preview tg-spoiler:focus-visible,
+.log-preview tg-spoiler.is-revealed,
+.log-preview tg-spoiler:hover,
+.log-preview tg-spoiler:focus-visible {
+  background: var(--surface-muted-2);
+  color: var(--foreground);
+  user-select: text;
 }
 
 .template-inline-emoji {
@@ -3072,9 +3192,27 @@ td {
   font-family: var(--font-mono);
 }
 
+.log-preview code {
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: var(--surface-muted-3);
+  color: var(--accent);
+}
+
 .log-preview pre {
   margin: 7px 0;
+  padding: 10px;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: var(--code-bg);
+  color: var(--code-fg);
   white-space: pre-wrap;
+}
+
+.log-preview pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
 }
 
 .log-preview a {
@@ -4414,9 +4552,27 @@ tbody tr:hover {
   font-family: var(--font-mono);
 }
 
+.template-library-preview code {
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: var(--surface-muted-3);
+  color: var(--accent);
+}
+
 .template-library-preview pre {
   margin: 6px 0;
+  padding: 9px;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: var(--code-bg);
+  color: var(--code-fg);
   white-space: pre-wrap;
+}
+
+.template-library-preview pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
 }
 
 .template-library-preview a {

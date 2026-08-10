@@ -153,13 +153,35 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function bindSpoilerPreviews(scope) {
+        scope.querySelectorAll('tg-spoiler').forEach((spoiler) => {
+            if (spoiler.dataset.spoilerBound === '1') {
+                return;
+            }
+
+            spoiler.dataset.spoilerBound = '1';
+            spoiler.setAttribute('role', 'button');
+            spoiler.setAttribute('tabindex', '0');
+            spoiler.setAttribute('aria-label', 'Hiện hoặc ẩn nội dung spoiler');
+
+            const toggle = () => spoiler.classList.toggle('is-revealed');
+            spoiler.addEventListener('click', toggle);
+            spoiler.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    toggle();
+                }
+            });
+        });
+    }
+
     function renderSafeHtml(value) {
         const tokenized = String(value || '').replace(/\{\{ce:([a-z0-9._-]+)\}\}/ig, (token, slug) => (
             `<span data-log-emoji="${String(slug).toLowerCase()}"></span>`
         ));
         const source = document.createElement('template');
         const output = document.createElement('div');
-        const allowedTags = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'INS', 'S', 'STRIKE', 'DEL', 'CODE', 'PRE', 'BLOCKQUOTE', 'A', 'BR']);
+        const allowedTags = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'INS', 'S', 'STRIKE', 'DEL', 'CODE', 'PRE', 'BLOCKQUOTE', 'TG-SPOILER', 'A', 'BR']);
         source.innerHTML = tokenized;
 
         function cleanNode(node) {
@@ -222,6 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ? renderSafeHtml(record.body || '')
             : escapeHtml(record.body || '').replace(/\n/g, '<br>');
         bindCustomEmojiPreviews(preview);
+        bindSpoilerPreviews(preview);
     });
 });
 </script>

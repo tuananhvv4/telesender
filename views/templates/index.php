@@ -102,7 +102,7 @@ foreach ($templates as $template) {
                 <div class="field">
                     <label for="template_modal_preset">Chọn nội dung mẫu</label>
                     <select class="select" id="template_modal_preset" data-template-preset>
-                        <option value="">Chọn mẫu cài sẵn để tự động điền form</option>
+                        <option value="">Chọn mẫu cài sẵn hoặc tự thiết lập ở phần dưới</option>
                         <?php foreach ($templatePresets as $preset): ?>
                             <option value="<?= e($preset['key']) ?>"><?= e($preset['name']) ?> · <?= e($preset['description']) ?></option>
                         <?php endforeach; ?>
@@ -152,8 +152,18 @@ foreach ($templates as $template) {
                             <button class="template-editor-tool" type="button" data-editor-command="italic" aria-label="In nghiêng" title="In nghiêng"><em>I</em></button>
                             <button class="template-editor-tool" type="button" data-editor-command="underline" aria-label="Gạch chân" title="Gạch chân"><u>U</u></button>
                             <button class="template-editor-tool" type="button" data-editor-command="strikeThrough" aria-label="Gạch ngang" title="Gạch ngang"><s>S</s></button>
+                            <button class="template-editor-tool" type="button" data-editor-command="inlineCode" aria-label="Mã nội tuyến" title="Mã nội tuyến"><i class="fa-solid fa-code" aria-hidden="true"></i></button>
+                            <button class="template-editor-tool" type="button" data-editor-command="spoiler" aria-label="Nội dung ẩn" title="Nội dung ẩn (spoiler)"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i></button>
                             <span class="template-editor-toolbar-separator" aria-hidden="true"></span>
                             <button class="template-editor-tool template-editor-tool-wide" type="button" data-editor-block="blockquote" aria-label="Trích dẫn" title="Trích dẫn"><i class="fa-solid fa-quote-left" aria-hidden="true"></i><span>Trích dẫn</span></button>
+                            <button class="template-editor-tool" type="button" data-editor-block="pre" aria-label="Khối mã" title="Khối mã"><i class="fa-solid fa-file-code" aria-hidden="true"></i></button>
+                            <button class="template-editor-tool" type="button" data-editor-action="link" aria-label="Chèn liên kết" title="Chèn liên kết"><i class="fa-solid fa-link" aria-hidden="true"></i></button>
+                            <span class="template-editor-toolbar-separator" aria-hidden="true"></span>
+                            <button class="template-editor-tool" type="button" data-editor-action="unorderedList" aria-label="Danh sách dấu chấm" title="Danh sách dấu chấm"><i class="fa-solid fa-list-ul" aria-hidden="true"></i></button>
+                            <button class="template-editor-tool" type="button" data-editor-action="orderedList" aria-label="Danh sách đánh số" title="Danh sách đánh số"><i class="fa-solid fa-list-ol" aria-hidden="true"></i></button>
+                            <button class="template-editor-tool" type="button" data-editor-action="indent" aria-label="Tăng thụt lề" title="Tăng thụt lề"><i class="fa-solid fa-indent" aria-hidden="true"></i></button>
+                            <button class="template-editor-tool" type="button" data-editor-action="outdent" aria-label="Giảm thụt lề" title="Giảm thụt lề"><i class="fa-solid fa-outdent" aria-hidden="true"></i></button>
+                            <span class="template-editor-toolbar-separator" aria-hidden="true"></span>
                             <button class="template-editor-tool template-editor-tool-wide" type="button" data-editor-command="removeFormat" aria-label="Xóa định dạng" title="Xóa định dạng"><i class="fa-solid fa-eraser" aria-hidden="true"></i><span>Xóa định dạng</span></button>
                             <span class="template-editor-toolbar-separator" aria-hidden="true"></span>
                             <button
@@ -332,13 +342,35 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function bindSpoilerPreviews(scope) {
+        scope.querySelectorAll('tg-spoiler').forEach((spoiler) => {
+            if (spoiler.dataset.spoilerBound === '1') {
+                return;
+            }
+
+            spoiler.dataset.spoilerBound = '1';
+            spoiler.setAttribute('role', 'button');
+            spoiler.setAttribute('tabindex', '0');
+            spoiler.setAttribute('aria-label', 'Hiện hoặc ẩn nội dung spoiler');
+
+            const toggle = () => spoiler.classList.toggle('is-revealed');
+            spoiler.addEventListener('click', toggle);
+            spoiler.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    toggle();
+                }
+            });
+        });
+    }
+
     function renderSafeTelegramPreview(value, emojiMap) {
         const tokenized = String(value || '').replace(/\{\{ce:([a-z0-9._-]+)\}\}/ig, (token, slug) => (
             `<span data-preview-emoji="${String(slug).toLowerCase()}"></span>`
         ));
         const source = document.createElement('template');
         const output = document.createElement('div');
-        const allowedTags = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'INS', 'S', 'STRIKE', 'DEL', 'CODE', 'PRE', 'BLOCKQUOTE', 'A', 'BR']);
+        const allowedTags = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'INS', 'S', 'STRIKE', 'DEL', 'CODE', 'PRE', 'BLOCKQUOTE', 'TG-SPOILER', 'A', 'BR']);
         source.innerHTML = tokenized;
 
         function cleanNode(node) {
@@ -423,6 +455,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             preview.innerHTML = renderTemplateContent(record.body || '', customEmojiMap, record.parse_mode || 'HTML');
             bindCustomEmojiPreviews(preview);
+            bindSpoilerPreviews(preview);
         });
     }
 
@@ -443,7 +476,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ));
         const source = document.createElement('template');
         const output = document.createElement('div');
-        const allowedTags = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'INS', 'S', 'STRIKE', 'DEL', 'CODE', 'PRE', 'BLOCKQUOTE', 'A', 'BR']);
+        const allowedTags = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'INS', 'S', 'STRIKE', 'DEL', 'CODE', 'PRE', 'BLOCKQUOTE', 'TG-SPOILER', 'A', 'BR']);
         source.innerHTML = tokenized;
 
         function cleanNode(node) {
@@ -511,6 +544,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const editorSurface = wrapper.querySelector('[data-template-editor-surface]');
         const editorCommandButtons = wrapper.querySelectorAll('[data-editor-command]');
         const editorBlockButtons = wrapper.querySelectorAll('[data-editor-block]');
+        const editorActionButtons = wrapper.querySelectorAll('[data-editor-action]');
+        const toolbarFormatStates = [
+            { button: wrapper.querySelector('[data-editor-command="bold"]'), selector: 'b, strong' },
+            { button: wrapper.querySelector('[data-editor-command="italic"]'), selector: 'i, em' },
+            { button: wrapper.querySelector('[data-editor-command="underline"]'), selector: 'u, ins' },
+            { button: wrapper.querySelector('[data-editor-command="strikeThrough"]'), selector: 's, strike, del' },
+            { button: wrapper.querySelector('[data-editor-command="inlineCode"]'), selector: 'code' },
+            { button: wrapper.querySelector('[data-editor-command="spoiler"]'), selector: 'tg-spoiler' },
+            { button: wrapper.querySelector('[data-editor-block="blockquote"]'), selector: 'blockquote' },
+            { button: wrapper.querySelector('[data-editor-block="pre"]'), selector: 'pre' },
+            { button: wrapper.querySelector('[data-editor-action="link"]'), selector: 'a' },
+            { button: wrapper.querySelector('[data-editor-action="unorderedList"]'), selector: 'ul' },
+            { button: wrapper.querySelector('[data-editor-action="orderedList"]'), selector: 'ol' },
+        ];
         const parseModeInput = wrapper.querySelector('[data-template-parse-mode]');
         const labelInput = wrapper.querySelector('[data-template-label]');
         const activeInput = wrapper.querySelector('[data-template-active]');
@@ -656,6 +703,61 @@ document.addEventListener('DOMContentLoaded', () => {
             editorSurface.innerHTML = renderEditorContent(value, emojiMap, parseModeInput.value);
             bindCustomEmojiPreviews(editorSurface);
             lastEditorRange = null;
+            syncEditorToolbarState(null);
+        }
+
+        function syncEditorToolbarState(range) {
+            const selectedTextNodes = [];
+
+            if (range && editorSurface.contains(range.commonAncestorContainer)) {
+                const walker = document.createTreeWalker(editorSurface, NodeFilter.SHOW_TEXT);
+                let currentNode = walker.nextNode();
+
+                while (currentNode) {
+                    if ((currentNode.textContent || '').trim() !== '') {
+                        try {
+                            if (range.intersectsNode(currentNode)) {
+                                selectedTextNodes.push(currentNode);
+                            }
+                        } catch (error) {
+                        }
+                    }
+
+                    currentNode = walker.nextNode();
+                }
+            }
+
+            toolbarFormatStates.forEach(({ button, selector }) => {
+                if (!button) {
+                    return;
+                }
+
+                let matches = 0;
+                let total = selectedTextNodes.length;
+
+                if (range && total === 0 && editorSurface.contains(range.commonAncestorContainer)) {
+                    const startElement = range.startContainer instanceof HTMLElement
+                        ? range.startContainer
+                        : range.startContainer.parentElement;
+                    total = 1;
+                    matches = startElement?.closest(selector) && editorSurface.contains(startElement.closest(selector)) ? 1 : 0;
+                } else if (total > 0) {
+                    matches = selectedTextNodes.filter((node) => {
+                        const formattedParent = node.parentElement?.closest(selector);
+                        return formattedParent && editorSurface.contains(formattedParent);
+                    }).length;
+                }
+
+                const state = matches === 0
+                    ? 'off'
+                    : matches === total
+                        ? 'active'
+                        : 'mixed';
+
+                button.classList.toggle('active', state === 'active');
+                button.classList.toggle('mixed', state === 'mixed');
+                button.setAttribute('aria-pressed', state === 'mixed' ? 'mixed' : state === 'active' ? 'true' : 'false');
+            });
         }
 
         function serializeEditorNode(node) {
@@ -680,9 +782,34 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const children = Array.from(node.childNodes).map(serializeEditorNode).join('');
+
+            if (node.tagName === 'LI') {
+                const list = node.parentElement;
+                let depth = 0;
+                let ancestor = list?.parentElement || null;
+
+                while (ancestor && ancestor !== editorSurface) {
+                    if (ancestor.tagName === 'LI') {
+                        depth += 1;
+                    }
+                    ancestor = ancestor.parentElement;
+                }
+
+                const marker = list?.tagName === 'OL'
+                    ? `${Array.from(list.children).indexOf(node) + 1}. `
+                    : '• ';
+
+                return `${'\u2003'.repeat(depth)}${marker}${children}<br>`;
+            }
+
+            if (node.tagName === 'UL' || node.tagName === 'OL') {
+                return children;
+            }
+
             const tagMap = {
                 B: 'b', STRONG: 'b', I: 'i', EM: 'i', U: 'u', INS: 'u',
                 S: 's', STRIKE: 's', DEL: 's', CODE: 'code', PRE: 'pre', BLOCKQUOTE: 'blockquote',
+                'TG-SPOILER': 'tg-spoiler',
             };
             const tag = tagMap[node.tagName];
 
@@ -706,6 +833,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function syncBodyFromEditor() {
             let value = Array.from(editorSurface.childNodes).map(serializeEditorNode).join('')
+                .replace(/<(b|i|u|s|code|pre|blockquote|tg-spoiler)>\s*<\/\1>/gi, '')
                 .replace(/(?:<br>){2,}$/g, '<br>')
                 .replace(/<br>$/g, '');
 
@@ -722,12 +850,16 @@ document.addEventListener('DOMContentLoaded', () => {
         function rememberEditorSelection() {
             const selection = window.getSelection();
             if (!selection || selection.rangeCount === 0) {
+                syncEditorToolbarState(null);
                 return;
             }
 
             const range = selection.getRangeAt(0);
             if (editorSurface.contains(range.commonAncestorContainer)) {
                 lastEditorRange = range.cloneRange();
+                syncEditorToolbarState(range);
+            } else if (!richEditor.contains(document.activeElement)) {
+                syncEditorToolbarState(null);
             }
         }
 
@@ -834,48 +966,96 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            const tagMap = {
+                bold: 'b',
+                italic: 'i',
+                underline: 'u',
+                strikeThrough: 's',
+                inlineCode: 'code',
+                spoiler: 'tg-spoiler',
+            };
+            const tagName = tagMap[command];
+
             if (range.collapsed) {
-                document.execCommand(command, false);
+                if (['bold', 'italic', 'underline', 'strikeThrough', 'removeFormat'].includes(command)) {
+                    document.execCommand(command, false);
+                } else if (tagName) {
+                    const formatted = document.createElement(tagName);
+                    const marker = document.createTextNode('\u200B');
+                    formatted.appendChild(marker);
+                    range.insertNode(formatted);
+                    range.setStart(marker, marker.length);
+                    range.collapse(true);
+
+                    const selection = window.getSelection();
+                    selection?.removeAllRanges();
+                    selection?.addRange(range);
+                    lastEditorRange = range.cloneRange();
+                }
+
                 rememberEditorSelection();
                 return;
             }
 
             if (command === 'removeFormat') {
-                const extracted = range.extractContents();
-                const cleanFragment = document.createDocumentFragment();
+                const formattedBlocks = Array.from(editorSurface.querySelectorAll('blockquote, pre'))
+                    .filter((block) => range.intersectsNode(block));
+                const formattedLists = Array.from(editorSurface.querySelectorAll('ul, ol'))
+                    .filter((list) => range.intersectsNode(list));
+                const formattedInline = Array.from(editorSurface.querySelectorAll('a, code, tg-spoiler'))
+                    .filter((element) => range.intersectsNode(element));
+                const protectedEmojis = Array.from(editorSurface.querySelectorAll('[data-editor-emoji-token]'))
+                    .filter((emoji) => range.intersectsNode(emoji))
+                    .map((emoji, index) => {
+                        const marker = document.createTextNode(`\uE000${index}\uE001`);
+                        const clone = emoji.cloneNode(true);
+                        emoji.replaceWith(marker);
 
-                function appendWithoutFormatting(source, target) {
-                    source.childNodes.forEach((node) => {
-                        if (node.nodeType === Node.TEXT_NODE) {
-                            target.appendChild(node.cloneNode(true));
-                            return;
-                        }
-
-                        if (!(node instanceof HTMLElement)) {
-                            return;
-                        }
-
-                        if (node.hasAttribute('data-editor-emoji-token') || node.tagName === 'BR') {
-                            target.appendChild(node.cloneNode(true));
-                            return;
-                        }
-
-                        appendWithoutFormatting(node, target);
+                        return { marker, clone };
                     });
-                }
 
-                appendWithoutFormatting(extracted, cleanFragment);
-                const insertedNodes = Array.from(cleanFragment.childNodes);
-                range.insertNode(cleanFragment);
+                document.execCommand('removeFormat', false);
+                document.execCommand('unlink', false);
 
-                if (insertedNodes.length > 0) {
-                    range.setStartBefore(insertedNodes[0]);
-                    range.setEndAfter(insertedNodes[insertedNodes.length - 1]);
-                }
+                protectedEmojis.forEach(({ marker, clone }) => {
+                    if (marker.isConnected) {
+                        marker.replaceWith(clone);
+                    }
+                });
+
+                // Block formatting wraps the selection, so convert affected blocks to normal paragraphs.
+                formattedBlocks.forEach((block) => {
+                    if (!block.isConnected) {
+                        return;
+                    }
+
+                    const paragraph = document.createElement('div');
+                    paragraph.append(...block.childNodes);
+                    block.replaceWith(paragraph);
+                });
+
+                formattedLists.forEach((list) => {
+                    if (!list.isConnected) {
+                        return;
+                    }
+
+                    const paragraphs = document.createDocumentFragment();
+                    Array.from(list.children).forEach((item) => {
+                        const paragraph = document.createElement('div');
+                        paragraph.append(...item.childNodes);
+                        paragraphs.appendChild(paragraph);
+                    });
+                    list.replaceWith(paragraphs);
+                });
+
+                formattedInline.forEach((element) => {
+                    if (element.isConnected) {
+                        element.replaceWith(...element.childNodes);
+                    }
+                });
+
+                bindCustomEmojiPreviews(editorSurface);
             } else {
-                const tagMap = { bold: 'b', italic: 'i', underline: 'u', strikeThrough: 's' };
-                const tagName = tagMap[command];
-
                 if (!tagName) {
                     return;
                 }
@@ -906,6 +1086,7 @@ document.addEventListener('DOMContentLoaded', () => {
             selection?.removeAllRanges();
             selection?.addRange(range);
             lastEditorRange = range.cloneRange();
+            syncEditorToolbarState(range);
         }
 
         function applyEditorBlock(tagName) {
@@ -929,6 +1110,139 @@ document.addEventListener('DOMContentLoaded', () => {
             selection?.removeAllRanges();
             selection?.addRange(range);
             lastEditorRange = range.cloneRange();
+            syncEditorToolbarState(range);
+        }
+
+        function applyEditorLink() {
+            const range = focusEditorRange();
+            if (!range) {
+                return;
+            }
+
+            const startElement = range.startContainer instanceof HTMLElement
+                ? range.startContainer
+                : range.startContainer.parentElement;
+            const existingLink = startElement?.closest('a');
+            const enteredUrl = window.prompt('Nhập liên kết (https://... hoặc tg://...):', existingLink?.getAttribute('href') || 'https://');
+
+            if (enteredUrl === null) {
+                return;
+            }
+
+            const url = enteredUrl.trim();
+
+            if (url === '') {
+                document.execCommand('unlink', false);
+                rememberEditorSelection();
+                return;
+            }
+
+            if (!/^(https?:|tg:)/i.test(url)) {
+                window.alert('Liên kết phải bắt đầu bằng http://, https:// hoặc tg://.');
+                return;
+            }
+
+            if (range.collapsed) {
+                const link = document.createElement('a');
+                link.href = url;
+                link.textContent = url;
+                range.insertNode(link);
+                range.setStartAfter(link);
+                range.collapse(true);
+
+                const selection = window.getSelection();
+                selection?.removeAllRanges();
+                selection?.addRange(range);
+                lastEditorRange = range.cloneRange();
+                return;
+            }
+
+            document.execCommand('createLink', false, url);
+            rememberEditorSelection();
+        }
+
+        function applyEditorList(type) {
+            focusEditorRange();
+            document.execCommand(type === 'ordered' ? 'insertOrderedList' : 'insertUnorderedList', false);
+            rememberEditorSelection();
+        }
+
+        function applyEditorIndent(direction) {
+            const range = focusEditorRange();
+            if (!range) {
+                return;
+            }
+
+            const startElement = range.startContainer instanceof HTMLElement
+                ? range.startContainer
+                : range.startContainer.parentElement;
+
+            if (startElement?.closest('li')) {
+                document.execCommand(direction, false);
+                rememberEditorSelection();
+                return;
+            }
+
+            const blockTags = new Set(['DIV', 'P', 'BLOCKQUOTE', 'PRE']);
+            const lines = [];
+            let inlineLine = [];
+
+            const flushInlineLine = () => {
+                if (inlineLine.length > 0) {
+                    lines.push({ container: editorSurface, nodes: inlineLine });
+                    inlineLine = [];
+                }
+            };
+
+            Array.from(editorSurface.childNodes).forEach((node) => {
+                if (node instanceof HTMLElement && node.tagName === 'BR') {
+                    flushInlineLine();
+                    return;
+                }
+
+                if (node instanceof HTMLElement && blockTags.has(node.tagName)) {
+                    flushInlineLine();
+                    lines.push({ container: node, nodes: [node] });
+                    return;
+                }
+
+                inlineLine.push(node);
+            });
+            flushInlineLine();
+
+            const selectedLines = lines.filter(({ nodes }) => nodes.some((node) => {
+                try {
+                    return range.intersectsNode(node);
+                } catch (error) {
+                    return false;
+                }
+            }));
+
+            selectedLines.forEach(({ container, nodes }) => {
+                const firstNode = container === editorSurface ? nodes[0] : container.firstChild;
+
+                if (direction === 'indent') {
+                    container.insertBefore(document.createTextNode('\u2003'), firstNode || null);
+                    return;
+                }
+
+                const leadingNode = firstNode?.nodeType === Node.TEXT_NODE
+                    ? firstNode
+                    : firstNode?.firstChild;
+
+                if (leadingNode?.nodeType === Node.TEXT_NODE && leadingNode.textContent?.startsWith('\u2003')) {
+                    leadingNode.textContent = leadingNode.textContent.slice(1);
+                    if (leadingNode.textContent === '') {
+                        leadingNode.remove();
+                    }
+                }
+            });
+
+            if (selectedLines.length === 0 && range.collapsed && direction === 'indent') {
+                document.execCommand('insertText', false, '\u2003');
+            }
+
+            rememberEditorSelection();
         }
 
         function bindEmojiGridEvents() {
@@ -994,7 +1308,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: formData.toString(),
                 });
 
-                previewSurface.innerHTML = renderSafeTelegramPreview(bodyInput.value, emojiMap);
+                previewSurface.innerHTML = renderTemplateContent(
+                    bodyInput.value,
+                    emojiMap,
+                    parseModeInput.value || 'HTML'
+                );
                 const issues = Array.isArray(payload.issues) ? payload.issues : [];
                 previewIssuesItem.hidden = issues.length === 0;
                 previewIssuesWrap.innerHTML = issues.length > 0
@@ -1011,6 +1329,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     : '';
 
                 bindCustomEmojiPreviews(wrapper);
+                bindSpoilerPreviews(previewSurface);
             } catch (error) {
                 previewIssuesItem.hidden = false;
                 previewIssuesWrap.innerHTML = `<div class="badge danger">${escapeHtml(error.message || 'Preview thất bại.')}</div>`;
@@ -1088,6 +1407,27 @@ document.addEventListener('DOMContentLoaded', () => {
             button.addEventListener('mousedown', (event) => event.preventDefault());
             button.addEventListener('click', () => {
                 applyEditorBlock(button.getAttribute('data-editor-block') || 'blockquote');
+                parseModeInput.value = 'HTML';
+                syncBodyFromEditor();
+                scheduleTemplatePreview();
+            });
+        });
+
+        editorActionButtons.forEach((button) => {
+            button.addEventListener('mousedown', (event) => event.preventDefault());
+            button.addEventListener('click', () => {
+                const action = button.getAttribute('data-editor-action') || '';
+
+                if (action === 'link') {
+                    applyEditorLink();
+                } else if (action === 'unorderedList') {
+                    applyEditorList('unordered');
+                } else if (action === 'orderedList') {
+                    applyEditorList('ordered');
+                } else if (action === 'indent' || action === 'outdent') {
+                    applyEditorIndent(action);
+                }
+
                 parseModeInput.value = 'HTML';
                 syncBodyFromEditor();
                 scheduleTemplatePreview();
