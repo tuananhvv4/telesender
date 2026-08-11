@@ -1061,17 +1061,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
         await window.TeleSenderApp.submitAjaxForm(form, {
             reloadOnSuccess: false,
-            async onSuccess(payload) {
+            onSuccess(payload) {
                 const schedule = payload.schedule || {};
 
                 if (!row || String(schedule.id || '') !== scheduleId) {
                     return;
                 }
 
-                try {
-                    await syncScheduleRows(scheduleId);
-                } catch (error) {
-                    window.TeleSenderApp.showFlash('error', error.message || 'Đã đổi trạng thái nhưng chưa đồng bộ được dòng hiển thị.');
+                const status = String(schedule.status || '');
+                const statusBadge = row.querySelector('[data-schedule-status-badge]');
+                const toggleButton = row.querySelector('[data-schedule-toggle-button]');
+                const nextRun = row.querySelector('[data-schedule-next-run]');
+
+                if (statusBadge) {
+                    statusBadge.className = `badge ${status === 'active' ? 'success' : 'warning'}`;
+                    statusBadge.textContent = schedule.status_label || (status === 'active' ? 'Đang chạy' : 'Tạm dừng');
+                }
+
+                if (toggleButton) {
+                    const nextActionLabel = status === 'active' ? 'Tạm dừng' : 'Tiếp tục';
+                    toggleButton.textContent = nextActionLabel;
+                    toggleButton.dataset.originalLabel = nextActionLabel;
+                }
+
+                if (nextRun && schedule.next_run_at_label) {
+                    nextRun.textContent = schedule.next_run_at_label;
+                }
+
+                if (schedule.queue_cleared) {
+                    row.querySelector('[data-schedule-error]')?.remove();
+                    row.querySelector('[data-schedule-queue-notice]')?.remove();
+                }
+
+                if (scheduleRecords[scheduleId]) {
+                    scheduleRecords[scheduleId].status = status;
                 }
             },
         });
