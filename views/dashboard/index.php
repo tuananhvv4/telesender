@@ -120,7 +120,7 @@
                                 <?php endif; ?>
                             </div>
                             <?php if (!empty($log['error_message'])): ?>
-                                <div class="small dashboard-inline-error"><?= e($log['error_message']) ?></div>
+                                <div class="small dashboard-inline-error"><?= e(dispatch_error_message((string) $log['error_message'])) ?></div>
                             <?php endif; ?>
                         </article>
                     <?php endforeach; ?>
@@ -190,7 +190,7 @@
                             <strong><?= e($log['template_name'] ?? 'Không xác định') ?></strong>
                             <div class="small muted"><?= e($log['group_title'] ?? 'Nhóm không xác định') ?> · <?= e(fmt_datetime($log['sent_at'])) ?></div>
                             <?php if (!empty($log['error_message'])): ?>
-                                <div class="small" style="color:#b91c1c;"><?= e($log['error_message']) ?></div>
+                                <div class="small" style="color:#b91c1c;"><?= e(dispatch_error_message((string) $log['error_message'])) ?></div>
                             <?php endif; ?>
                         </article>
                     <?php endforeach; ?>

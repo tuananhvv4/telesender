@@ -121,7 +121,7 @@ foreach ($schedules as $schedule) {
                                 <span class="badge info"><?= e($scheduleTypeLabels[(string) ($schedule['schedule_type'] ?? 'advanced')] ?? 'Nâng cao') ?></span>
                             </div>
                             <?php if (!empty($schedule['last_error'])): ?>
-                                <div class="small" style="color:<?= $queueNotice ? '#0f766e' : '#b91c1c' ?>;"><?= e($schedule['last_error']) ?></div>
+                                <div class="small" style="color:<?= $queueNotice ? '#0f766e' : '#b91c1c' ?>;"><?= e(dispatch_error_message((string) $schedule['last_error'])) ?></div>
                             <?php endif; ?>
                         </td>
                         <td>

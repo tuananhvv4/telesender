@@ -284,6 +284,64 @@ if (!function_exists('safety_mode_label')) {
     }
 }
 
+if (!function_exists('dispatch_error_message')) {
+    function dispatch_error_message(?string $message): string
+    {
+        $message = trim((string) $message);
+
+        if ($message === '') {
+            return '';
+        }
+
+        $normalized = strtoupper($message);
+        $waitLabel = static function (int $seconds): string {
+            $minutes = intdiv($seconds, 60);
+            $remainingSeconds = $seconds % 60;
+
+            if ($minutes > 0 && $remainingSeconds > 0) {
+                return $minutes . ' phút ' . $remainingSeconds . ' giây';
+            }
+
+            return $minutes > 0 ? $minutes . ' phút' : $remainingSeconds . ' giây';
+        };
+
+        if (preg_match('/SLOWMODE_WAIT_([0-9]+)/i', $message, $matches) === 1) {
+            return 'Nhóm đang bật chế độ gửi chậm. Có thể gửi lại sau ' . $waitLabel((int) $matches[1]) . '.';
+        }
+
+        if (preg_match('/FLOOD_WAIT_([0-9]+)/i', $message, $matches) === 1) {
+            return 'Telegram đang tạm giới hạn tần suất gửi của tài khoản. Có thể thử lại sau ' . $waitLabel((int) $matches[1]) . '.';
+        }
+
+        $knownErrors = [
+            'PEER_FLOOD' => 'Telegram đang hạn chế tài khoản do gửi quá nhiều tin. Hãy tạm dừng và thử lại sau.',
+            'CHAT_WRITE_FORBIDDEN' => 'Tài khoản không có quyền gửi tin vào nhóm này.',
+            'USER_BANNED_IN_CHANNEL' => 'Tài khoản đã bị cấm gửi tin trong nhóm này.',
+            'CHANNEL_PRIVATE' => 'Tài khoản không còn quyền truy cập nhóm hoặc đã rời khỏi nhóm.',
+            'CHAT_ADMIN_REQUIRED' => 'Thao tác này yêu cầu tài khoản có quyền quản trị trong nhóm.',
+            'TOPIC_CLOSED' => 'Topic đích đã bị đóng. Hãy chọn topic khác hoặc mở lại topic trên Telegram.',
+            'TOPIC_DELETED' => 'Topic đích đã bị xóa. Hãy cập nhật lại nhóm và chọn topic khác.',
+            'CHANNEL_FORUM_MISSING' => 'Nhóm này không bật Topics. Hãy gửi vào nhóm chung thay vì chọn topic.',
+            'MESSAGE_TOO_LONG' => 'Nội dung tin nhắn vượt quá giới hạn cho phép của Telegram.',
+            'MESSAGE_EMPTY' => 'Nội dung tin nhắn đang trống hoặc không có nội dung hợp lệ để gửi.',
+            'PEER_ID_INVALID' => 'Không xác định được nhóm Telegram. Hãy tải lại danh sách nhóm và chọn lại.',
+            'CHANNEL_INVALID' => 'Nhóm Telegram không hợp lệ hoặc không còn tồn tại.',
+            'CHAT_ID_INVALID' => 'ID nhóm Telegram không hợp lệ. Hãy cập nhật lại cấu hình nhóm.',
+            'AUTH_KEY_UNREGISTERED' => 'Phiên đăng nhập Telegram đã hết hiệu lực. Hãy đăng nhập lại tài khoản.',
+            'SESSION_REVOKED' => 'Phiên đăng nhập Telegram đã bị thu hồi. Hãy đăng nhập lại tài khoản.',
+            'PHONE_NUMBER_BANNED' => 'Số điện thoại của tài khoản đã bị Telegram khóa.',
+        ];
+
+        foreach ($knownErrors as $code => $friendlyMessage) {
+            if (str_contains($normalized, $code)) {
+                return $friendlyMessage;
+            }
+        }
+
+        return $message;
+    }
+}
+
 if (!function_exists('safety_event_label')) {
     function safety_event_label(?string $eventType): string
     {

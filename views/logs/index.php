@@ -72,7 +72,7 @@ foreach ($logs as $log) {
                     </div>
 
                     <?php if (!empty($log['error_message'])): ?>
-                        <div class="log-alert danger"><?= e($log['error_message']) ?></div>
+                        <div class="log-alert danger"><?= e(dispatch_error_message((string) $log['error_message'])) ?></div>
                     <?php endif; ?>
 
                     <div class="log-card-grid">
