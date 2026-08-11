@@ -55,6 +55,14 @@ foreach ($logs as $log) {
                     <div class="log-card-head">
                         <div class="inline-actions">
                             <span class="badge <?= e($statusClass) ?>"><?= e($statusLabel) ?></span>
+                            <?php if (!empty($log['safety_mode_snapshot'])): ?>
+                                <span class="badge <?= (string) $log['safety_mode_snapshot'] === 'risk_accepted' ? 'danger' : ((string) $log['safety_mode_snapshot'] === 'elevated' ? 'warning' : 'success') ?>">
+                                    <?= e(safety_mode_label((string) $log['safety_mode_snapshot'])) ?>
+                                </span>
+                            <?php endif; ?>
+                            <?php if (!empty($log['safety_override_used'])): ?>
+                                <span class="badge danger">Đã dùng risk override</span>
+                            <?php endif; ?>
                             <span class="log-meta-pill"><?= e(fmt_datetime($log['sent_at'])) ?></span>
                             <!-- <span class="log-meta-pill mono"><?= e($log['request_id']) ?></span> -->
                         </div>

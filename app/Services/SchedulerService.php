@@ -14,6 +14,8 @@ use Throwable;
 class SchedulerService
 {
     private ?CustomEmojiService $customEmojiService = null;
+    private ?AccountSafetyPolicyService $safetyPolicyService = null;
+    private ?NotificationService $notificationService = null;
 
     public function __construct(
         private readonly Database $db,
@@ -35,6 +37,7 @@ class SchedulerService
         $jobs = $this->db->fetchAll(
             'SELECT sj.*, ta.name AS account_name, ta.phone_number, ta.session_name, ta.session_status,
                     ta.last_sent_at, ta.cooldown_until, ta.cooldown_reason, ta.is_active AS account_active,
+                    ta.safety_mode, ta.circuit_breaker_until, ta.circuit_breaker_reason,
                     u.role AS owner_role, u.status AS owner_status, u.subscription_expires_at AS owner_subscription_expires_at,
                     mt.name AS template_name, mt.body, mt.parse_mode, mt.label_id
              FROM schedule_jobs sj
@@ -96,6 +99,7 @@ class SchedulerService
         $job = $this->db->fetch(
             'SELECT sj.*, ta.name AS account_name, ta.phone_number, ta.session_name, ta.session_status,
                     ta.last_sent_at, ta.cooldown_until, ta.cooldown_reason, ta.is_active AS account_active,
+                    ta.safety_mode, ta.circuit_breaker_until, ta.circuit_breaker_reason,
                     u.role AS owner_role, u.status AS owner_status, u.subscription_expires_at AS owner_subscription_expires_at,
                     mt.name AS template_name, mt.body, mt.parse_mode, mt.label_id, mt.is_active AS template_active
              FROM schedule_jobs sj
@@ -166,13 +170,18 @@ class SchedulerService
         );
     }
 
-    public function analyzeScheduleRisk(string $expression, string $timezone, int $targetCount = 1): array
+    public function analyzeScheduleRisk(
+        string $expression,
+        string $timezone,
+        int $targetCount = 1,
+        ?array $account = null
+    ): array
     {
         $localNow = new DateTimeImmutable('now', new DateTimeZone($timezone));
         $cursor = $localNow;
         $occurrences = [];
 
-        for ($i = 0; $i < 60; $i++) {
+        for ($i = 0; $i < 1500; $i++) {
             $cursor = $this->cron->nextRun($expression, $cursor, $timezone);
             $occurrences[] = $cursor;
 
@@ -217,18 +226,26 @@ class SchedulerService
         $warnRuns = (int) config('safety.schedule_limits.warn_runs_per_day', 12);
         $highGap = (int) config('safety.schedule_limits.high_min_gap_minutes', 30);
         $warnGap = (int) config('safety.schedule_limits.warn_min_gap_minutes', 60);
-        $hourlyLimit = (int) config('safety.account_limits.max_success_per_hour', 6);
-        $dailyLimit = (int) config('safety.account_limits.max_success_per_day', 30);
+        $policy = $this->safety()->resolvedPolicy($account ?? ['safety_mode' => AccountSafetyPolicyService::MODE_SAFE]);
+        $hourlyLimit = $policy['hourly_limit'];
+        $dailyLimit = $policy['daily_limit'];
+        $policyMinGap = (int) $policy['min_gap_minutes'];
 
         $risk = 'safe';
         $message = 'Mật độ lịch gửi đang ở mức an toàn.';
 
-        if ($maxRunsPerHour > $hourlyLimit || $runsPerDay > $dailyLimit) {
+        if ($minGapMinutes !== null && $minGapMinutes < $policyMinGap) {
             $risk = 'blocked';
-            $message = 'Số lượt gửi theo nhóm vượt giới hạn an toàn của account theo giờ hoặc theo ngày. Hãy giảm số nhóm hoặc giãn lịch.';
+            $message = 'Khoảng cách giữa các lần chạy thấp hơn mức tối thiểu ' . $policyMinGap . ' phút của chế độ account hiện tại.';
+        } elseif (
+            ($hourlyLimit !== null && $maxRunsPerHour > $hourlyLimit)
+            || ($dailyLimit !== null && $runsPerDay > $dailyLimit)
+        ) {
+            $risk = 'blocked';
+            $message = 'Số lượt gửi theo nhóm vượt giới hạn theo giờ hoặc theo ngày của chế độ account hiện tại.';
         } elseif ($runsPerDay > $blockRuns || ($minGapMinutes !== null && $minGapMinutes < $highGap)) {
-            $risk = 'blocked';
-            $message = 'Lịch này quá dày, dễ chạm anti-spam. Hãy giãn cách thêm trước khi lưu.';
+            $risk = 'high';
+            $message = 'Lịch này có mật độ rất cao. Account đang cho phép lưu nhưng cần theo dõi sát cảnh báo từ Telegram.';
         } elseif ($runsPerDay > $highRuns) {
             $risk = 'high';
             $message = 'Lịch gửi khá dày. Hệ thống sẽ tự giới hạn theo account để giảm rủi ro.';
@@ -243,6 +260,11 @@ class SchedulerService
             'max_runs_per_hour' => $maxRunsPerHour,
             'min_gap_minutes' => $minGapMinutes,
             'message' => $message,
+            'safety_mode' => (string) $policy['mode'],
+            'safety_mode_label' => $this->safety()->modeLabel((string) $policy['mode']),
+            'policy_min_gap_minutes' => $policyMinGap,
+            'hourly_limit' => $hourlyLimit,
+            'daily_limit' => $dailyLimit,
         ];
     }
 
@@ -254,9 +276,10 @@ class SchedulerService
         ));
 
         $pausedCount = count($schedules) - count($activeSchedules);
-        $minGapLimit = (int) config('safety.account_limits.min_minutes_between_sends', 8);
-        $hourlyLimit = (int) config('safety.account_limits.max_success_per_hour', 6);
-        $dailyLimit = (int) config('safety.account_limits.max_success_per_day', 30);
+        $policy = $this->safety()->resolvedPolicy($activeSchedules[0] ?? ['safety_mode' => 'safe']);
+        $minGapLimit = (int) $policy['min_gap_minutes'];
+        $hourlyLimit = $policy['hourly_limit'];
+        $dailyLimit = $policy['daily_limit'];
 
         if ($activeSchedules === []) {
             return [
@@ -270,6 +293,11 @@ class SchedulerService
                 'conflict_pairs' => 0,
                 'same_minute_pairs' => 0,
                 'queue_likely' => false,
+                'safety_mode' => (string) $policy['mode'],
+                'safety_mode_label' => $this->safety()->modeLabel((string) $policy['mode']),
+                'hourly_limit' => $hourlyLimit,
+                'daily_limit' => $dailyLimit,
+                'policy_min_gap_minutes' => $minGapLimit,
                 'next_occurrences' => [],
             ];
         }
@@ -316,13 +344,17 @@ class SchedulerService
         }
 
         $queueLikely = ($minGapMinutes !== null && $minGapMinutes < $minGapLimit)
-            || $maxRunsPerHour > $hourlyLimit
-            || $runsPerDay > $dailyLimit;
+            || ($hourlyLimit !== null && $maxRunsPerHour > $hourlyLimit)
+            || ($dailyLimit !== null && $runsPerDay > $dailyLimit);
 
         $risk = 'safe';
         $message = 'Tổng lịch của account này đang nằm trong giới hạn an toàn.';
 
-        if ($sameMinutePairs > 0 || $maxRunsPerHour > $hourlyLimit || $runsPerDay > $dailyLimit) {
+        if (
+            $sameMinutePairs > 0
+            || ($hourlyLimit !== null && $maxRunsPerHour > $hourlyLimit)
+            || ($dailyLimit !== null && $runsPerDay > $dailyLimit)
+        ) {
             $risk = 'high';
             $message = 'Có dấu hiệu quá tải theo account. Một số lịch có thể bị dời bởi hàng đợi hoặc guard an toàn.';
         } elseif ($conflictPairs > 0) {
@@ -341,6 +373,11 @@ class SchedulerService
             'conflict_pairs' => $conflictPairs,
             'same_minute_pairs' => $sameMinutePairs,
             'queue_likely' => $queueLikely,
+            'safety_mode' => (string) $policy['mode'],
+            'safety_mode_label' => $this->safety()->modeLabel((string) $policy['mode']),
+            'hourly_limit' => $hourlyLimit,
+            'daily_limit' => $dailyLimit,
+            'policy_min_gap_minutes' => $minGapLimit,
             'next_occurrences' => array_map(
                 static fn (array $occurrence): array => [
                     'label' => $occurrence['local']->format('d/m H:i'),
@@ -356,8 +393,18 @@ class SchedulerService
     public function explainManualDispatchGuard(array $job, ?DateTimeImmutable $now = null): ?array
     {
         $now ??= new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $hardGuard = $this->determineGuard($job, $now, true);
+        if ($hardGuard !== null) {
+            $hardGuard['bypass_allowed'] = false;
+            return $hardGuard;
+        }
 
-        return $this->determineGuard($job, $now);
+        $guard = $this->determineGuard($job, $now);
+        if ($guard !== null) {
+            $guard['bypass_allowed'] = true;
+        }
+
+        return $guard;
     }
 
     private function lockJob(int $jobId): bool
@@ -504,39 +551,56 @@ class SchedulerService
 
         $guard = $this->determineGuard($jobs[0], $now);
         $queueStart = $guard['retry_at'] ?? $now;
-        $minGapMinutes = (int) config('safety.account_limits.min_minutes_between_sends', 8);
+        $minGapMinutes = (int) $this->safety()->resolvedPolicy($jobs[0])['min_gap_minutes'];
+        $queuedJobs = [];
+        $queueIndex = 0;
 
-        foreach ($jobs as $index => &$job) {
-            $slot = $index === 0
+        foreach ($jobs as $job) {
+            $slot = $queueIndex === 0
                 ? $queueStart
-                : $queueStart->modify('+' . ($minGapMinutes * $index) . ' minutes');
+                : $queueStart->modify('+' . ($minGapMinutes * $queueIndex) . ' minutes');
+            $currentNextRunAt = (string) ($job['next_run_at'] ?? '');
+            $occurrenceDueAt = $this->nullableDate((string) ($job['occurrence_due_at'] ?? ''))
+                ?? $this->nullableDate($currentNextRunAt)
+                ?? $now;
+
+            if ($this->occurrenceDelayExceeded($occurrenceDueAt, $slot)) {
+                $resumeFrom = $guard !== null ? $queueStart : $now;
+                $this->skipStaleOccurrence($job, $now, $occurrenceDueAt, $resumeFrom, false);
+                continue;
+            }
 
             $slotString = $slot->format('Y-m-d H:i:s');
-            $currentNextRunAt = (string) ($job['next_run_at'] ?? '');
             $queueNote = null;
 
-            if ($index === 0 && $guard !== null) {
+            if ($queueIndex === 0 && $guard !== null) {
                 $queueNote = 'Queue: ' . $guard['reason'];
-            } elseif ($index > 0) {
+            } elseif ($queueIndex > 0) {
                 $queueNote = 'Queue: Schedule này đang chờ tới lượt theo account, dự kiến gửi lúc ' . fmt_datetime($slotString);
             }
 
-            if (($index === 0 && $guard === null) || ($currentNextRunAt === $slotString && (string) ($job['last_error'] ?? '') === (string) $queueNote)) {
+            if (($queueIndex === 0 && $guard === null) || ($currentNextRunAt === $slotString && (string) ($job['last_error'] ?? '') === (string) $queueNote)) {
+                $queuedJobs[] = $job;
+                $queueIndex++;
                 continue;
             }
 
             $this->db->update('schedule_jobs', [
                 'next_run_at' => $slotString,
+                'occurrence_due_at' => $occurrenceDueAt->format('Y-m-d H:i:s'),
                 'last_error' => $queueNote,
+                'queue_reason_code' => $queueIndex === 0 && $guard !== null ? (string) $guard['code'] : 'account_queue',
                 'updated_at' => $now->format('Y-m-d H:i:s'),
             ], 'id = :id', ['id' => (int) $job['id']]);
 
             $job['next_run_at'] = $slotString;
+            $job['occurrence_due_at'] = $occurrenceDueAt->format('Y-m-d H:i:s');
             $job['last_error'] = $queueNote;
+            $queuedJobs[] = $job;
+            $queueIndex++;
         }
-        unset($job);
 
-        return $jobs;
+        return $queuedJobs;
     }
 
     private function dispatchOne(
@@ -549,11 +613,21 @@ class SchedulerService
     {
         $now ??= new DateTimeImmutable('now', new DateTimeZone('UTC'));
         $scheduledAt = $this->nullableDate((string) ($job['next_run_at'] ?? '')) ?? $now;
+        $occurrenceDueAt = $this->nullableDate((string) ($job['occurrence_due_at'] ?? '')) ?? $scheduledAt;
+
+        if (!$manual && $this->occurrenceDelayExceeded($occurrenceDueAt, $now)) {
+            return $this->skipStaleOccurrence($job, $now, $occurrenceDueAt, $now);
+        }
+
         $runKey ??= $this->automaticRunKey($job, $scheduledAt);
-        $guard = $force ? null : $this->determineGuard($job, $now);
+        $guard = $this->determineGuard($job, $now, $force);
 
         if ($guard !== null) {
-            return $this->guardDispatch($job, $guard['retry_at'], $guard['reason'], $now, $manual);
+            if (!$manual && $this->occurrenceDelayExceeded($occurrenceDueAt, $guard['retry_at'])) {
+                return $this->skipStaleOccurrence($job, $now, $occurrenceDueAt, $guard['retry_at']);
+            }
+
+            return $this->guardDispatch($job, $guard, $now, $manual);
         }
 
         $targets = is_array($job['target_groups'] ?? null) ? $job['target_groups'] : [];
@@ -565,8 +639,10 @@ class SchedulerService
         $targetResults = [];
         $accountUpdates = [];
         $retryAt = null;
+        $retryGuard = null;
         $compiledMessage = null;
         $globalError = null;
+        $globalFailureGuard = null;
         $lastSuccessfulSendAt = null;
         $messagePreview = mb_substr((string) $job['body'], 0, 500);
 
@@ -598,7 +674,9 @@ class SchedulerService
             $failureGuard = $this->buildFailureGuard($exception, $now);
 
             if ($failureGuard !== null) {
+                $globalFailureGuard = $failureGuard;
                 $retryAt = $failureGuard['retry_at'];
+                $retryGuard = $failureGuard;
                 $globalError = $failureGuard['reason'] . ' | Chi tiết: ' . $globalError;
             }
         }
@@ -607,6 +685,24 @@ class SchedulerService
             foreach ($targets as $target) {
                 $targetResults[] = $this->existingTargetResult($job, $target, $runKey)
                     ?? $this->recordTargetFailure($job, $target, $runKey, $messagePreview, $globalError, $now);
+            }
+            if ($globalFailureGuard !== null) {
+                $firstLogId = isset($targetResults[0]['log_id']) ? (int) $targetResults[0]['log_id'] : null;
+                if ($this->safety()->shouldOpenCircuitBreaker($job, (string) $globalFailureGuard['code'])) {
+                    $this->safety()->openCircuitBreaker(
+                        $job,
+                        (string) $globalFailureGuard['code'],
+                        (string) $globalFailureGuard['reason'],
+                        $globalFailureGuard['retry_at']
+                    );
+                }
+                $this->notifications()->notifyTelegramRestriction(
+                    $job,
+                    (string) $globalFailureGuard['code'],
+                    $globalError,
+                    $globalFailureGuard['retry_at']->format('Y-m-d H:i:s'),
+                    $firstLogId
+                );
             }
         } else {
             $stopReason = null;
@@ -640,6 +736,7 @@ class SchedulerService
                     $volumeGuard = $this->determineVolumeGuard($job, new DateTimeImmutable('now', new DateTimeZone('UTC')));
                     if ($volumeGuard !== null) {
                         $retryAt = $volumeGuard['retry_at'];
+                        $retryGuard = $volumeGuard;
                         $stopReason = 'Bỏ qua nhóm còn lại vì account đã chạm giới hạn an toàn: ' . $volumeGuard['reason'];
                         $targetResults[] = $this->recordTargetFailure(
                             $job,
@@ -667,6 +764,7 @@ class SchedulerService
                     $volumeGuard = $this->determineVolumeGuard($job, new DateTimeImmutable('now', new DateTimeZone('UTC')));
                     if ($volumeGuard !== null) {
                         $retryAt = $volumeGuard['retry_at'];
+                        $retryGuard = $volumeGuard;
                         $stopReason = 'Bỏ qua nhóm còn lại vì account đã chạm giới hạn an toàn: ' . $volumeGuard['reason'];
                         $targetResults[] = $this->recordTargetFailure(
                             $job,
@@ -683,6 +781,7 @@ class SchedulerService
 
                 $payload = null;
                 $targetError = null;
+                $failureGuard = null;
                 $attempt = $this->startTargetAttempt($job, $target, $runKey, $messagePreview);
 
                 try {
@@ -702,6 +801,7 @@ class SchedulerService
 
                     if ($failureGuard !== null) {
                         $retryAt = $failureGuard['retry_at'];
+                        $retryGuard = $failureGuard;
                         $targetError = $failureGuard['reason'] . ' | Chi tiết: ' . $targetError;
                         $stopReason = 'Bỏ qua nhóm còn lại vì Telegram đang giới hạn account: ' . $failureGuard['reason'];
                     }
@@ -721,6 +821,23 @@ class SchedulerService
                     'sent_at' => $sentAt->format('Y-m-d H:i:s'),
                 ];
                 $this->finishTargetAttempt((int) $attempt['id'], $result);
+                if ($failureGuard !== null) {
+                    if ($this->safety()->shouldOpenCircuitBreaker($job, (string) $failureGuard['code'])) {
+                        $this->safety()->openCircuitBreaker(
+                            $job,
+                            (string) $failureGuard['code'],
+                            (string) $failureGuard['reason'],
+                            $failureGuard['retry_at']
+                        );
+                    }
+                    $this->notifications()->notifyTelegramRestriction(
+                        $job,
+                        (string) $failureGuard['code'],
+                        (string) $targetError,
+                        $failureGuard['retry_at']->format('Y-m-d H:i:s'),
+                        (int) $attempt['id']
+                    );
+                }
                 $targetResults[] = $result;
                 $hasPreviousTarget = true;
             }
@@ -751,31 +868,40 @@ class SchedulerService
             $accountUpdates['cooldown_reason'] = 'Giãn cách an toàn sau lần gửi gần nhất.';
         }
 
-        if ($retryAt !== null) {
+        if ($retryAt !== null && (string) ($retryGuard['category'] ?? '') === 'hard_telegram') {
             $accountUpdates['cooldown_until'] = $retryAt->format('Y-m-d H:i:s');
-            $accountUpdates['cooldown_reason'] = 'Telegram đang giới hạn account này do tín hiệu spam/rate limit.';
-        }
-
-        $nextRunAt = $manual
-            ? $this->determineManualNextRunAt($job, $scheduledAt, $now)
-            : $this->calculateNextRun(
-                (string) $job['cron_expression'],
-                (string) $job['timezone'],
-                $scheduledAt
-            );
-        if ($retryAt !== null) {
-            $nextRunAt = $this->maxDateTimeString($nextRunAt, $retryAt->format('Y-m-d H:i:s'));
+            $accountUpdates['cooldown_reason'] = (string) ($retryGuard['reason'] ?? 'Telegram đang giới hạn account này.');
         }
 
         $finishedAt = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $nextRunAt = $manual
+            ? $this->determineManualNextRunAt($job, $scheduledAt, $finishedAt)
+            : $this->calculateNextRun(
+                (string) $job['cron_expression'],
+                (string) $job['timezone'],
+                $finishedAt
+            );
+        if ($retryAt !== null) {
+            $nextRun = $this->nullableDate($nextRunAt) ?? $finishedAt;
+            $nextRunAt = $this->occurrenceDelayExceeded($nextRun, $retryAt)
+                ? $this->calculateNextRun(
+                    (string) $job['cron_expression'],
+                    (string) $job['timezone'],
+                    $retryAt
+                )
+                : $this->maxDateTimeString($nextRunAt, $retryAt->format('Y-m-d H:i:s'));
+        }
+
         $accountUpdates['updated_at'] = $finishedAt->format('Y-m-d H:i:s');
         $accountUpdates['dispatch_locked_until'] = null;
 
-        $this->db->transaction(function (Database $db) use ($job, $error, $nextRunAt, $accountUpdates, $finishedAt): void {
+        $this->db->transaction(function (Database $db) use ($job, $error, $nextRunAt, $accountUpdates, $finishedAt, $retryGuard): void {
             $db->update('schedule_jobs', [
                 'next_run_at' => $nextRunAt,
+                'occurrence_due_at' => null,
                 'last_run_at' => $finishedAt->format('Y-m-d H:i:s'),
                 'last_error' => $error,
+                'queue_reason_code' => $retryGuard !== null ? (string) ($retryGuard['code'] ?? '') : null,
                 'dispatch_locked_until' => null,
                 'updated_at' => $finishedAt->format('Y-m-d H:i:s'),
             ], 'id = :id', ['id' => (int) $job['id']]);
@@ -914,6 +1040,7 @@ class SchedulerService
     {
         $requestId = 'dispatch_' . bin2hex(random_bytes(6));
         $startedAt = gmdate('Y-m-d H:i:s');
+        $safetySnapshot = $this->safety()->usageSnapshot($job);
         $id = $this->db->insert('dispatch_logs', [
             'user_id' => (int) $job['user_id'],
             'schedule_job_id' => (int) $job['id'],
@@ -927,6 +1054,9 @@ class SchedulerService
             'label_id' => $job['label_id'] ? (int) $job['label_id'] : null,
             'request_id' => $requestId,
             'status' => 'processing',
+            'safety_mode_snapshot' => (string) $safetySnapshot['mode'],
+            'safety_override_used' => (bool) $safetySnapshot['override_used'] ? 1 : 0,
+            'safety_usage_snapshot_json' => json_encode($safetySnapshot, JSON_UNESCAPED_UNICODE),
             'message_preview' => $messagePreview,
             'response_payload' => null,
             'error_message' => null,
@@ -959,6 +1089,7 @@ class SchedulerService
     ): array {
         $attempt = $this->startTargetAttempt($job, $target, $runKey, $messagePreview);
         $result = [
+            'log_id' => (int) $attempt['id'],
             'target' => $target,
             'request_id' => $attempt['request_id'],
             'status' => 'error',
@@ -973,88 +1104,26 @@ class SchedulerService
 
     private function determineVolumeGuard(array $job, DateTimeImmutable $now): ?array
     {
-        $guards = [];
-        $hourlyLimit = (int) config('safety.account_limits.max_success_per_hour', 6);
-        $hourly = $this->successWindow((int) $job['telegram_account_id'], '1 HOUR');
-        if ($hourly['count'] >= $hourlyLimit && $hourly['oldest_at'] !== null) {
-            $guards[] = [
-                'retry_at' => $hourly['oldest_at']->modify('+1 hour'),
-                'reason' => 'Account đã chạm giới hạn an toàn theo giờ. Hệ thống dừng các nhóm còn lại để tránh spam flag.',
-            ];
-        }
-
-        $dailyLimit = (int) config('safety.account_limits.max_success_per_day', 30);
-        $daily = $this->successWindow((int) $job['telegram_account_id'], '1 DAY');
-        if ($daily['count'] >= $dailyLimit && $daily['oldest_at'] !== null) {
-            $guards[] = [
-                'retry_at' => $daily['oldest_at']->modify('+1 day'),
-                'reason' => 'Account đã chạm giới hạn an toàn theo ngày. Hệ thống dừng các nhóm còn lại để tránh khóa tài khoản.',
-            ];
-        }
-
-        if ($guards === []) {
-            return null;
-        }
-
-        usort($guards, static fn (array $left, array $right): int => $left['retry_at'] <=> $right['retry_at']);
-        return $guards[count($guards) - 1];
+        return $this->safety()->determineVolumeGuard($job, $now);
     }
 
-    private function determineGuard(array $job, DateTimeImmutable $now): ?array
+    private function determineGuard(array $job, DateTimeImmutable $now, bool $bypassSoft = false): ?array
     {
-        $guards = [];
-        $cooldownUntil = $this->nullableDate((string) ($job['cooldown_until'] ?? ''));
-        if ($cooldownUntil !== null && $cooldownUntil > $now) {
-            $guards[] = [
-                'retry_at' => $cooldownUntil,
-                'reason' => 'Account đang trong thời gian cooldown an toàn đến ' . fmt_datetime($cooldownUntil->format('Y-m-d H:i:s')),
-            ];
-        }
-
-        $lastSentAt = $this->nullableDate((string) ($job['last_sent_at'] ?? ''));
-        $minGap = (int) config('safety.account_limits.min_minutes_between_sends', 8);
-        if ($lastSentAt !== null) {
-            $nextAllowedAt = $lastSentAt->modify('+' . $minGap . ' minutes');
-            if ($nextAllowedAt > $now) {
-                $guards[] = [
-                    'retry_at' => $nextAllowedAt,
-                    'reason' => 'Account vừa gửi gần đây, hệ thống đang giãn cách tối thiểu ' . $minGap . ' phút giữa hai lần gửi.',
-                ];
-            }
-        }
-
-        $hourlyLimit = (int) config('safety.account_limits.max_success_per_hour', 6);
-        $hourly = $this->successWindow((int) $job['telegram_account_id'], '1 HOUR');
-        if ($hourly['count'] >= $hourlyLimit && $hourly['oldest_at'] !== null) {
-            $guards[] = [
-                'retry_at' => $hourly['oldest_at']->modify('+1 hour'),
-                'reason' => 'Account đã chạm giới hạn an toàn theo giờ. Hệ thống tạm lùi lịch để tránh spam flag.',
-            ];
-        }
-
-        $dailyLimit = (int) config('safety.account_limits.max_success_per_day', 30);
-        $daily = $this->successWindow((int) $job['telegram_account_id'], '1 DAY');
-        if ($daily['count'] >= $dailyLimit && $daily['oldest_at'] !== null) {
-            $guards[] = [
-                'retry_at' => $daily['oldest_at']->modify('+1 day'),
-                'reason' => 'Account đã chạm giới hạn an toàn theo ngày. Hệ thống tạm lùi lịch để tránh khóa tài khoản.',
-            ];
-        }
-
-        if ($guards === []) {
-            return null;
-        }
-
-        usort($guards, static fn (array $left, array $right): int => $left['retry_at'] <=> $right['retry_at']);
-
-        return $guards[count($guards) - 1];
+        return $this->safety()->determineGuard($job, $now, $bypassSoft);
     }
 
-    private function guardDispatch(array $job, DateTimeImmutable $retryAt, string $reason, DateTimeImmutable $now, bool $manual = false): array
+    private function guardDispatch(array $job, array $guard, DateTimeImmutable $now, bool $manual = false): array
     {
-        $accountCooldownUntil = $retryAt->format('Y-m-d H:i:s');
-        $nextRunAt = $accountCooldownUntil;
+        $retryAt = $guard['retry_at'];
+        $reason = (string) $guard['reason'];
+        $nextRunAt = $retryAt->format('Y-m-d H:i:s');
         $targets = is_array($job['target_groups'] ?? null) ? $job['target_groups'] : [];
+        $occurrenceDueAt = $this->nullableDate((string) ($job['occurrence_due_at'] ?? ''))
+            ?? $this->nullableDate((string) ($job['next_run_at'] ?? ''))
+            ?? $now;
+        $queuedOccurrenceAt = $manual
+            ? ($job['occurrence_due_at'] ?? null)
+            : $occurrenceDueAt->format('Y-m-d H:i:s');
 
         if ($manual) {
             $currentNextRunAt = $this->nullableDate((string) ($job['next_run_at'] ?? ''));
@@ -1063,8 +1132,10 @@ class SchedulerService
             }
         }
 
-        $this->db->transaction(function (Database $db) use ($job, $targets, $reason, $now, $nextRunAt, $accountCooldownUntil): void {
+        $guardCode = (string) ($guard['code'] ?? 'guarded');
+        $this->db->transaction(function (Database $db) use ($job, $targets, $reason, $now, $nextRunAt, $guardCode, $queuedOccurrenceAt): void {
             foreach ($targets as $target) {
+                $safetySnapshot = $this->safety()->usageSnapshot($job);
                 $db->insert('dispatch_logs', [
                     'user_id' => (int) $job['user_id'],
                     'schedule_job_id' => (int) $job['id'],
@@ -1077,6 +1148,9 @@ class SchedulerService
                     'label_id' => $job['label_id'] ? (int) $job['label_id'] : null,
                     'request_id' => 'guard_' . bin2hex(random_bytes(6)),
                     'status' => 'guarded',
+                    'safety_mode_snapshot' => (string) $safetySnapshot['mode'],
+                    'safety_override_used' => 0,
+                    'safety_usage_snapshot_json' => json_encode($safetySnapshot, JSON_UNESCAPED_UNICODE),
                     'message_preview' => mb_substr((string) $job['body'], 0, 500),
                     'response_payload' => null,
                     'error_message' => $reason,
@@ -1087,14 +1161,14 @@ class SchedulerService
 
             $db->update('schedule_jobs', [
                 'next_run_at' => $nextRunAt,
+                'occurrence_due_at' => $queuedOccurrenceAt,
                 'last_error' => $reason,
+                'queue_reason_code' => $guardCode,
                 'dispatch_locked_until' => null,
                 'updated_at' => $now->format('Y-m-d H:i:s'),
             ], 'id = :id', ['id' => (int) $job['id']]);
 
             $db->update('telegram_accounts', [
-                'cooldown_until' => $accountCooldownUntil,
-                'cooldown_reason' => $reason,
                 'dispatch_locked_until' => null,
                 'updated_at' => $now->format('Y-m-d H:i:s'),
             ], 'id = :id', ['id' => (int) $job['telegram_account_id']]);
@@ -1105,6 +1179,8 @@ class SchedulerService
             'group' => $this->targetGroupSummary($job),
             'account' => $job['account_name'],
             'status' => 'guarded',
+            'guard_code' => $guardCode,
+            'guard_category' => (string) ($guard['category'] ?? ''),
             'next_run_at' => $nextRunAt,
             'error' => $reason,
         ];
@@ -1123,12 +1199,22 @@ class SchedulerService
             return null;
         }
 
+        $code = str_contains($normalized, 'PEER_FLOOD')
+            ? 'telegram_peer_flood'
+            : (str_contains($normalized, 'FLOOD_WAIT')
+                ? 'telegram_flood_wait'
+                : (str_contains($normalized, 'TOO_MANY_REQUESTS')
+                    ? 'telegram_rate_limit'
+                    : 'telegram_spam_signal'));
+
         $retryAfterSeconds = $this->extractRetryAfterSeconds($message);
         $retryAt = $retryAfterSeconds !== null
             ? $now->modify('+' . $retryAfterSeconds . ' seconds')
-            : $now->modify('+' . (int) config('safety.account_limits.spam_cooldown_minutes', 180) . ' minutes');
+            : $now->modify('+' . $this->safety()->circuitBreakerCooldownMinutes() . ' minutes');
 
         return [
+            'code' => $code,
+            'category' => 'hard_telegram',
             'retry_at' => $retryAt,
             'reason' => 'Telegram đang giới hạn account này do tín hiệu spam/rate limit. Hệ thống đã tự cooldown để giảm rủi ro.',
         ];
@@ -1145,6 +1231,59 @@ class SchedulerService
             (string) $job['timezone'],
             $now
         );
+    }
+
+    private function occurrenceDelayExceeded(DateTimeImmutable $occurrenceDueAt, DateTimeImmutable $candidate): bool
+    {
+        return $candidate > $occurrenceDueAt->modify('+' . $this->maxOccurrenceDelayMinutes() . ' minutes');
+    }
+
+    private function maxOccurrenceDelayMinutes(): int
+    {
+        return max(1, (int) config('safety.account_limits.max_occurrence_delay_minutes', 60));
+    }
+
+    private function skipStaleOccurrence(
+        array $job,
+        DateTimeImmutable $now,
+        DateTimeImmutable $occurrenceDueAt,
+        DateTimeImmutable $resumeFrom,
+        bool $releaseLocks = true
+    ): array {
+        $nextRunAt = $this->calculateNextRun(
+            (string) $job['cron_expression'],
+            (string) $job['timezone'],
+            $resumeFrom
+        );
+        $reason = 'Đã bỏ lượt chạy lúc ' . fmt_datetime($occurrenceDueAt->format('Y-m-d H:i:s'))
+            . ' vì bị dời quá ' . $this->maxOccurrenceDelayMinutes() . ' phút.';
+
+        $this->db->transaction(function (Database $db) use ($job, $now, $nextRunAt, $reason, $releaseLocks): void {
+            $db->update('schedule_jobs', [
+                'next_run_at' => $nextRunAt,
+                'occurrence_due_at' => null,
+                'last_error' => $reason,
+                'queue_reason_code' => 'stale_occurrence_skipped',
+                'dispatch_locked_until' => $releaseLocks ? null : ($job['dispatch_locked_until'] ?? null),
+                'updated_at' => $now->format('Y-m-d H:i:s'),
+            ], 'id = :id', ['id' => (int) $job['id']]);
+
+            if ($releaseLocks) {
+                $db->update('telegram_accounts', [
+                    'dispatch_locked_until' => null,
+                    'updated_at' => $now->format('Y-m-d H:i:s'),
+                ], 'id = :id', ['id' => (int) $job['telegram_account_id']]);
+            }
+        });
+
+        return [
+            'schedule_id' => (int) $job['id'],
+            'group' => $this->targetGroupSummary($job),
+            'account' => (string) ($job['account_name'] ?? ''),
+            'status' => 'skipped',
+            'next_run_at' => $nextRunAt,
+            'error' => $reason,
+        ];
     }
 
     private function successWindow(int $accountId, string $intervalSql): array
@@ -1235,5 +1374,15 @@ class SchedulerService
     private function customEmojis(): CustomEmojiService
     {
         return $this->customEmojiService ??= new CustomEmojiService();
+    }
+
+    private function safety(): AccountSafetyPolicyService
+    {
+        return $this->safetyPolicyService ??= new AccountSafetyPolicyService($this->db, $this->cron);
+    }
+
+    private function notifications(): NotificationService
+    {
+        return $this->notificationService ??= new NotificationService($this->db);
     }
 }

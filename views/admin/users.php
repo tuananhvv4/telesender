@@ -199,6 +199,10 @@ $remainingLabel = static function (array $user): string {
             <input type="checkbox" name="is_active" value="1" checked>
             <span>Kích hoạt admin này ngay sau khi tạo</span>
         </label>
+        <label class="checkbox-row admin-form-span-2">
+            <input type="checkbox" name="can_override_safety_limits" value="1">
+            <span>Cho phép admin tự bật/tắt chế độ elevated hoặc chấp nhận rủi ro</span>
+        </label>
         <div class="actions admin-form-span-2">
             <button class="button primary" type="submit" data-loading-text="Đang tạo...">Tạo admin con</button>
             <button class="button secondary" type="button" data-crud-modal-close>Hủy</button>
@@ -277,6 +281,11 @@ $remainingLabel = static function (array $user): string {
                         <label for="admin_detail_note">Ghi chú nội bộ</label>
                         <textarea class="textarea" id="admin_detail_note" name="internal_note" rows="4" placeholder="Chỉ super admin nhìn thấy ghi chú này."></textarea>
                     </div>
+                    <label class="checkbox-row">
+                        <input type="checkbox" name="can_override_safety_limits" value="1">
+                        <span>Cho phép tự bật/tắt chế độ gửi rủi ro</span>
+                    </label>
+                    <div class="small muted">Nếu thu hồi quyền, toàn bộ Telegram account elevated/risk accepted của admin sẽ tự về safe.</div>
                     <div class="small muted">Nếu để trống thì admin này sẽ không bị giới hạn số lượng account hoặc schedule.</div>
                     <div class="actions">
                         <button class="button primary sm" type="submit" data-loading-text="Đang lưu...">Lưu thông tin nội bộ</button>
@@ -451,13 +460,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const maxAccountsField = wrapper.querySelector('input[name="max_telegram_accounts"]');
         const maxSchedulesField = wrapper.querySelector('input[name="max_schedule_jobs"]');
         const noteField = wrapper.querySelector('textarea[name="internal_note"]');
+        const safetyPermissionField = wrapper.querySelector('input[name="can_override_safety_limits"]');
 
         if (
             !statusBadge || !subscriptionBadge || !remainingTarget || !createdAtTarget || !accountActiveTarget
             || !accountLimitTarget || !groupActiveTarget || !scheduleActiveTarget || !scheduleLimitTarget
             || !templatesTarget || !logSuccessTarget || !logErrorTarget || !lastDispatchTarget
             || !adjustmentsTarget || !logsTarget || !form || !userIdField || !maxAccountsField
-            || !maxSchedulesField || !noteField
+            || !maxSchedulesField || !noteField || !safetyPermissionField
         ) {
             return;
         }
@@ -483,6 +493,7 @@ document.addEventListener('DOMContentLoaded', () => {
         maxAccountsField.value = user.account_limit ?? '';
         maxSchedulesField.value = user.schedule_limit ?? '';
         noteField.value = user.internal_note || '';
+        safetyPermissionField.checked = user.can_override_safety_limits === true;
 
         form.addEventListener('submit', async (event) => {
             event.preventDefault();

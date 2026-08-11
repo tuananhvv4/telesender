@@ -51,6 +51,16 @@ GET /system/migrate?token=YOUR_MIGRATE_TOKEN
 
 Hệ thống sẽ áp dụng tất cả migration chưa chạy với version nhỏ hơn hoặc bằng version truyền vào.
 
+### 4. Safety limit và risk override
+
+- Account mới và account hiện có mặc định ở chế độ `safe`: `8` lượt/giờ, `40` lượt/24 giờ và gap `8` phút.
+- Super admin cấu hình được ngưỡng `safe`, `elevated`, `risk_accepted` tại `/admin/settings`.
+- Super admin cấp quyền risk override cho từng admin; khi thu hồi, toàn bộ account của admin đó tự về `safe`.
+- Admin được cấp quyền tự đổi mode theo từng Telegram account; lịch cũ bị dời không được gửi bù và lịch hợp lệ tiếp theo được tính từ hiện tại.
+- `risk_accepted` chỉ bỏ giới hạn volume nội bộ; Telegram cooldown, circuit breaker, lock và chống gửi trùng vẫn luôn được áp dụng.
+- Cảnh báo Telegram xuất hiện trong `/notifications`; trang `/admin/safety` dùng để giám sát mode, usage, breaker và audit.
+- Audit và notification được cron tự dọn sau 30 ngày.
+
 ## Cấu trúc thư mục
 
 ```text
@@ -105,6 +115,8 @@ Tạo database MySQL trống, sau đó gọi:
 ```text
 GET http://localhost:8000/system/migrate?token=YOUR_MIGRATE_TOKEN
 ```
+
+Khi nâng cấp bản có Safety Limit & Risk Override, cần bảo đảm migration hiện tại đạt version `17` trước khi mở lại cron production.
 
 Các migration hiện được đánh số tuần tự `1, 2, 3...` để dễ quản lý hơn.
 Nếu môi trường cũ từng chạy version dạng timestamp như `202607020002`, hệ thống vẫn tự nhận diện là đã migrate rồi.

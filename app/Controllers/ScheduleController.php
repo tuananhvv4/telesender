@@ -63,7 +63,8 @@ class ScheduleController extends Controller
             $scheduleAnalyses[(int) $schedule['id']] = $scheduler->analyzeScheduleRisk(
                 (string) $schedule['cron_expression'],
                 (string) $schedule['timezone'],
-                max(1, (int) ($schedule['group_count'] ?? 1))
+                max(1, (int) ($schedule['group_count'] ?? 1)),
+                $schedule
             );
             $scheduleSummaries[(int) $schedule['id']] = $builder->summaryFromSchedule($schedule);
             $scheduleManualGuards[(int) $schedule['id']] = $scheduler->explainManualDispatchGuard($schedule);
@@ -76,6 +77,7 @@ class ScheduleController extends Controller
             if ($accountId > 0) {
                 $accountScheduleAnalyses[$accountId]['account_id'] = $accountId;
                 $accountScheduleAnalyses[$accountId]['account_name'] = (string) ($schedule['account_name'] ?? ('Account #' . $accountId));
+                $accountScheduleAnalyses[$accountId]['safety_mode'] = (string) ($schedule['safety_mode'] ?? 'safe');
                 $accountScheduleAnalyses[$accountId]['schedules'][] = $schedule;
             }
         }
@@ -127,8 +129,17 @@ class ScheduleController extends Controller
             $builder = new ScheduleBuilderService(new CronExpression());
             $preview = $builder->preview($request->all(), $timezone);
             $groupCount = count(array_filter((array) $request->query('telegram_group_ids', [])));
+            $accountId = (int) $request->query('telegram_account_id', 0);
+            $account = $accountId > 0
+                ? $this->accounts->findForUser($accountId, (int) auth()->id())
+                : null;
+
+            if ($accountId > 0 && $account === null) {
+                throw new Exception('Telegram account không hợp lệ.');
+            }
+
             $risk = (new SchedulerService(app()->db(), new TelegramService(), new CronExpression()))
-                ->analyzeScheduleRisk($preview['cron_expression'], $timezone, max(1, $groupCount));
+                ->analyzeScheduleRisk($preview['cron_expression'], $timezone, max(1, $groupCount), $account);
 
             Response::json([
                 'ok' => true,
@@ -162,7 +173,12 @@ class ScheduleController extends Controller
         $data = $this->validatedData($request, $scheduler);
         $groupIds = $data['telegram_group_ids'];
         unset($data['telegram_group_ids']);
-        $analysis = $scheduler->analyzeScheduleRisk($data['cron_expression'], $data['timezone'], count($groupIds));
+        $analysis = $scheduler->analyzeScheduleRisk(
+            $data['cron_expression'],
+            $data['timezone'],
+            count($groupIds),
+            $this->accounts->findForUser((int) $data['telegram_account_id'], (int) auth()->id())
+        );
         $nextRunAt = $scheduler->calculateNextRun(
             $data['cron_expression'],
             $data['timezone'],
@@ -173,6 +189,7 @@ class ScheduleController extends Controller
             $scheduleId = $this->schedules->create(array_merge($data, [
                 'user_id' => (int) auth()->id(),
                 'next_run_at' => $nextRunAt,
+                'occurrence_due_at' => null,
                 'last_run_at' => null,
                 'last_error' => null,
                 'status' => 'active',
@@ -206,7 +223,12 @@ class ScheduleController extends Controller
         $data = $this->validatedData($request, $scheduler);
         $groupIds = $data['telegram_group_ids'];
         unset($data['telegram_group_ids']);
-        $analysis = $scheduler->analyzeScheduleRisk($data['cron_expression'], $data['timezone'], count($groupIds));
+        $analysis = $scheduler->analyzeScheduleRisk(
+            $data['cron_expression'],
+            $data['timezone'],
+            count($groupIds),
+            $this->accounts->findForUser((int) $data['telegram_account_id'], (int) auth()->id())
+        );
         $nextRunAt = $scheduler->calculateNextRun(
             $data['cron_expression'],
             $data['timezone'],
@@ -217,6 +239,7 @@ class ScheduleController extends Controller
             $scheduleId = (int) $schedule['id'];
             $this->schedules->updateById($scheduleId, array_merge($data, [
                 'next_run_at' => $nextRunAt,
+                'occurrence_due_at' => null,
                 'updated_at' => gmdate('Y-m-d H:i:s'),
             ]));
             $this->schedules->syncGroups($scheduleId, $groupIds);
@@ -242,11 +265,25 @@ class ScheduleController extends Controller
         }
 
         $newStatus = $schedule['status'] === 'active' ? 'paused' : 'active';
-
-        $this->schedules->updateById((int) $schedule['id'], [
+        $updates = [
             'status' => $newStatus,
             'updated_at' => gmdate('Y-m-d H:i:s'),
-        ]);
+        ];
+
+        if ($newStatus === 'active') {
+            $updates['next_run_at'] = (new SchedulerService(app()->db(), new TelegramService(), new CronExpression()))
+                ->calculateNextRun(
+                    (string) $schedule['cron_expression'],
+                    (string) $schedule['timezone'],
+                    new DateTimeImmutable('now', new DateTimeZone('UTC'))
+                );
+            $updates['last_error'] = null;
+            $updates['queue_reason_code'] = null;
+            $updates['occurrence_due_at'] = null;
+            $updates['dispatch_locked_until'] = null;
+        }
+
+        $this->schedules->updateById((int) $schedule['id'], $updates);
 
         $this->redirectWith('/schedules', success: 'Đã cập nhật trạng thái schedule.');
     }
@@ -304,7 +341,11 @@ class ScheduleController extends Controller
 
         if (($result['status'] ?? '') === 'guarded') {
             $message = (string) ($result['error'] ?? 'Schedule đang bị chặn tạm thời bởi cơ chế an toàn.');
-            $message .= ' Hãy bấm lại "Gửi ngay" và xác nhận rủi ro nếu bạn muốn ép gửi.';
+            if (str_starts_with((string) ($result['guard_category'] ?? ''), 'soft_')) {
+                $message .= ' Hãy bấm lại "Gửi ngay" và xác nhận rủi ro nếu bạn muốn ép gửi.';
+            } else {
+                $message .= ' Guard này là bắt buộc và không thể ép gửi vượt qua.';
+            }
             $this->redirectWith('/schedules', error: $message);
         }
 
@@ -331,7 +372,8 @@ class ScheduleController extends Controller
         $templateId = (int) $request->input('message_template_id');
         $timezone = trim((string) $request->input('timezone'));
 
-        if ($this->accounts->findForUser($accountId, $userId) === null) {
+        $account = $this->accounts->findForUser($accountId, $userId);
+        if ($account === null) {
             abort404();
         }
 
@@ -381,7 +423,7 @@ class ScheduleController extends Controller
         }
 
         $scheduler ??= new SchedulerService(app()->db(), new TelegramService(), new CronExpression());
-        $analysis = $scheduler->analyzeScheduleRisk($built['cron_expression'], $timezone, count($groupIds));
+        $analysis = $scheduler->analyzeScheduleRisk($built['cron_expression'], $timezone, count($groupIds), $account);
 
         if ($analysis['risk'] === 'blocked') {
             $this->redirectWith('/schedules', error: $analysis['message']);

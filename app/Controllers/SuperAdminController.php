@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Controller;
+use App\Core\CronExpression;
 use App\Core\Request;
 use App\Models\DispatchLog;
 use App\Models\SystemSetting;
+use App\Models\TelegramAccount;
 use App\Models\User;
 use App\Models\UserSubscriptionAdjustment;
 use App\Services\UserAccessService;
+use App\Services\AccountSafetyPolicyService;
 
 class SuperAdminController extends Controller
 {
@@ -75,7 +78,8 @@ class SuperAdminController extends Controller
             $this->redirectWith('/admin/users', error: $exception->getMessage());
         }
 
-        $this->users->create([
+        $canOverrideSafety = (bool) $request->input('can_override_safety_limits');
+        $userId = $this->users->create([
             'name' => $name,
             'email' => $email,
             'password_hash' => password_hash($password, PASSWORD_DEFAULT),
@@ -84,10 +88,18 @@ class SuperAdminController extends Controller
             'subscription_expires_at' => $access->defaultSubscriptionUntilFromDays($initialDays),
             'max_telegram_accounts' => $maxTelegramAccounts,
             'max_schedule_jobs' => $maxScheduleJobs,
+            'can_override_safety_limits' => 0,
             'internal_note' => $internalNote === '' ? null : $internalNote,
             'created_at' => gmdate('Y-m-d H:i:s'),
             'updated_at' => gmdate('Y-m-d H:i:s'),
         ]);
+        if ($canOverrideSafety) {
+            (new AccountSafetyPolicyService(app()->db(), new CronExpression()))->updateUserPermission(
+                (int) $userId,
+                (int) auth()->id(),
+                true
+            );
+        }
 
         $this->redirectWith('/admin/users', success: 'Đã tạo admin con mới thành công.');
     }
@@ -128,6 +140,11 @@ class SuperAdminController extends Controller
             'internal_note' => $internalNote === '' ? null : $internalNote,
             'updated_at' => gmdate('Y-m-d H:i:s'),
         ]);
+        (new AccountSafetyPolicyService(app()->db(), new CronExpression()))->updateUserPermission(
+            (int) $user['id'],
+            (int) auth()->id(),
+            (bool) $request->input('can_override_safety_limits')
+        );
 
         $this->redirectWith('/admin/users', success: 'Đã cập nhật giới hạn và ghi chú nội bộ.');
     }
@@ -191,6 +208,7 @@ class SuperAdminController extends Controller
                 'logs_error_recent' => (int) ($user['logs_error_recent'] ?? 0),
                 'last_dispatch_at_label' => fmt_datetime((string) ($user['last_dispatch_at'] ?? '')),
                 'internal_note' => (string) ($user['internal_note'] ?? ''),
+                'can_override_safety_limits' => (bool) ($user['can_override_safety_limits'] ?? false),
             ],
             'recent_logs' => $recentLogs,
             'recent_adjustments' => $recentAdjustments,
@@ -317,15 +335,120 @@ class SuperAdminController extends Controller
             'support_contact_value' => trim((string) $request->input('support_contact_value')),
             'support_contact_extra' => trim((string) $request->input('support_contact_extra')),
             'footer_text' => trim((string) $request->input('footer_text')),
+            'safety_safe_hourly_limit' => trim((string) $request->input('safety_safe_hourly_limit')),
+            'safety_safe_daily_limit' => trim((string) $request->input('safety_safe_daily_limit')),
+            'safety_safe_min_gap_minutes' => trim((string) $request->input('safety_safe_min_gap_minutes')),
+            'safety_elevated_hourly_limit' => trim((string) $request->input('safety_elevated_hourly_limit')),
+            'safety_elevated_daily_limit' => trim((string) $request->input('safety_elevated_daily_limit')),
+            'safety_elevated_min_gap_minutes' => trim((string) $request->input('safety_elevated_min_gap_minutes')),
+            'safety_risk_min_gap_minutes' => trim((string) $request->input('safety_risk_min_gap_minutes')),
+            'safety_admin_self_override_enabled' => $request->input('safety_admin_self_override_enabled') ? '1' : '0',
+            'safety_circuit_breaker_error_count' => trim((string) $request->input('safety_circuit_breaker_error_count')),
+            'safety_circuit_breaker_window_minutes' => trim((string) $request->input('safety_circuit_breaker_window_minutes')),
+            'safety_circuit_breaker_cooldown_minutes' => trim((string) $request->input('safety_circuit_breaker_cooldown_minutes')),
+            'safety_audit_retention_days' => '30',
         ];
 
         if ($payload['expired_notice_title'] === '' || $payload['expired_notice_message'] === '') {
             $this->redirectWith('/admin/settings', error: 'Tiêu đề và nội dung hết hạn là bắt buộc.');
         }
 
+        $numericKeys = [
+            'safety_safe_hourly_limit', 'safety_safe_daily_limit', 'safety_safe_min_gap_minutes',
+            'safety_elevated_hourly_limit', 'safety_elevated_daily_limit', 'safety_elevated_min_gap_minutes',
+            'safety_risk_min_gap_minutes', 'safety_circuit_breaker_error_count',
+            'safety_circuit_breaker_window_minutes', 'safety_circuit_breaker_cooldown_minutes',
+        ];
+        foreach ($numericKeys as $key) {
+            if (filter_var($payload[$key], FILTER_VALIDATE_INT) === false || (int) $payload[$key] < 1) {
+                $this->redirectWith('/admin/settings', error: 'Các giới hạn an toàn phải là số nguyên lớn hơn 0.');
+            }
+        }
+        if ((int) $payload['safety_safe_daily_limit'] < (int) $payload['safety_safe_hourly_limit']) {
+            $this->redirectWith('/admin/settings', error: 'Safe daily limit phải lớn hơn hoặc bằng hourly limit.');
+        }
+        if (
+            (int) $payload['safety_elevated_hourly_limit'] < (int) $payload['safety_safe_hourly_limit']
+            || (int) $payload['safety_elevated_daily_limit'] < (int) $payload['safety_safe_daily_limit']
+        ) {
+            $this->redirectWith('/admin/settings', error: 'Elevated limit không được thấp hơn safe limit.');
+        }
+        if (
+            (int) $payload['safety_safe_min_gap_minutes'] < (int) $payload['safety_elevated_min_gap_minutes']
+            || (int) $payload['safety_elevated_min_gap_minutes'] < (int) $payload['safety_risk_min_gap_minutes']
+        ) {
+            $this->redirectWith('/admin/settings', error: 'Khoảng cách phải giảm dần từ safe đến elevated và risk.');
+        }
+
         $this->settings->saveMany($payload);
 
         $this->redirectWith('/admin/settings', success: 'Đã lưu cấu hình hệ thống.');
+    }
+
+    public function safety(Request $request): void
+    {
+        $query = trim((string) $request->query('q', ''));
+        $result = (new TelegramAccount())->paginateForSafetyAdmin(
+            (int) $request->query('page', 1),
+            pagination_per_page(20),
+            $query
+        );
+        $policy = new AccountSafetyPolicyService(app()->db(), new CronExpression());
+        $result['items'] = array_map(static function (array $account) use ($policy): array {
+            $account['safety'] = $policy->statusForAccount($account);
+            return $account;
+        }, $result['items']);
+
+        $this->render('admin/safety', [
+            'title' => 'Giám sát an toàn',
+            'accounts' => $result['items'],
+            'pagination' => $result['pagination'],
+            'searchQuery' => $query,
+            'events' => app()->db()->fetchAll(
+                'SELECT events.*, ta.name AS account_name, u.name AS owner_name, actor.name AS actor_name
+                 FROM account_safety_policy_events events
+                 INNER JOIN telegram_accounts ta ON ta.id = events.telegram_account_id
+                 INNER JOIN users u ON u.id = events.user_id
+                 LEFT JOIN users actor ON actor.id = events.actor_user_id
+                 ORDER BY events.id DESC LIMIT 30'
+            ),
+            'permissionEvents' => app()->db()->fetchAll(
+                'SELECT events.*, target.name AS target_name, target.email AS target_email, actor.name AS actor_name
+                 FROM user_safety_permission_events events
+                 INNER JOIN users target ON target.id = events.target_user_id
+                 LEFT JOIN users actor ON actor.id = events.actor_user_id
+                 ORDER BY events.id DESC LIMIT 30'
+            ),
+        ]);
+    }
+
+    public function changeAccountSafetyMode(Request $request): void
+    {
+        $account = (new TelegramAccount())->find((int) $request->input('account_id'));
+        if ($account === null) {
+            abort404();
+        }
+
+        try {
+            $result = (new AccountSafetyPolicyService(app()->db(), new CronExpression()))->changeMode(
+                $account,
+                auth()->user() ?? [],
+                trim((string) $request->input('safety_mode')),
+                trim((string) $request->input('queue_action', 'recalculate_from_now')),
+                true,
+                trim((string) $request->input('reason'))
+            );
+        } catch (\Throwable $exception) {
+            $this->redirectWith('/admin/safety', error: $exception->getMessage());
+        }
+
+        $queueMessage = $result['queue_blocked_reason'] !== null
+            ? ' Hàng đợi chưa được giải phóng vì: ' . $result['queue_blocked_reason']
+            : ' Đã cập nhật ' . $result['queue_updated_count'] . ' lịch trong hàng đợi.';
+        $this->redirectWith(
+            '/admin/safety',
+            success: 'Đã đổi chế độ account sang ' . $result['mode_label'] . '.' . $queueMessage
+        );
     }
 
     private function adminOrFail(int $userId): array

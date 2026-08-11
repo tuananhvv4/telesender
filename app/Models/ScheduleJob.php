@@ -19,8 +19,10 @@ class ScheduleJob extends Model
         'schedule_type',
         'schedule_config_json',
         'next_run_at',
+        'occurrence_due_at',
         'last_run_at',
         'last_error',
+        'queue_reason_code',
         'status',
         'dispatch_locked_until',
         'created_at',
@@ -34,6 +36,7 @@ class ScheduleJob extends Model
 
         $items = $this->db()->fetchAll(
             'SELECT sj.*, ta.name AS account_name, ta.last_sent_at, ta.cooldown_until, ta.cooldown_reason,
+                    ta.safety_mode, ta.circuit_breaker_until, ta.circuit_breaker_reason,
                     tg.title AS group_title, tg.topic_id, tg.topic_title, mt.name AS template_name
              FROM schedule_jobs sj
              INNER JOIN telegram_accounts ta ON ta.id = sj.telegram_account_id
@@ -60,6 +63,7 @@ class ScheduleJob extends Model
              INNER JOIN message_templates mt ON mt.id = sj.message_template_id
              ' . $whereSql,
             'SELECT sj.*, ta.name AS account_name, ta.last_sent_at, ta.cooldown_until, ta.cooldown_reason,
+                    ta.safety_mode, ta.circuit_breaker_until, ta.circuit_breaker_reason,
                     tg.title AS group_title, tg.topic_id, tg.topic_title, mt.name AS template_name
              FROM schedule_jobs sj
              INNER JOIN telegram_accounts ta ON ta.id = sj.telegram_account_id

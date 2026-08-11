@@ -272,6 +272,35 @@ if (!function_exists('fmt_datetime')) {
     }
 }
 
+if (!function_exists('safety_mode_label')) {
+    function safety_mode_label(?string $mode): string
+    {
+        return match ((string) $mode) {
+            'safe' => 'An toàn',
+            'elevated' => 'Mở rộng giới hạn',
+            'risk_accepted' => 'Chấp nhận rủi ro',
+            default => '-',
+        };
+    }
+}
+
+if (!function_exists('safety_event_label')) {
+    function safety_event_label(?string $eventType): string
+    {
+        return match ((string) $eventType) {
+            'mode_changed' => 'Thay đổi chế độ',
+            'risk_acknowledged' => 'Xác nhận chấp nhận rủi ro',
+            'permission_granted' => 'Cấp quyền điều chỉnh chế độ',
+            'permission_revoked' => 'Thu hồi quyền điều chỉnh chế độ',
+            'queue_released' => 'Cập nhật lại lịch gửi',
+            'circuit_breaker_opened' => 'Kích hoạt tạm dừng bảo vệ',
+            'circuit_breaker_closed' => 'Kết thúc tạm dừng bảo vệ',
+            'forced_safe_mode' => 'Buộc chuyển về chế độ an toàn',
+            default => 'Cập nhật chính sách an toàn',
+        };
+    }
+}
+
 if (!function_exists('pagination_url')) {
     function pagination_url(int $page, array $overrides = []): string
     {

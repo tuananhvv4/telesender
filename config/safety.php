@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 return [
     'account_limits' => [
-        'max_success_per_hour' => 6,
-        'max_success_per_day' => 30,
+        'max_success_per_hour' => 8,
+        'max_success_per_day' => 40,
         'min_minutes_between_sends' => 8,
+        'max_occurrence_delay_minutes' => 60,
         'dispatch_lock_minutes' => 5,
         'inter_group_delay_seconds_min' => 3,
         'inter_group_delay_seconds_max' => 8,

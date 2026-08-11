@@ -11,6 +11,8 @@ use App\Core\Response;
 use App\Services\MigrationService;
 use App\Services\SchedulerService;
 use App\Services\TelegramService;
+use App\Services\AccountSafetyPolicyService;
+use App\Services\NotificationService;
 
 class SystemController extends Controller
 {
@@ -23,10 +25,14 @@ class SystemController extends Controller
         }
 
         $service = new SchedulerService(app()->db(), new TelegramService(), new CronExpression());
+        $results = $service->dispatchDueJobs();
+        $policy = new AccountSafetyPolicyService(app()->db(), new CronExpression());
+        $policy->cleanupExpired();
+        (new NotificationService(app()->db()))->cleanupExpired($policy->auditRetentionDays());
         Response::json([
             'ok' => true,
             'executed_at' => gmdate(DATE_ATOM),
-            'results' => $service->dispatchDueJobs(),
+            'results' => $results,
         ]);
     }
 

@@ -23,6 +23,13 @@ class TelegramAccount extends Model
         'cooldown_until',
         'cooldown_reason',
         'dispatch_locked_until',
+        'safety_mode',
+        'safety_mode_changed_at',
+        'safety_mode_changed_by',
+        'risk_acknowledged_at',
+        'risk_acknowledged_by',
+        'circuit_breaker_until',
+        'circuit_breaker_reason',
         'meta_json',
         'created_at',
         'updated_at',
@@ -72,6 +79,29 @@ class TelegramAccount extends Model
                 'user_id' => $userId,
                 'session_status' => 'active',
             ]
+        );
+    }
+
+    public function paginateForSafetyAdmin(int $page = 1, int $perPage = 20, string $query = ''): array
+    {
+        $bindings = [];
+        $searchSql = '';
+        $query = trim($query);
+        if ($query !== '') {
+            $bindings['search'] = '%' . $query . '%';
+            $searchSql = ' WHERE ta.name LIKE :search OR u.name LIKE :search OR u.email LIKE :search';
+        }
+
+        return $this->paginateQuery(
+            'SELECT COUNT(*) AS aggregate FROM telegram_accounts ta INNER JOIN users u ON u.id = ta.user_id' . $searchSql,
+            'SELECT ta.*, u.name AS owner_name, u.email AS owner_email, u.can_override_safety_limits,
+                    (SELECT COUNT(*) FROM schedule_jobs sj WHERE sj.telegram_account_id = ta.id AND sj.status = \'active\') AS schedules_count
+             FROM telegram_accounts ta
+             INNER JOIN users u ON u.id = ta.user_id' . $searchSql . '
+             ORDER BY ta.safety_mode = \'risk_accepted\' DESC, ta.safety_mode = \'elevated\' DESC, ta.id DESC',
+            $bindings,
+            $page,
+            $perPage
         );
     }
 }

@@ -98,6 +98,7 @@ foreach ($schedules as $schedule) {
                     <?php
                     $analysis = $scheduleAnalyses[(int) $schedule['id']] ?? ['risk' => 'safe', 'message' => '', 'runs_per_day' => 0, 'min_gap_minutes' => null];
                     $manualGuard = $scheduleManualGuards[(int) $schedule['id']] ?? null;
+                    $manualGuardCanBypass = $manualGuard !== null && !empty($manualGuard['bypass_allowed']);
                     $summary = $scheduleSummaries[(int) $schedule['id']] ?? ('Cron tùy chỉnh: ' . (string) $schedule['cron_expression']);
                     $queueNotice = is_string($schedule['last_error'] ?? null) && str_starts_with((string) $schedule['last_error'], 'Queue:');
                     $riskBadgeClass = match ($analysis['risk']) {
@@ -170,16 +171,18 @@ foreach ($schedules as $schedule) {
                                     action="<?= e(url('/schedules/send-now')) ?>"
                                     data-ajax-form
                                     data-ajax-refresh="schedules-shell"
-                                    data-ajax-risk-confirm="1"
+                                    <?= $manualGuardCanBypass ? 'data-ajax-risk-confirm="1"' : '' ?>
                                     data-ajax-confirm-title="Xác nhận gửi ngay"
                                     data-ajax-confirm-text="Vẫn gửi ngay"
                                     data-send-now-form
-                                    <?= $manualGuard !== null ? 'data-risk-message="' . e((string) ($manualGuard['reason'] ?? 'Tài khoản đang trong vùng rủi ro an toàn.')) . '"' : '' ?>
+                                    <?= $manualGuardCanBypass ? 'data-risk-message="' . e((string) ($manualGuard['reason'] ?? 'Tài khoản đang trong vùng rủi ro an toàn.')) . '"' : '' ?>
                                 >
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= e((string) $schedule['id']) ?>">
                                     <input type="hidden" name="force_send" value="0" data-force-send-input>
-                                    <button class="button secondary" type="submit">Gửi ngay</button>
+                                    <button class="button secondary" type="submit" <?= $manualGuard !== null && !$manualGuardCanBypass ? 'disabled title="' . e((string) ($manualGuard['reason'] ?? 'Đang bị guard bắt buộc chặn.')) . '"' : '' ?>>
+                                        <?= $manualGuard !== null && !$manualGuardCanBypass ? 'Đang bị chặn' : 'Gửi ngay' ?>
+                                    </button>
                                 </form>
                                 <form method="post" action="<?= e(url('/schedules/toggle')) ?>" data-ajax-form data-ajax-refresh="schedules-shell">
                                     <?= csrf_field() ?>
@@ -237,6 +240,7 @@ foreach ($schedules as $schedule) {
                             <div class="inline-actions" style="justify-content: space-between; align-items: flex-start;">
                                 <div>
                                     <strong><?= e((string) ($accountAnalysis['account_name'] ?? '')) ?></strong>
+                                    <div style="margin-top:6px;"><span class="badge <?= ($accountAnalysis['safety_mode'] ?? 'safe') === 'risk_accepted' ? 'danger' : (($accountAnalysis['safety_mode'] ?? 'safe') === 'elevated' ? 'warning' : 'success') ?>"><?= e((string) ($accountAnalysis['safety_mode_label'] ?? 'An toàn')) ?></span></div>
                                     <div class="small muted">
                                         <?= e((string) ($accountAnalysis['active_schedule_count'] ?? 0)) ?> lịch đang chạy
                                         <?php if ((int) ($accountAnalysis['paused_schedule_count'] ?? 0) > 0): ?>
@@ -259,6 +263,7 @@ foreach ($schedules as $schedule) {
                                 <div class="hint-box">
                                     <div class="small muted">Đỉnh tải 1 giờ</div>
                                     <strong><?= e((string) ($accountAnalysis['max_runs_per_hour'] ?? 0)) ?> lần/giờ</strong>
+                                    <div class="small muted">Giới hạn: <?= ($accountAnalysis['hourly_limit'] ?? null) === null ? 'Không giới hạn' : e((string) $accountAnalysis['hourly_limit']) ?></div>
                                 </div>
                                 <div class="hint-box">
                                     <div class="small muted">Cặp mốc quá sát</div>
@@ -269,6 +274,7 @@ foreach ($schedules as $schedule) {
                             <?php if (!empty($accountAnalysis['message'])): ?>
                                 <div class="small muted"><?= e((string) $accountAnalysis['message']) ?></div>
                             <?php endif; ?>
+                            <div class="small muted">Giới hạn 24 giờ: <?= ($accountAnalysis['daily_limit'] ?? null) === null ? 'Không giới hạn' : e((string) $accountAnalysis['daily_limit']) ?> · Gap policy: <?= e((string) ($accountAnalysis['policy_min_gap_minutes'] ?? 8)) ?> phút</div>
                         </article>
                     <?php endforeach; ?>
                 </div>
@@ -386,7 +392,7 @@ foreach ($schedules as $schedule) {
                     <div class="field" data-schedule-section="interval_minutes">
                         <label for="schedule_modal_interval_minutes">Mỗi X phút</label>
                         <div class="schedule-inline-grid">
-                            <input class="input" id="schedule_modal_interval_minutes" type="number" name="interval_minutes" min="5" max="59" value="15" data-schedule-interval-minutes>
+                            <input class="input" id="schedule_modal_interval_minutes" type="number" name="interval_minutes" min="1" max="59" value="15" data-schedule-interval-minutes>
                             <div class="inline-hint">phút / lần</div>
                         </div>
                     </div>

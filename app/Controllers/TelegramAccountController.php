@@ -6,7 +6,10 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Core\Request;
+use App\Core\CronExpression;
+use App\Models\AccountSafetyPolicyEvent;
 use App\Models\TelegramAccount;
+use App\Services\AccountSafetyPolicyService;
 use App\Services\TelegramService;
 
 class TelegramAccountController extends Controller
@@ -20,11 +23,20 @@ class TelegramAccountController extends Controller
     public function index(Request $request): void
     {
         $result = $this->accounts->paginateForUser((int) auth()->id(), (int) $request->query('page', 1), pagination_per_page(20));
+        $policy = new AccountSafetyPolicyService(app()->db(), new CronExpression());
+        $result['items'] = array_map(static function (array $account) use ($policy): array {
+            $account['safety'] = $policy->statusForAccount($account);
+            return $account;
+        }, $result['items']);
+        $user = auth()->user() ?? [];
 
         $this->render('accounts/index', [
             'title' => 'Telegram Accounts',
             'accounts' => $result['items'],
             'pagination' => $result['pagination'],
+            'canOverrideSafety' => (string) ($user['role'] ?? '') === 'super_admin'
+                || ((bool) ($user['can_override_safety_limits'] ?? false) && $policy->adminSelfOverrideEnabled()),
+            'safetyEvents' => (new AccountSafetyPolicyEvent())->recentForUser((int) auth()->id(), 20),
         ]);
     }
 
@@ -73,7 +85,7 @@ class TelegramAccountController extends Controller
             );
         }
 
-        $sessionName = 'account_' . auth()->id() . '_' . time();
+        $sessionName = 'account_' . auth()->id() . '_' . bin2hex(random_bytes(16));
 
         $this->accounts->create([
             'user_id' => (int) auth()->id(),
@@ -121,10 +133,14 @@ class TelegramAccountController extends Controller
 
             $this->accounts->updateById((int) $account['id'], [
                 'session_status' => $result['status'],
-                'tg_user_id' => $profile['id'] ?? null,
-                'tg_username' => $profile['username'] ?? null,
-                'last_connected_at' => gmdate('Y-m-d H:i:s'),
-                'meta_json' => $profile ? json_encode($profile, JSON_UNESCAPED_UNICODE) : null,
+                'tg_user_id' => $profile['id'] ?? $account['tg_user_id'] ?? null,
+                'tg_username' => $profile['username'] ?? $account['tg_username'] ?? null,
+                'last_connected_at' => $result['status'] === 'active'
+                    ? gmdate('Y-m-d H:i:s')
+                    : ($account['last_connected_at'] ?? null),
+                'meta_json' => $profile
+                    ? json_encode($profile, JSON_UNESCAPED_UNICODE)
+                    : ($account['meta_json'] ?? null),
                 'updated_at' => gmdate('Y-m-d H:i:s'),
             ]);
 
@@ -177,6 +193,33 @@ class TelegramAccountController extends Controller
             success: $isActive
                 ? 'Đã tạm dừng tài khoản này.'
                 : 'Đã bật lại tài khoản này.'
+        );
+    }
+
+    public function changeSafetyMode(Request $request): void
+    {
+        $account = $this->ownedAccount((int) $request->input('account_id'));
+        $actor = auth()->user() ?? [];
+
+        try {
+            $result = (new AccountSafetyPolicyService(app()->db(), new CronExpression()))->changeMode(
+                $account,
+                $actor,
+                trim((string) $request->input('safety_mode')),
+                trim((string) $request->input('queue_action', 'recalculate_from_now')),
+                in_array((string) $request->input('acknowledged', '0'), ['1', 'true', 'on'], true),
+                trim((string) $request->input('reason'))
+            );
+        } catch (\Throwable $exception) {
+            $this->redirectWith('/accounts', error: $exception->getMessage());
+        }
+
+        $queueMessage = $result['queue_blocked_reason'] !== null
+            ? ' Hàng đợi chưa được giải phóng vì: ' . $result['queue_blocked_reason']
+            : ' Đã cập nhật ' . $result['queue_updated_count'] . ' lịch trong hàng đợi.';
+        $this->redirectWith(
+            '/accounts',
+            success: 'Đã chuyển account sang chế độ ' . $result['mode_label'] . '.' . $queueMessage
         );
     }
 

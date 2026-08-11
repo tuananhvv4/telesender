@@ -118,8 +118,8 @@ class ScheduleBuilderService
     {
         $minutes = (int) ($payload['interval_minutes'] ?? 0);
 
-        if ($minutes < 5 || $minutes > 59) {
-            throw new InvalidArgumentException('Lịch mỗi X phút chỉ hỗ trợ từ 5 đến 59 phút.');
+        if ($minutes < 1 || $minutes > 59) {
+            throw new InvalidArgumentException('Lịch mỗi X phút chỉ hỗ trợ từ 1 đến 59 phút.');
         }
 
         $config = ['interval_minutes' => $minutes];

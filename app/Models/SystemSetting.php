@@ -47,6 +47,18 @@ class SystemSetting extends Model
             'support_contact_value' => '',
             'support_contact_extra' => '',
             'footer_text' => 'Liên hệ quản trị viên nếu cần hỗ trợ gia hạn, cấu hình hoặc xử lý sự cố hệ thống.',
+            'safety_safe_hourly_limit' => '8',
+            'safety_safe_daily_limit' => '40',
+            'safety_safe_min_gap_minutes' => '8',
+            'safety_elevated_hourly_limit' => '10',
+            'safety_elevated_daily_limit' => '80',
+            'safety_elevated_min_gap_minutes' => '5',
+            'safety_risk_min_gap_minutes' => '1',
+            'safety_admin_self_override_enabled' => '1',
+            'safety_circuit_breaker_error_count' => '3',
+            'safety_circuit_breaker_window_minutes' => '15',
+            'safety_circuit_breaker_cooldown_minutes' => '180',
+            'safety_audit_retention_days' => '30',
         ];
     }
 

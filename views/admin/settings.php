@@ -13,7 +13,7 @@ $footerText = trim((string) ($settingsMap['footer_text'] ?? ''));
     <div class="topbar">
         <div>
             <h1 class="page-title">Cấu hình hệ thống</h1>
-            <p class="page-subtitle">Thiết lập nội dung màn hình hết hạn, thông tin liên hệ và footer chung hiển thị trên toàn hệ thống.</p>
+            <p class="page-subtitle">Thiết lập nội dung chung và chính sách an toàn gửi Telegram trên toàn hệ thống.</p>
         </div>
     </div>
 
@@ -54,6 +54,64 @@ $footerText = trim((string) ($settingsMap['footer_text'] ?? ''));
                         <label for="footer_text">Nội dung footer chung</label>
                         <textarea class="textarea" id="footer_text" name="footer_text" rows="3" placeholder="Ví dụ: Hỗ trợ gia hạn qua Zalo, phản hồi từ 08:00 - 22:00 mỗi ngày..."><?= e((string) ($settingsMap['footer_text'] ?? '')) ?></textarea>
                         <div class="small muted">Hiển thị ở cuối toàn bộ trang trong hệ thống, phù hợp để đặt thông tin liên hệ ngắn hoặc lưu ý hỗ trợ.</div>
+                    </div>
+
+                    <div class="list-item">
+                        <div class="builder-block-head">
+                            <div>
+                                <strong>An toàn gửi Telegram</strong>
+                                <div class="small muted">Daily limit là cửa sổ trượt 24 giờ. Các giá trị có hiệu lực từ cron request tiếp theo.</div>
+                            </div>
+                        </div>
+
+                        <div class="admin-form-grid" style="margin-top:16px;">
+                            <div class="field">
+                                <label for="safety_safe_hourly_limit">Safe - lượt/giờ</label>
+                                <input class="input" id="safety_safe_hourly_limit" type="number" min="1" name="safety_safe_hourly_limit" value="<?= e((string) ($settingsMap['safety_safe_hourly_limit'] ?? '8')) ?>" required>
+                            </div>
+                            <div class="field">
+                                <label for="safety_safe_daily_limit">Safe - lượt/24 giờ</label>
+                                <input class="input" id="safety_safe_daily_limit" type="number" min="1" name="safety_safe_daily_limit" value="<?= e((string) ($settingsMap['safety_safe_daily_limit'] ?? '40')) ?>" required>
+                            </div>
+                            <div class="field">
+                                <label for="safety_safe_min_gap_minutes">Safe - khoảng cách (phút)</label>
+                                <input class="input" id="safety_safe_min_gap_minutes" type="number" min="1" name="safety_safe_min_gap_minutes" value="<?= e((string) ($settingsMap['safety_safe_min_gap_minutes'] ?? '8')) ?>" required>
+                            </div>
+                            <div class="field">
+                                <label for="safety_elevated_hourly_limit">Elevated - lượt/giờ</label>
+                                <input class="input" id="safety_elevated_hourly_limit" type="number" min="1" name="safety_elevated_hourly_limit" value="<?= e((string) ($settingsMap['safety_elevated_hourly_limit'] ?? '10')) ?>" required>
+                            </div>
+                            <div class="field">
+                                <label for="safety_elevated_daily_limit">Elevated - lượt/24 giờ</label>
+                                <input class="input" id="safety_elevated_daily_limit" type="number" min="1" name="safety_elevated_daily_limit" value="<?= e((string) ($settingsMap['safety_elevated_daily_limit'] ?? '80')) ?>" required>
+                            </div>
+                            <div class="field">
+                                <label for="safety_elevated_min_gap_minutes">Elevated - khoảng cách (phút)</label>
+                                <input class="input" id="safety_elevated_min_gap_minutes" type="number" min="1" name="safety_elevated_min_gap_minutes" value="<?= e((string) ($settingsMap['safety_elevated_min_gap_minutes'] ?? '5')) ?>" required>
+                            </div>
+                            <div class="field">
+                                <label for="safety_risk_min_gap_minutes">Risk - khoảng cách tối thiểu</label>
+                                <input class="input" id="safety_risk_min_gap_minutes" type="number" min="1" name="safety_risk_min_gap_minutes" value="<?= e((string) ($settingsMap['safety_risk_min_gap_minutes'] ?? '1')) ?>" required>
+                            </div>
+                            <div class="field">
+                                <label for="safety_circuit_breaker_error_count">Lỗi không phân loại để mở breaker</label>
+                                <input class="input" id="safety_circuit_breaker_error_count" type="number" min="1" name="safety_circuit_breaker_error_count" value="<?= e((string) ($settingsMap['safety_circuit_breaker_error_count'] ?? '3')) ?>" required>
+                            </div>
+                            <div class="field">
+                                <label for="safety_circuit_breaker_window_minutes">Cửa sổ đếm lỗi dự phòng (phút)</label>
+                                <input class="input" id="safety_circuit_breaker_window_minutes" type="number" min="1" name="safety_circuit_breaker_window_minutes" value="<?= e((string) ($settingsMap['safety_circuit_breaker_window_minutes'] ?? '15')) ?>" required>
+                            </div>
+                            <div class="field">
+                                <label for="safety_circuit_breaker_cooldown_minutes">Cooldown mặc định (phút)</label>
+                                <input class="input" id="safety_circuit_breaker_cooldown_minutes" type="number" min="1" name="safety_circuit_breaker_cooldown_minutes" value="<?= e((string) ($settingsMap['safety_circuit_breaker_cooldown_minutes'] ?? '180')) ?>" required>
+                            </div>
+                        </div>
+
+                        <label class="chip" style="margin-top:12px;display:inline-flex;align-items:center;gap:8px;">
+                            <input type="checkbox" name="safety_admin_self_override_enabled" value="1" <?= (string) ($settingsMap['safety_admin_self_override_enabled'] ?? '1') === '1' ? 'checked' : '' ?>>
+                            Cho phép admin đã được cấp quyền tự bật/tắt chế độ elevated hoặc risk accepted
+                        </label>
+                        <div class="small muted" style="margin-top:8px;">Tín hiệu spam/rate limit rõ ràng từ Telegram sẽ mở breaker ngay; ngưỡng lỗi chỉ dùng làm cơ chế dự phòng. Audit và thông báo được lưu 30 ngày.</div>
                     </div>
 
                     <div class="actions">

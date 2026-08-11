@@ -18,6 +18,7 @@ class User extends Model
         'subscription_expires_at',
         'max_telegram_accounts',
         'max_schedule_jobs',
+        'can_override_safety_limits',
         'internal_note',
         'created_at',
         'updated_at',

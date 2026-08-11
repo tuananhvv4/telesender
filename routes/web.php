@@ -9,6 +9,7 @@ use App\Controllers\ExpiredAccessController;
 use App\Controllers\LabelController;
 use App\Controllers\LogController;
 use App\Controllers\MessageTemplateController;
+use App\Controllers\NotificationController;
 use App\Controllers\PresetController;
 use App\Controllers\ScheduleController;
 use App\Controllers\SuperAdminController;
@@ -38,6 +39,7 @@ $router->post('/accounts/toggle-active', [TelegramAccountController::class, 'tog
 $router->post('/accounts/send-code', [TelegramAccountController::class, 'sendCode'], ['auth', 'subscription_active']);
 $router->post('/accounts/verify-code', [TelegramAccountController::class, 'verifyCode'], ['auth', 'subscription_active']);
 $router->post('/accounts/verify-password', [TelegramAccountController::class, 'verifyPassword'], ['auth', 'subscription_active']);
+$router->post('/accounts/safety-mode', [TelegramAccountController::class, 'changeSafetyMode'], ['auth', 'subscription_active']);
 
 $router->get('/groups', [TelegramGroupController::class, 'index'], ['auth', 'subscription_active']);
 $router->get('/groups/dialogs', [TelegramGroupController::class, 'dialogs'], ['auth', 'subscription_active']);
@@ -74,6 +76,9 @@ $router->post('/schedules/toggle', [ScheduleController::class, 'toggle'], ['auth
 $router->post('/schedules/delete', [ScheduleController::class, 'delete'], ['auth', 'subscription_active']);
 
 $router->get('/logs', [LogController::class, 'index'], ['auth', 'subscription_active']);
+$router->get('/notifications', [NotificationController::class, 'index'], ['auth']);
+$router->post('/notifications/read', [NotificationController::class, 'markRead'], ['auth']);
+$router->post('/notifications/read-all', [NotificationController::class, 'markAllRead'], ['auth']);
 
 $router->get('/admin/users', [SuperAdminController::class, 'users'], ['auth', 'super_admin']);
 $router->get('/admin/users/details', [SuperAdminController::class, 'userDetails'], ['auth', 'super_admin']);
@@ -85,3 +90,5 @@ $router->get('/admin/subscriptions/details', [SuperAdminController::class, 'subs
 $router->post('/admin/subscriptions/adjust', [SuperAdminController::class, 'adjustSubscription'], ['auth', 'super_admin']);
 $router->get('/admin/settings', [SuperAdminController::class, 'settings'], ['auth', 'super_admin']);
 $router->post('/admin/settings', [SuperAdminController::class, 'updateSettings'], ['auth', 'super_admin']);
+$router->get('/admin/safety', [SuperAdminController::class, 'safety'], ['auth', 'super_admin']);
+$router->post('/admin/safety/mode', [SuperAdminController::class, 'changeAccountSafetyMode'], ['auth', 'super_admin']);

@@ -46,6 +46,12 @@ $supportValue = trim((string) ($systemSettings['support_contact_value'] ?? ''));
 $supportExtra = trim((string) ($systemSettings['support_contact_extra'] ?? ''));
 $supportHref = support_contact_href($supportValue);
 $hasFooterMeta = $footerText !== '' || $supportName !== '' || $supportValue !== '' || $supportExtra !== '';
+$notificationUnreadCount = 0;
+try {
+    $notificationUnreadCount = (new App\Models\UserNotification())->unreadCount((int) ($currentUser['id'] ?? 0));
+} catch (Throwable) {
+    $notificationUnreadCount = 0;
+}
 
 if ($isSuperAdmin) {
     $subscriptionBadgeClass = 'info';
@@ -129,6 +135,10 @@ if ($isSuperAdmin) {
                     <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-clock-rotate-left"></i></span>
                     <span class="nav-text">Nhật ký</span>
                 </a>
+                <a class="nav-link <?= is_active_path('/notifications') ? 'active' : '' ?>" href="<?= e(url('/notifications')) ?>" title="Thông báo">
+                    <span class="nav-icon" aria-hidden="true"><i class="fa-regular fa-bell"></i></span>
+                    <span class="nav-text">Thông báo<?= $notificationUnreadCount > 0 ? ' (' . e((string) $notificationUnreadCount) . ')' : '' ?></span>
+                </a>
             </nav>
 
             <?php if ($isSuperAdmin): ?>
@@ -145,6 +155,10 @@ if ($isSuperAdmin) {
                     <a class="nav-link <?= is_active_path('/admin/settings') ? 'active' : '' ?>" href="<?= e(url('/admin/settings')) ?>" title="Cấu hình hệ thống">
                         <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-sliders"></i></span>
                         <span class="nav-text">Cấu hình hệ thống</span>
+                    </a>
+                    <a class="nav-link <?= is_active_path('/admin/safety') ? 'active' : '' ?>" href="<?= e(url('/admin/safety')) ?>" title="Giám sát an toàn">
+                        <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
+                        <span class="nav-text">Giám sát an toàn</span>
                     </a>
                 </nav>
             <?php endif; ?>
@@ -945,7 +959,7 @@ if ($isSuperAdmin) {
                 if (message !== '') {
                     const confirmed = await requestAppModal('confirm', {
                         title: form.getAttribute('data-ajax-confirm-title') || 'Xác nhận thao tác',
-                        message: message + '\n\nNếu tiếp tục, hệ thống sẽ ép gửi ngay và bỏ qua cooldown / giãn cách an toàn ở lần bấm này.',
+                        message: message + '\n\nNếu tiếp tục, hệ thống sẽ ép gửi ngay và chỉ bỏ qua giới hạn nội bộ hoặc giãn cách mềm ở lần bấm này.',
                         confirmText: form.getAttribute('data-ajax-confirm-text') || 'Vẫn tiếp tục',
                         cancelText: form.getAttribute('data-ajax-cancel-text') || 'Hủy',
                         confirmClass: form.getAttribute('data-ajax-confirm-class') || 'danger',
