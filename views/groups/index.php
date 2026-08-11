@@ -1250,7 +1250,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        let dialogsLoaded = false;
+        // An existing peer in edit mode is already a valid source for loading topics.
+        let dialogsLoaded = peerField.value.trim() !== '';
         let topicsLoaded = false;
 
         function setTopicsStatus(message, tone = 'muted') {
