@@ -43,7 +43,7 @@ foreach ($schedules as $schedule) {
                 <p class="panel-copy">Lọc theo tài khoản, mẫu tin, trạng thái hoặc từ khóa để quản lý danh sách lịch gửi lớn dễ hơn.</p>
             </div>
 
-            <form class="toolbar-form" method="get" action="<?= e(url('/schedules')) ?>">
+            <form class="toolbar-form" method="get" action="<?= e(url('/schedules')) ?>" data-schedule-filter-form>
                 <?php if ((int) request()->query('per_page', 0) > 0): ?>
                     <input type="hidden" name="per_page" value="<?= e((string) request()->query('per_page')) ?>">
                 <?php endif; ?>
@@ -75,7 +75,7 @@ foreach ($schedules as $schedule) {
                     <input class="input" type="text" name="q" value="<?= e($searchQuery ?? '') ?>" placeholder="Tìm theo mẫu tin, tài khoản, nhóm, topic, cron, timezone...">
                     <button class="button secondary" type="submit">Lọc</button>
                     <?php if (($searchQuery ?? '') !== '' || (int) ($selectedAccountId ?? 0) > 0 || (int) ($selectedTemplateId ?? 0) > 0 || ($selectedStatus ?? '') !== ''): ?>
-                        <a class="button secondary" href="<?= e(url('/schedules')) ?>">Xóa lọc</a>
+                        <a class="button secondary" href="<?= e(url('/schedules')) ?>" data-schedule-clear-filters>Xóa lọc</a>
                     <?php endif; ?>
                 </div>
             </form>
@@ -93,7 +93,7 @@ foreach ($schedules as $schedule) {
                         <th>Hành động</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody data-schedule-rows>
                 <?php foreach ($schedules as $schedule): ?>
                     <?php
                     $analysis = $scheduleAnalyses[(int) $schedule['id']] ?? ['risk' => 'safe', 'message' => '', 'runs_per_day' => 0, 'min_gap_minutes' => null];
@@ -114,14 +114,14 @@ foreach ($schedules as $schedule) {
                         default => 'Quá dày',
                     };
                     ?>
-                    <tr>
+                    <tr data-schedule-row="<?= e((string) $schedule['id']) ?>">
                         <td>
                             <strong><?= e($schedule['template_name']) ?></strong>
                             <div style="margin-top:8px;">
                                 <span class="badge info"><?= e($scheduleTypeLabels[(string) ($schedule['schedule_type'] ?? 'advanced')] ?? 'Nâng cao') ?></span>
                             </div>
                             <?php if (!empty($schedule['last_error'])): ?>
-                                <div class="small" style="color:<?= $queueNotice ? '#0f766e' : '#b91c1c' ?>;"><?= e(dispatch_error_message((string) $schedule['last_error'])) ?></div>
+                                <div class="small" style="color:<?= $queueNotice ? '#0f766e' : '#b91c1c' ?>;" data-schedule-error><?= e(dispatch_error_message((string) $schedule['last_error'])) ?></div>
                             <?php endif; ?>
                         </td>
                         <td>
@@ -148,13 +148,13 @@ foreach ($schedules as $schedule) {
                             <div class="small muted"><?= e((string) $analysis['runs_per_day']) ?> lần/ngày · <?= e($analysis['min_gap_minutes'] !== null ? (string) $analysis['min_gap_minutes'] . ' phút/lần' : 'không xác định') ?></div>
                         </td>
                         <td>
-                            <div><?= e(fmt_datetime($schedule['next_run_at'])) ?></div>
+                            <div data-schedule-next-run><?= e(fmt_datetime($schedule['next_run_at'])) ?></div>
                             <div class="small muted">Lần chạy gần nhất: <?= e(fmt_datetime($schedule['last_run_at'])) ?></div>
                         </td>
-                        <td>
-                            <span class="badge <?= $schedule['status'] === 'active' ? 'success' : 'warning' ?>"><?= e($schedule['status'] === 'active' ? 'Đang chạy' : 'Tạm dừng') ?></span>
+                        <td data-schedule-status-cell>
+                            <span class="badge <?= $schedule['status'] === 'active' ? 'success' : 'warning' ?>" data-schedule-status-badge><?= e($schedule['status'] === 'active' ? 'Đang chạy' : 'Tạm dừng') ?></span>
                             <?php if ($queueNotice): ?>
-                                <div style="margin-top:8px;">
+                                <div style="margin-top:8px;" data-schedule-queue-notice>
                                     <span class="badge info">Đang xếp hàng</span>
                                 </div>
                             <?php endif; ?>
@@ -169,30 +169,29 @@ foreach ($schedules as $schedule) {
                                 <form
                                     method="post"
                                     action="<?= e(url('/schedules/send-now')) ?>"
-                                    data-ajax-form
-                                    data-ajax-refresh="schedules-shell"
                                     <?= $manualGuardCanBypass ? 'data-ajax-risk-confirm="1"' : '' ?>
                                     data-ajax-confirm-title="Xác nhận gửi ngay"
                                     data-ajax-confirm-text="Vẫn gửi ngay"
                                     data-send-now-form
+                                    data-schedule-send-now-form
                                     <?= $manualGuardCanBypass ? 'data-risk-message="' . e((string) ($manualGuard['reason'] ?? 'Tài khoản đang trong vùng rủi ro an toàn.')) . '"' : '' ?>
                                 >
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= e((string) $schedule['id']) ?>">
                                     <input type="hidden" name="force_send" value="0" data-force-send-input>
-                                    <button class="button secondary" type="submit" <?= $manualGuard !== null && !$manualGuardCanBypass ? 'disabled title="' . e((string) ($manualGuard['reason'] ?? 'Đang bị guard bắt buộc chặn.')) . '"' : '' ?>>
+                                    <button class="button secondary" type="submit" data-loading-text="Đang gửi..." <?= $manualGuard !== null && !$manualGuardCanBypass ? 'disabled title="' . e((string) ($manualGuard['reason'] ?? 'Đang bị guard bắt buộc chặn.')) . '"' : '' ?>>
                                         <?= $manualGuard !== null && !$manualGuardCanBypass ? 'Đang bị chặn' : 'Gửi ngay' ?>
                                     </button>
                                 </form>
-                                <form method="post" action="<?= e(url('/schedules/toggle')) ?>" data-ajax-form data-ajax-refresh="schedules-shell">
+                                <form method="post" action="<?= e(url('/schedules/toggle')) ?>" data-schedule-toggle-form>
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= e((string) $schedule['id']) ?>">
-                                    <button class="button accent" type="submit"><?= $schedule['status'] === 'active' ? 'Tạm dừng' : 'Tiếp tục' ?></button>
+                                    <button class="button accent" type="submit" data-schedule-toggle-button data-loading-text="Đang cập nhật..."><?= $schedule['status'] === 'active' ? 'Tạm dừng' : 'Tiếp tục' ?></button>
                                 </form>
-                                <form method="post" action="<?= e(url('/schedules/delete')) ?>" data-ajax-form data-ajax-refresh="schedules-shell">
+                                <form method="post" action="<?= e(url('/schedules/delete')) ?>" data-schedule-delete-form>
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="id" value="<?= e((string) $schedule['id']) ?>">
-                                    <button class="button danger" type="submit">Xóa</button>
+                                    <button class="button danger" type="submit" data-loading-text="Đang xóa...">Xóa</button>
                                 </form>
                             </div>
                         </td>
@@ -217,7 +216,7 @@ foreach ($schedules as $schedule) {
     </section>
 
     <?php if (!empty($accountScheduleAnalyses)): ?>
-        <section class="panel">
+        <section class="panel" data-schedule-account-analysis>
             <div class="panel-header">
                 <h2 class="panel-title">Đánh giá tổng theo tài khoản</h2>
             </div>
@@ -501,6 +500,131 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!editorTemplate || !window.TeleSenderCrudModal || !window.TeleSenderApp) {
         return;
+    }
+
+    async function fetchScheduleDocument(url = window.location.href) {
+        const response = await fetch(url, {
+            headers: {
+                'Accept': 'text/html,application/xhtml+xml',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            cache: 'no-store',
+            credentials: 'same-origin',
+        });
+
+        if (!response.ok) {
+            throw new Error('Không thể đồng bộ lại dữ liệu lịch gửi.');
+        }
+
+        return new DOMParser().parseFromString(await response.text(), 'text/html');
+    }
+
+    function readScheduleRecordsFromDocument(nextDocument) {
+        const source = nextDocument.querySelector('[data-schedule-records]');
+
+        if (!source) {
+            return {};
+        }
+
+        try {
+            return JSON.parse(source.textContent || '{}');
+        } catch (error) {
+            return {};
+        }
+    }
+
+    function replaceScheduleSupportRegions(nextDocument) {
+        const currentPagination = document.querySelector('[data-live-region="schedules-shell"] .listing-pagination');
+        const nextPagination = nextDocument.querySelector('[data-live-region="schedules-shell"] .listing-pagination');
+
+        if (currentPagination && nextPagination) {
+            currentPagination.replaceWith(document.importNode(nextPagination, true));
+        }
+
+        const currentAnalysis = document.querySelector('[data-schedule-account-analysis]');
+        const nextAnalysis = nextDocument.querySelector('[data-schedule-account-analysis]');
+
+        if (currentAnalysis && nextAnalysis) {
+            currentAnalysis.replaceWith(document.importNode(nextAnalysis, true));
+        } else if (currentAnalysis && !nextAnalysis) {
+            currentAnalysis.remove();
+        } else if (!currentAnalysis && nextAnalysis) {
+            document.querySelector('[data-live-region="schedules-shell"]')?.appendChild(document.importNode(nextAnalysis, true));
+        }
+    }
+
+    async function syncScheduleRows(changedScheduleId = '') {
+        const nextDocument = await fetchScheduleDocument(window.location.href);
+        const currentBody = document.querySelector('[data-schedule-rows]');
+        const nextBody = nextDocument.querySelector('[data-schedule-rows]');
+
+        if (!currentBody || !nextBody) {
+            throw new Error('Không tìm thấy danh sách lịch gửi để đồng bộ.');
+        }
+
+        const desiredRows = Array.from(nextBody.querySelectorAll('[data-schedule-row]'));
+        const desiredIds = new Set(desiredRows.map((row) => String(row.getAttribute('data-schedule-row') || '')));
+
+        currentBody.querySelectorAll('[data-schedule-row]').forEach((row) => {
+            const rowId = String(row.getAttribute('data-schedule-row') || '');
+
+            if (!desiredIds.has(rowId)) {
+                row.remove();
+            }
+        });
+
+        currentBody.querySelectorAll('tr:not([data-schedule-row])').forEach((row) => row.remove());
+
+        for (const sourceRow of desiredRows) {
+            const rowId = String(sourceRow.getAttribute('data-schedule-row') || '');
+            let currentRow = currentBody.querySelector(`[data-schedule-row="${CSS.escape(rowId)}"]`);
+
+            if (!currentRow || rowId === String(changedScheduleId || '')) {
+                const freshRow = document.importNode(sourceRow, true);
+
+                if (currentRow) {
+                    currentRow.replaceWith(freshRow);
+                }
+
+                currentRow = freshRow;
+            }
+
+            currentBody.appendChild(currentRow);
+        }
+
+        if (desiredRows.length === 0) {
+            const emptyRow = nextBody.querySelector('tr');
+
+            if (emptyRow) {
+                currentBody.appendChild(document.importNode(emptyRow, true));
+            }
+        }
+
+        scheduleRecords = readScheduleRecordsFromDocument(nextDocument);
+        replaceScheduleSupportRegions(nextDocument);
+    }
+
+    async function navigateScheduleList(url, pushState = true) {
+        const shell = document.querySelector('[data-live-region="schedules-shell"]');
+
+        if (!shell) {
+            window.location.href = url;
+            return;
+        }
+
+        shell.setAttribute('aria-busy', 'true');
+
+        try {
+            await window.TeleSenderApp.refreshRegions(['[data-live-region="schedules-shell"]'], { url });
+
+            if (pushState) {
+                window.history.pushState({}, '', url);
+            }
+        } catch (error) {
+            window.location.href = url;
+        } finally {
+            document.querySelector('[data-live-region="schedules-shell"]')?.removeAttribute('aria-busy');
+        }
     }
 
     function createTimeRow(name, value = '') {
@@ -881,8 +1005,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             await window.TeleSenderApp.submitAjaxForm(form, {
-                closeCrudModalOnSuccess: true,
-                refreshRegionsOnSuccess: ['[data-live-region="schedules-shell"]'],
+                reloadOnSuccess: false,
+                async onSuccess(payload) {
+                    window.TeleSenderCrudModal.close();
+
+                    try {
+                        await syncScheduleRows(String(payload.schedule_id || scheduleId || ''));
+                    } catch (error) {
+                        window.TeleSenderApp.showFlash('error', error.message || 'Đã lưu lịch nhưng chưa đồng bộ được danh sách hiển thị.');
+                    }
+                },
             });
         });
 
@@ -911,6 +1043,180 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         openScheduleModal('edit', button.getAttribute('data-schedule-edit'));
+    });
+
+    document.addEventListener('submit', async (event) => {
+        const form = event.target instanceof HTMLFormElement
+            ? event.target.closest('[data-schedule-toggle-form]')
+            : null;
+
+        if (!form) {
+            return;
+        }
+
+        event.preventDefault();
+
+        const scheduleId = String(form.querySelector('input[name="id"]')?.value || '');
+        const row = document.querySelector(`[data-schedule-row="${CSS.escape(scheduleId)}"]`);
+
+        await window.TeleSenderApp.submitAjaxForm(form, {
+            reloadOnSuccess: false,
+            async onSuccess(payload) {
+                const schedule = payload.schedule || {};
+
+                if (!row || String(schedule.id || '') !== scheduleId) {
+                    return;
+                }
+
+                try {
+                    await syncScheduleRows(scheduleId);
+                } catch (error) {
+                    window.TeleSenderApp.showFlash('error', error.message || 'Đã đổi trạng thái nhưng chưa đồng bộ được dòng hiển thị.');
+                }
+            },
+        });
+    });
+
+    document.addEventListener('submit', async (event) => {
+        const form = event.target instanceof HTMLFormElement
+            ? event.target.closest('[data-schedule-delete-form]')
+            : null;
+
+        if (!form) {
+            return;
+        }
+
+        event.preventDefault();
+
+        const scheduleId = String(form.querySelector('input[name="id"]')?.value || '');
+        const row = document.querySelector(`[data-schedule-row="${CSS.escape(scheduleId)}"]`);
+
+        await window.TeleSenderApp.submitAjaxForm(form, {
+            reloadOnSuccess: false,
+            async onSuccess() {
+                row?.remove();
+
+                try {
+                    await syncScheduleRows(scheduleId);
+                } catch (error) {
+                    window.TeleSenderApp.showFlash('error', error.message || 'Đã xóa lịch nhưng chưa đồng bộ được danh sách hiển thị.');
+                }
+            },
+        });
+    });
+
+    document.addEventListener('submit', async (event) => {
+        const form = event.target instanceof HTMLFormElement
+            ? event.target.closest('[data-schedule-send-now-form]')
+            : null;
+
+        if (!form) {
+            return;
+        }
+
+        event.preventDefault();
+
+        const forceInput = form.querySelector('[data-force-send-input]');
+        const riskMessage = form.getAttribute('data-risk-message') || '';
+
+        if (forceInput instanceof HTMLInputElement) {
+            forceInput.value = '0';
+        }
+
+        if (form.getAttribute('data-ajax-risk-confirm') === '1' && riskMessage !== '') {
+            const confirmed = await window.TeleSenderApp.requestModal('confirm', {
+                title: form.getAttribute('data-ajax-confirm-title') || 'Xác nhận gửi ngay',
+                message: riskMessage + '\n\nNếu tiếp tục, hệ thống sẽ ép gửi ngay và chỉ bỏ qua giới hạn nội bộ hoặc giãn cách mềm ở lần bấm này.',
+                confirmText: form.getAttribute('data-ajax-confirm-text') || 'Vẫn gửi ngay',
+                cancelText: 'Hủy',
+                confirmClass: 'danger',
+            });
+
+            if (!confirmed) {
+                return;
+            }
+
+            if (forceInput instanceof HTMLInputElement) {
+                forceInput.value = '1';
+            }
+        }
+
+        const scheduleId = String(form.querySelector('input[name="id"]')?.value || '');
+        const syncChangedRow = async () => {
+            try {
+                await syncScheduleRows(scheduleId);
+            } catch (error) {
+                window.TeleSenderApp.showFlash('error', error.message || 'Đã gửi xong nhưng chưa đồng bộ được dòng hiển thị.');
+            }
+        };
+
+        await window.TeleSenderApp.submitAjaxForm(form, {
+            reloadOnSuccess: false,
+            onSuccess: syncChangedRow,
+            async onError(payload) {
+                await syncChangedRow();
+                window.TeleSenderApp.showFlash('error', payload.message || 'Không thể gửi lịch này ngay lúc này.');
+            },
+        });
+    });
+
+    function scheduleUrlFromForm(form) {
+        const targetUrl = new URL(form.action || window.location.href, window.location.href);
+
+        for (const [key, value] of new FormData(form).entries()) {
+            const normalizedValue = String(value || '').trim();
+
+            if (normalizedValue === '') {
+                targetUrl.searchParams.delete(key);
+            } else {
+                targetUrl.searchParams.set(key, normalizedValue);
+            }
+        }
+
+        return targetUrl.toString();
+    }
+
+    document.addEventListener('submit', (event) => {
+        const form = event.target instanceof HTMLFormElement ? event.target : null;
+
+        if (!form || (!form.matches('[data-schedule-filter-form]') && !form.closest('[data-live-region="schedules-shell"] .listing-pagination'))) {
+            return;
+        }
+
+        event.preventDefault();
+        void navigateScheduleList(scheduleUrlFromForm(form));
+    });
+
+    document.addEventListener('click', (event) => {
+        const link = event.target instanceof Element
+            ? event.target.closest('[data-live-region="schedules-shell"] .pagination-link, [data-schedule-clear-filters]')
+            : null;
+
+        if (!link || link.classList.contains('disabled') || link.getAttribute('href') === '#') {
+            return;
+        }
+
+        event.preventDefault();
+        void navigateScheduleList(link.href);
+    });
+
+    document.addEventListener('change', (event) => {
+        const select = event.target instanceof HTMLSelectElement ? event.target : null;
+
+        if (!select || !select.matches('[data-live-region="schedules-shell"] .pagination-select')) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+
+        if (select.form) {
+            void navigateScheduleList(scheduleUrlFromForm(select.form));
+        }
+    }, true);
+
+    window.addEventListener('popstate', () => {
+        void navigateScheduleList(window.location.href, false);
     });
 
     document.addEventListener('app:regions:refreshed', () => {

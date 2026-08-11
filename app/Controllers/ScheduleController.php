@@ -185,7 +185,8 @@ class ScheduleController extends Controller
             new DateTimeImmutable('now', new DateTimeZone('UTC'))
         );
 
-        app()->db()->transaction(function () use ($data, $groupIds, $nextRunAt): void {
+        $scheduleId = 0;
+        app()->db()->transaction(function () use ($data, $groupIds, $nextRunAt, &$scheduleId): void {
             $scheduleId = $this->schedules->create(array_merge($data, [
                 'user_id' => (int) auth()->id(),
                 'next_run_at' => $nextRunAt,
@@ -204,7 +205,9 @@ class ScheduleController extends Controller
             ? 'Đã tạo lịch gửi. Lưu ý lịch này khá dày, hệ thống sẽ tự giãn cách và giới hạn theo account.'
             : 'Đã tạo lịch gửi tin nhắn.';
 
-        $this->redirectWith('/schedules', success: $message);
+        $this->redirectWith('/schedules', success: $message, payload: [
+            'schedule_id' => $scheduleId,
+        ]);
     }
 
     public function update(Request $request): void
@@ -249,7 +252,9 @@ class ScheduleController extends Controller
             ? 'Đã cập nhật lịch gửi. Lưu ý lịch này khá dày, hệ thống sẽ tự giãn cách và giới hạn theo account.'
             : 'Đã cập nhật lịch gửi.';
 
-        $this->redirectWith('/schedules', success: $message);
+        $this->redirectWith('/schedules', success: $message, payload: [
+            'schedule_id' => (int) $schedule['id'],
+        ]);
     }
 
     public function toggle(Request $request): void
@@ -285,7 +290,20 @@ class ScheduleController extends Controller
 
         $this->schedules->updateById((int) $schedule['id'], $updates);
 
-        $this->redirectWith('/schedules', success: 'Đã cập nhật trạng thái schedule.');
+        $message = $newStatus === 'active'
+            ? 'Đã tiếp tục lịch gửi.'
+            : 'Đã tạm dừng lịch gửi.';
+
+        $this->redirectWith('/schedules', success: $message, payload: [
+            'schedule' => [
+                'id' => (int) $schedule['id'],
+                'status' => $newStatus,
+                'status_label' => $newStatus === 'active' ? 'Đang chạy' : 'Tạm dừng',
+                'next_run_at' => (string) ($updates['next_run_at'] ?? $schedule['next_run_at'] ?? ''),
+                'next_run_at_label' => fmt_datetime((string) ($updates['next_run_at'] ?? $schedule['next_run_at'] ?? '')),
+                'queue_cleared' => $newStatus === 'active',
+            ],
+        ]);
     }
 
     public function delete(Request $request): void
@@ -301,7 +319,10 @@ class ScheduleController extends Controller
         }
 
         $this->schedules->deleteById((int) $schedule['id']);
-        $this->redirectWith('/schedules', success: 'Đã xóa schedule.');
+        $this->redirectWith('/schedules', success: 'Đã xóa lịch gửi.', payload: [
+            'schedule_id' => (int) $schedule['id'],
+            'deleted' => true,
+        ]);
     }
 
     public function sendNow(Request $request): void
@@ -322,20 +343,25 @@ class ScheduleController extends Controller
         try {
             $result = $scheduler->dispatchScheduleNow((int) $schedule['id'], (int) auth()->id(), $forceSend);
         } catch (Exception $exception) {
-            $this->redirectWith('/schedules', error: $exception->getMessage());
+            $this->redirectWith('/schedules', error: dispatch_error_message($exception->getMessage()), payload: [
+                'schedule_id' => (int) $schedule['id'],
+            ]);
         }
 
         if (($result['status'] ?? '') === 'success') {
             $message = $forceSend
                 ? 'Đã ép gửi ngay schedule này thành công. Hãy theo dõi rủi ro cooldown / spam ở các lần gửi tiếp theo.'
                 : 'Đã gửi ngay schedule này thành công.';
-            $this->redirectWith('/schedules', success: $message);
+            $this->redirectWith('/schedules', success: $message, payload: [
+                'schedule_id' => (int) $schedule['id'],
+            ]);
         }
 
         if (($result['status'] ?? '') === 'partial') {
             $this->redirectWith(
                 '/schedules',
-                error: (string) ($result['error'] ?? 'Lịch đã gửi được một số nhóm nhưng có nhóm thất bại. Hãy kiểm tra nhật ký gửi tin.')
+                error: dispatch_error_message((string) ($result['error'] ?? 'Lịch đã gửi được một số nhóm nhưng có nhóm thất bại. Hãy kiểm tra nhật ký gửi tin.')),
+                payload: ['schedule_id' => (int) $schedule['id']]
             );
         }
 
@@ -346,14 +372,24 @@ class ScheduleController extends Controller
             } else {
                 $message .= ' Guard này là bắt buộc và không thể ép gửi vượt qua.';
             }
-            $this->redirectWith('/schedules', error: $message);
+            $this->redirectWith('/schedules', error: $message, payload: [
+                'schedule_id' => (int) $schedule['id'],
+            ]);
         }
 
         if (($result['status'] ?? '') === 'locked') {
-            $this->redirectWith('/schedules', error: (string) ($result['error'] ?? 'Schedule đang được xử lý bởi tiến trình khác.'));
+            $this->redirectWith(
+                '/schedules',
+                error: (string) ($result['error'] ?? 'Schedule đang được xử lý bởi tiến trình khác.'),
+                payload: ['schedule_id' => (int) $schedule['id']]
+            );
         }
 
-        $this->redirectWith('/schedules', error: (string) ($result['error'] ?? 'Gửi ngay thất bại, vui lòng kiểm tra lại account hoặc Telegram response.'));
+        $this->redirectWith(
+            '/schedules',
+            error: dispatch_error_message((string) ($result['error'] ?? 'Gửi ngay thất bại, vui lòng kiểm tra lại account hoặc Telegram response.')),
+            payload: ['schedule_id' => (int) $schedule['id']]
+        );
     }
 
     private function validatedData(Request $request, ?SchedulerService $scheduler = null): array
