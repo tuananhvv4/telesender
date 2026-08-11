@@ -1456,9 +1456,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateSaveAvailability();
 
                 const topicCount = Array.isArray(payload.topics) ? payload.topics.length : 0;
-                const successMessage = topicCount > 0
-                    ? `Đã tải xong ${topicCount} topic từ Telegram.`
-                    : 'Nhóm không có topic riêng. Hệ thống sẽ dùng Topic chung / mặc định.';
+                const successMessage = payload.forum_enabled === false
+                    ? (payload.message || 'Nhóm này không bật Topics. Tin nhắn sẽ được gửi vào nhóm chung, không cần chọn topic.')
+                    : topicCount > 0
+                        ? `Đã tải xong ${topicCount} topic từ Telegram.`
+                        : 'Nhóm đã bật Topics nhưng chưa có topic riêng. Hệ thống sẽ dùng Topic chung / mặc định.';
 
                 setTopicsStatus(successMessage, 'success');
                 window.TeleSenderApp.showFlash('success', successMessage);

@@ -146,8 +146,18 @@ class TelegramGroupController extends Controller
             Response::json([
                 'ok' => true,
                 'topics' => $topics,
+                'forum_enabled' => true,
             ]);
         } catch (\Throwable $exception) {
+            if ($exception instanceof \danog\MadelineProto\RPCErrorException && $exception->rpc === 'CHANNEL_FORUM_MISSING') {
+                Response::json([
+                    'ok' => true,
+                    'topics' => [],
+                    'forum_enabled' => false,
+                    'message' => 'Nhóm này không bật Topics. Tin nhắn sẽ được gửi vào nhóm chung, không cần chọn topic.',
+                ]);
+            }
+
             Response::json([
                 'ok' => false,
                 'message' => $exception->getMessage(),
