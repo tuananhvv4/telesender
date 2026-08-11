@@ -451,19 +451,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         return `
             <tr data-import-row="${index}">
-                <td class="emoji-import-index" data-row-number></td>
-                <td>
+                <td class="emoji-import-index" data-label="Dòng" data-row-number></td>
+                <td data-label="Tên gợi nhớ">
                     <input class="input" type="text" name="rows[${index}][name]" value="${escapeHtml(item.name)}" placeholder="Fire Cat" required data-import-name>
                     <input type="hidden" name="rows[${index}][slug]" value="${escapeHtml(item.slug)}" data-import-slug>
                     <input type="hidden" name="rows[${index}][keywords]" value="${escapeHtml(item.keywords)}">
                     <input type="hidden" name="rows[${index}][notes]" value="${escapeHtml(item.notes)}">
                 </td>
-                <td><input class="input mono" type="text" name="rows[${index}][emoji_identifier]" value="${escapeHtml(item.emoji_identifier)}" placeholder="5318779098686826724" required></td>
-                <td><input class="input emoji-import-fallback" type="text" name="rows[${index}][fallback_emoji]" value="${escapeHtml(item.fallback_emoji)}" placeholder="🔥" required data-import-fallback></td>
-                <td class="emoji-import-check-cell">
+                <td data-label="Emoji ID"><input class="input mono" type="text" name="rows[${index}][emoji_identifier]" value="${escapeHtml(item.emoji_identifier)}" placeholder="5318779098686826724" required></td>
+                <td data-label="Icon dự phòng"><input class="input emoji-import-fallback" type="text" name="rows[${index}][fallback_emoji]" value="${escapeHtml(item.fallback_emoji)}" placeholder="🔥" required data-import-fallback></td>
+                <td class="emoji-import-check-cell" data-label="Bật">
                     <input type="checkbox" name="rows[${index}][is_active]" value="1" ${item.is_active ? 'checked' : ''} data-import-active>
                 </td>
-                <td class="emoji-import-action-cell">
+                <td class="emoji-import-action-cell" data-label="Xóa">
                     <button class="button danger sm" type="button" data-import-remove-row>Xóa</button>
                 </td>
             </tr>

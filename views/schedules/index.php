@@ -81,7 +81,7 @@ foreach ($schedules as $schedule) {
             </form>
         </div>
         <div class="panel-body table-wrap listing-body">
-            <table class="data-table">
+            <table class="data-table responsive-data-table">
                 <thead>
                     <tr>
                         <th>Mẫu tin</th>
@@ -115,7 +115,7 @@ foreach ($schedules as $schedule) {
                     };
                     ?>
                     <tr data-schedule-row="<?= e((string) $schedule['id']) ?>">
-                        <td>
+                        <td data-label="Mẫu tin">
                             <strong><?= e($schedule['template_name']) ?></strong>
                             <div style="margin-top:8px;">
                                 <span class="badge info"><?= e($scheduleTypeLabels[(string) ($schedule['schedule_type'] ?? 'advanced')] ?? 'Nâng cao') ?></span>
@@ -124,7 +124,7 @@ foreach ($schedules as $schedule) {
                                 <div class="small" style="color:<?= $queueNotice ? '#0f766e' : '#b91c1c' ?>;" data-schedule-error><?= e(dispatch_error_message((string) $schedule['last_error'])) ?></div>
                             <?php endif; ?>
                         </td>
-                        <td>
+                        <td data-label="Tài khoản / Nhóm">
                             <div><?= e($schedule['account_name']) ?></div>
                             <div class="schedule-target-list">
                                 <?php foreach ((array) ($schedule['target_groups'] ?? []) as $targetGroup): ?>
@@ -142,16 +142,16 @@ foreach ($schedules as $schedule) {
                                 <span class="badge info schedule-target-count"><?= e((string) $schedule['group_count']) ?> nhóm</span>
                             <?php endif; ?>
                         </td>
-                        <td>
+                        <td data-label="Lịch chạy">
                             <div><?= e($summary) ?></div>
                             <div class="small muted">Múi giờ: <?= e($schedule['timezone']) ?></div>
                             <div class="small muted"><?= e((string) $analysis['runs_per_day']) ?> lần/ngày · <?= e($analysis['min_gap_minutes'] !== null ? (string) $analysis['min_gap_minutes'] . ' phút/lần' : 'không xác định') ?></div>
                         </td>
-                        <td>
+                        <td data-label="Lần chạy tới">
                             <div data-schedule-next-run><?= e(fmt_datetime($schedule['next_run_at'])) ?></div>
                             <div class="small muted">Lần chạy gần nhất: <?= e(fmt_datetime($schedule['last_run_at'])) ?></div>
                         </td>
-                        <td data-schedule-status-cell>
+                        <td data-label="Trạng thái" data-schedule-status-cell>
                             <span class="badge <?= $schedule['status'] === 'active' ? 'success' : 'warning' ?>" data-schedule-status-badge><?= e($schedule['status'] === 'active' ? 'Đang chạy' : 'Tạm dừng') ?></span>
                             <?php if ($queueNotice): ?>
                                 <div style="margin-top:8px;" data-schedule-queue-notice>
@@ -159,11 +159,11 @@ foreach ($schedules as $schedule) {
                                 </div>
                             <?php endif; ?>
                         </td>
-                        <td>
+                        <td data-label="An toàn">
                             <span class="badge <?= e($riskBadgeClass) ?>"><?= e($riskLabel) ?></span>
                             <div class="small muted" style="margin-top: 6px;"><?= e($analysis['message']) ?></div>
                         </td>
-                        <td>
+                        <td data-label="Hành động">
                             <div class="inline-actions">
                                 <button class="button secondary" type="button" data-schedule-edit="<?= e((string) $schedule['id']) ?>">Sửa</button>
                                 <form
@@ -198,7 +198,7 @@ foreach ($schedules as $schedule) {
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($schedules === []): ?>
-                    <tr>
+                    <tr class="responsive-table-empty">
                         <td colspan="7" class="muted">
                             <?= (($searchQuery ?? '') !== '' || (int) ($selectedAccountId ?? 0) > 0 || (int) ($selectedTemplateId ?? 0) > 0 || ($selectedStatus ?? '') !== '')
                                 ? 'Không có lịch gửi nào khớp với bộ lọc hiện tại.'

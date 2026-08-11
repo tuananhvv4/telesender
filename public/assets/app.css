@@ -5220,6 +5220,29 @@ tbody tr:hover {
 }
 
 @media (max-width: 760px) {
+  .main-content > *,
+  .stack > *,
+  [data-live-region],
+  .listing-panel,
+  .listing-panel > *,
+  .listing-body > *,
+  .entity-list-item > *,
+  .group-card > *,
+  .admin-user-card > *,
+  .emoji-library-card > *,
+  .log-card > * {
+    min-width: 0;
+  }
+
+  .entity-list-item,
+  .group-card,
+  .admin-user-card,
+  .emoji-library-card,
+  .log-card,
+  .list-item {
+    overflow-wrap: anywhere;
+  }
+
   .listing-panel > .panel-header {
     padding: 16px;
   }
@@ -5240,6 +5263,109 @@ tbody tr:hover {
     padding: 8px;
   }
 
+  .listing-body.table-wrap:has(.responsive-data-table) {
+    overflow: visible;
+  }
+
+  .responsive-data-table {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .responsive-data-table thead,
+  .responsive-data-table colgroup {
+    display: none;
+  }
+
+  .responsive-data-table,
+  .responsive-data-table tbody,
+  .responsive-data-table tr,
+  .responsive-data-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .responsive-data-table tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .responsive-data-table tr {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-soft);
+  }
+
+  .responsive-data-table td,
+  .responsive-data-table td[style] {
+    min-width: 0 !important;
+    display: grid;
+    grid-template-columns: minmax(92px, 0.34fr) minmax(0, 1fr);
+    gap: 12px;
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--border);
+    overflow-wrap: anywhere;
+  }
+
+  .responsive-data-table td::before {
+    content: attr(data-label);
+    grid-column: 1;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.67rem;
+    font-weight: 700;
+    letter-spacing: 0.045em;
+    line-height: 1.45;
+    text-transform: uppercase;
+  }
+
+  .responsive-data-table td > * {
+    grid-column: 2;
+  }
+
+  .responsive-data-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .responsive-data-table tbody tr:hover td {
+    background: transparent;
+  }
+
+  .responsive-data-table .responsive-table-empty td {
+    display: block;
+    padding: 24px 16px;
+    text-align: center;
+  }
+
+  .responsive-data-table .responsive-table-empty td::before {
+    display: none;
+  }
+
+  .responsive-data-table .status-block,
+  .responsive-data-table .status-card,
+  .responsive-data-table .status-form,
+  .responsive-data-table .inline-actions,
+  .responsive-data-table form {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .responsive-data-table .inline-actions {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .responsive-data-table .inline-actions > form,
+  .responsive-data-table .inline-actions > .button {
+    flex: 1 1 120px;
+  }
+
+  .responsive-data-table .inline-actions .button,
+  .responsive-data-table .status-block > form > .button {
+    width: 100%;
+  }
+
   .entity-list-item {
     grid-template-columns: 1fr;
     align-items: stretch;
@@ -5247,8 +5373,20 @@ tbody tr:hover {
 
   .entity-list-item > .inline-actions:last-child {
     justify-content: flex-start;
+    flex-wrap: wrap;
     padding-top: 12px;
     border-top: 1px solid var(--border);
+  }
+
+  .entity-list-item > .inline-actions:last-child > form,
+  .entity-list-item > .inline-actions:last-child > .button,
+  .group-card-actions > form,
+  .group-card-actions > .button,
+  .admin-user-card > .inline-actions:last-child > form,
+  .admin-user-card > .inline-actions:last-child > .button,
+  .emoji-library-actions > form,
+  .emoji-library-actions > .button {
+    flex: 1 1 132px;
   }
 
   .template-library-item > .inline-actions:last-child,
@@ -5277,6 +5415,7 @@ tbody tr:hover {
   }
 
   .group-card-actions {
+    flex-wrap: wrap;
     justify-content: flex-end !important;
     padding-top: 10px !important;
     border-top: 1px solid var(--border) !important;
@@ -5300,6 +5439,94 @@ tbody tr:hover {
 
   .emoji-library-grid.listing-body {
     grid-template-columns: 1fr;
+  }
+
+  .emoji-library-actions,
+  .admin-user-card > .inline-actions:last-child,
+  .label-library-item > .inline-actions:last-child,
+  .template-library-item > .inline-actions:last-child {
+    flex-wrap: wrap;
+  }
+
+  .emoji-import-table-wrap {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+
+  .emoji-import-table {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .emoji-import-table thead,
+  .emoji-import-table colgroup {
+    display: none;
+  }
+
+  .emoji-import-table,
+  .emoji-import-table tbody,
+  .emoji-import-table tr,
+  .emoji-import-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .emoji-import-table tbody {
+    display: grid;
+    gap: 12px;
+  }
+
+  .emoji-import-table tr {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-soft);
+  }
+
+  .emoji-import-table td {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(88px, 0.34fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+
+  .emoji-import-table td::before {
+    content: attr(data-label);
+    grid-column: 1;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.67rem;
+    font-weight: 700;
+    letter-spacing: 0.045em;
+    text-transform: uppercase;
+  }
+
+  .emoji-import-table td > * {
+    grid-column: 2;
+  }
+
+  .emoji-import-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .emoji-import-table .emoji-import-index {
+    width: 100%;
+    min-width: 0;
+    text-align: left;
+  }
+
+  .emoji-import-table .emoji-import-check-cell input {
+    margin-top: 0;
+  }
+
+  .emoji-import-table .emoji-import-action-cell .button,
+  .emoji-import-toolbar .button {
+    width: 100%;
   }
 
   .emoji-form-core,

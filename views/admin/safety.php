@@ -16,7 +16,7 @@
             </form>
         </div>
         <div class="panel-body table-wrap listing-body">
-            <table class="data-table">
+            <table class="data-table responsive-data-table">
                 <thead>
                 <tr>
                     <th>Account</th>
@@ -38,18 +38,18 @@
                     };
                     ?>
                     <tr>
-                        <td>
+                        <td data-label="Account">
                             <strong><?= e((string) $account['name']) ?></strong>
                             <div class="small muted"><?= e((string) $account['owner_name']) ?> · <?= e((string) $account['owner_email']) ?></div>
                             <div class="small muted"><?= e((string) ($account['schedules_count'] ?? 0)) ?> lịch active</div>
                         </td>
-                        <td><span class="badge <?= e($badge) ?>"><?= e((string) ($safety['mode_label'] ?? 'An toàn')) ?></span></td>
-                        <td>
+                        <td data-label="Chế độ"><span class="badge <?= e($badge) ?>"><?= e((string) ($safety['mode_label'] ?? 'An toàn')) ?></span></td>
+                        <td data-label="Mức sử dụng">
                             <div>1 giờ: <?= e((string) ($safety['hourly_count'] ?? 0)) ?> / <?= $safety['hourly_limit'] === null ? 'Không giới hạn' : e((string) $safety['hourly_limit']) ?></div>
                             <div>24 giờ: <?= e((string) ($safety['daily_count'] ?? 0)) ?> / <?= $safety['daily_limit'] === null ? 'Không giới hạn' : e((string) $safety['daily_limit']) ?></div>
                             <div class="small muted">Gap <?= e((string) ($safety['min_gap_minutes'] ?? 8)) ?> phút</div>
                         </td>
-                        <td>
+                        <td data-label="Circuit breaker">
                             <?php if (!empty($safety['circuit_breaker_active'])): ?>
                                 <span class="badge danger">Đang mở</span>
                                 <div class="small muted"><?= e(fmt_datetime((string) ($safety['circuit_breaker_until'] ?? ''))) ?></div>
@@ -58,7 +58,7 @@
                                 <span class="badge success">Đóng</span>
                             <?php endif; ?>
                         </td>
-                        <td>
+                        <td data-label="Điều chỉnh">
                             <button
                                 class="button secondary sm"
                                 type="button"
@@ -78,7 +78,7 @@
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($accounts === []): ?>
-                    <tr><td colspan="5" class="muted">Không có Telegram account phù hợp.</td></tr>
+                    <tr class="responsive-table-empty"><td colspan="5" class="muted">Không có Telegram account phù hợp.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>

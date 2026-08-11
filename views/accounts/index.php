@@ -14,7 +14,7 @@
             <h2 class="panel-title">Danh sách tài khoản</h2>
         </div>
         <div class="panel-body table-wrap listing-body">
-            <table class="data-table">
+            <table class="data-table responsive-data-table">
 	                <thead>
 	                    <tr>
 	                        <th>Tài khoản</th>
@@ -53,19 +53,19 @@
                         };
                         ?>
 	                    <tr>
-	                        <td>
+	                        <td data-label="Tài khoản">
 	                            <strong><?= e($account['name']) ?></strong>
 	                            <div class="small muted"><?= e($account['tg_username'] ?: $account['session_name']) ?></div>
 	                        </td>
-	                        <td class="mono"><?= e($account['phone_number']) ?></td>
-	                        <td>
+	                        <td class="mono" data-label="Số điện thoại"><?= e($account['phone_number']) ?></td>
+	                        <td data-label="Trạng thái">
 	                            <span class="badge <?= e($badgeClass) ?>">
 	                                <?= e($statusLabel) ?>
 	                            </span>
 	                        </td>
-	                        <td><?= e((string) $account['groups_count']) ?></td>
-	                        <td><?= e((string) $account['schedules_count']) ?></td>
-	                        <td style="min-width:260px;">
+	                        <td data-label="Nhóm"><?= e((string) $account['groups_count']) ?></td>
+	                        <td data-label="Lịch gửi"><?= e((string) $account['schedules_count']) ?></td>
+	                        <td data-label="Chế độ gửi tin" style="min-width:260px;">
                                 <div class="status-block">
                                     <div>
                                         <span class="badge <?= e($safetyBadge) ?>"><?= e((string) ($safety['mode_label'] ?? 'An toàn')) ?></span>
@@ -105,7 +105,7 @@
                                     <?php endif; ?>
                                 </div>
 	                        </td>
-	                        <td>
+	                        <td data-label="Hành động">
 	                            <div class="status-block">
                                     <?php if ($status === 'active'): ?>
                                         <form method="post" action="<?= e(url('/accounts/toggle-active')) ?>" data-ajax-form data-ajax-refresh="accounts-panel">
@@ -164,7 +164,7 @@
 	                    </tr>
 	                <?php endforeach; ?>
                 <?php if ($accounts === []): ?>
-                    <tr><td colspan="7" class="muted">Chưa có tài khoản nào.</td></tr>
+                    <tr class="responsive-table-empty"><td colspan="7" class="muted">Chưa có tài khoản nào.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
