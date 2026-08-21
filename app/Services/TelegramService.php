@@ -252,6 +252,70 @@ class TelegramService
         return $this->decorateInboxMessages($api, $result);
     }
 
+    public function getInboxForumTopics(array $account, string $peer, int $limit = 100): array
+    {
+        $api = $this->client($account);
+        $api->start();
+
+        $result = $api->messages->getForumTopics(
+            peer: $peer,
+            offset_date: 0,
+            offset_id: 0,
+            offset_topic: 0,
+            limit: max(1, min(100, $limit)),
+            floodWaitLimit: max(0, (int) config('inbox.flood_wait_limit_seconds', 3)),
+            queueId: 'inbox_topics_' . (int) $account['id']
+        );
+
+        $topics = [];
+        foreach ((array) ($result['topics'] ?? []) as $topic) {
+            if (!is_array($topic) || ($topic['_'] ?? '') === 'forumTopicDeleted' || !isset($topic['id'])) {
+                continue;
+            }
+            $topicId = (int) $topic['id'];
+            if ($topicId <= 0) {
+                continue;
+            }
+            $topics[] = [
+                'topic_id' => $topicId,
+                'title' => trim((string) ($topic['title'] ?? '')) ?: ($topicId === 1 ? 'Chung' : 'Topic #' . $topicId),
+                'icon_color' => isset($topic['icon_color']) ? (int) $topic['icon_color'] : null,
+                'icon_emoji_id' => isset($topic['icon_emoji_id']) ? (string) $topic['icon_emoji_id'] : null,
+                'top_message_id' => isset($topic['top_message']) ? (int) $topic['top_message'] : null,
+                'unread_count' => max(0, (int) ($topic['unread_count'] ?? 0)),
+            ];
+        }
+
+        return $topics;
+    }
+
+    public function getTopicHistoryPage(
+        array $account,
+        string $peer,
+        int $topicId,
+        int $offsetId = 0,
+        int $limit = 40
+    ): array {
+        $api = $this->client($account);
+        $api->start();
+
+        $result = $api->messages->getReplies(
+            peer: $peer,
+            msg_id: $topicId,
+            offset_id: max(0, $offsetId),
+            offset_date: 0,
+            add_offset: 0,
+            limit: max(1, min(100, $limit)),
+            max_id: 0,
+            min_id: 0,
+            hash: [],
+            floodWaitLimit: max(0, (int) config('inbox.flood_wait_limit_seconds', 3)),
+            queueId: 'inbox_topic_history_' . (int) $account['id'] . '_' . $topicId
+        );
+
+        return $this->decorateInboxMessages($api, $result);
+    }
+
     public function downloadInboxMedia(
         array $account,
         string $fileId,

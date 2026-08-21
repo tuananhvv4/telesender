@@ -62,12 +62,42 @@ class TelegramInboxService
         return ['account' => $account, 'items' => $items, 'sync' => $this->syncStatus($accountId, null)];
     }
 
-    public function messages(int $dialogId, ?int $beforeMessageId = null, int $limit = 40): array
+    public function topics(int $dialogId): array
     {
         $dialog = $this->dialogOrFail($dialogId);
+        $items = (bool) ($dialog['is_forum'] ?? false)
+            ? $this->db->fetchAll(
+                'SELECT * FROM telegram_inbox_topics
+                 WHERE telegram_inbox_dialog_id = :dialog_id
+                 ORDER BY topic_id = 1 DESC, title ASC, topic_id ASC',
+                ['dialog_id' => $dialogId]
+            )
+            : [];
+
+        return [
+            'dialog' => $dialog,
+            'items' => $items,
+            'sync' => $this->syncStatus((int) $dialog['telegram_account_id'], $dialogId),
+        ];
+    }
+
+    public function messages(
+        int $dialogId,
+        ?int $beforeMessageId = null,
+        int $limit = 40,
+        ?int $topicId = null
+    ): array
+    {
+        $dialog = $this->dialogOrFail($dialogId);
+        $topic = $topicId !== null && $topicId > 0 ? $this->topicOrFail($dialogId, $topicId) : null;
         $limit = max(1, min(100, $limit));
         $bindings = ['dialog_id' => $dialogId];
         $beforeSql = '';
+        $topicSql = '';
+        if ($topic !== null) {
+            $bindings['topic_id'] = (int) $topic['topic_id'];
+            $topicSql = ' AND m.topic_id = :topic_id';
+        }
         if ($beforeMessageId !== null && $beforeMessageId > 0) {
             $bindings['before_message_id'] = $beforeMessageId;
             $beforeSql = ' AND m.telegram_message_id < :before_message_id';
@@ -81,7 +111,7 @@ class TelegramInboxService
              LEFT JOIN telegram_inbox_messages reply
                ON reply.telegram_inbox_dialog_id = m.telegram_inbox_dialog_id
               AND reply.telegram_message_id = m.reply_to_message_id
-             WHERE m.telegram_inbox_dialog_id = :dialog_id' . $beforeSql . '
+             WHERE m.telegram_inbox_dialog_id = :dialog_id' . $topicSql . $beforeSql . '
              ORDER BY m.telegram_message_id DESC
              LIMIT ' . $limit,
             $bindings
@@ -91,10 +121,15 @@ class TelegramInboxService
 
         return [
             'dialog' => $dialog,
+            'topic' => $topic,
             'items' => $items,
             'oldest_message_id' => $oldest,
-            'history_complete' => (bool) ($dialog['history_complete'] ?? false),
-            'has_more_cached' => $oldest !== null && $this->hasOlderCached($dialogId, $oldest),
+            'history_complete' => (bool) (($topic ?? $dialog)['history_complete'] ?? false),
+            'has_more_cached' => $oldest !== null && $this->hasOlderCached(
+                $dialogId,
+                $oldest,
+                $topic !== null ? (int) $topic['topic_id'] : null
+            ),
             'sync' => $this->syncStatus((int) $dialog['telegram_account_id'], $dialogId),
         ];
     }
@@ -116,15 +151,18 @@ class TelegramInboxService
         return $jobKey;
     }
 
-    public function enqueueDialogSync(int $dialogId): string
+    public function enqueueDialogSync(int $dialogId, ?int $topicId = null): string
     {
         $dialog = $this->dialogOrFail($dialogId);
+        $topicId = $topicId !== null && $topicId > 0
+            ? (int) $this->topicOrFail($dialogId, $topicId)['topic_id']
+            : null;
         $this->db->update('telegram_inbox_dialogs', [
             'last_opened_at' => gmdate('Y-m-d H:i:s'),
             'updated_at' => gmdate('Y-m-d H:i:s'),
         ], 'id = :id', ['id' => $dialogId]);
 
-        $jobKey = 'history-refresh:' . $dialogId;
+        $jobKey = 'history-refresh:' . $dialogId . ($topicId !== null ? ':topic:' . $topicId : '');
         $this->upsertJob(
             $jobKey,
             (int) $dialog['user_id'],
@@ -132,21 +170,24 @@ class TelegramInboxService
             $dialogId,
             'history_refresh',
             100,
-            null
+            $topicId !== null ? ['topic_id' => $topicId] : null
         );
 
         return $jobKey;
     }
 
-    public function enqueueOlder(int $dialogId, int $beforeMessageId): ?string
+    public function enqueueOlder(int $dialogId, int $beforeMessageId, ?int $topicId = null): ?string
     {
         $dialog = $this->dialogOrFail($dialogId);
-        if ((bool) ($dialog['history_complete'] ?? false)) {
+        $topic = $topicId !== null && $topicId > 0 ? $this->topicOrFail($dialogId, $topicId) : null;
+        if ((bool) (($topic ?? $dialog)['history_complete'] ?? false)) {
             return null;
         }
 
         $beforeMessageId = max(0, $beforeMessageId);
-        $jobKey = 'history-backfill:' . $dialogId . ':' . $beforeMessageId;
+        $jobKey = 'history-backfill:' . $dialogId
+            . ($topic !== null ? ':topic:' . (int) $topic['topic_id'] : '')
+            . ':' . $beforeMessageId;
         $this->upsertJob(
             $jobKey,
             (int) $dialog['user_id'],
@@ -154,7 +195,10 @@ class TelegramInboxService
             $dialogId,
             'history_backfill',
             80,
-            ['before_message_id' => $beforeMessageId]
+            array_filter([
+                'before_message_id' => $beforeMessageId,
+                'topic_id' => $topic !== null ? (int) $topic['topic_id'] : null,
+            ], static fn (mixed $value): bool => $value !== null)
         );
 
         return $jobKey;
@@ -233,6 +277,21 @@ class TelegramInboxService
         }
 
         return $dialog;
+    }
+
+    private function topicOrFail(int $dialogId, int $topicId): array
+    {
+        $topic = $this->db->fetch(
+            'SELECT * FROM telegram_inbox_topics
+             WHERE telegram_inbox_dialog_id = :dialog_id AND topic_id = :topic_id
+             LIMIT 1',
+            ['dialog_id' => $dialogId, 'topic_id' => $topicId]
+        );
+        if ($topic === null) {
+            throw new HttpException(404, 'Không tìm thấy topic của nhóm.');
+        }
+
+        return $topic;
     }
 
     private function adminOrFail(int $userId): array
@@ -321,14 +380,21 @@ class TelegramInboxService
         return $job ?? ['status' => 'not_synced'];
     }
 
-    private function hasOlderCached(int $dialogId, int $oldestMessageId): bool
+    private function hasOlderCached(int $dialogId, int $oldestMessageId, ?int $topicId = null): bool
     {
+        $bindings = ['dialog_id' => $dialogId, 'message_id' => $oldestMessageId];
+        $topicSql = '';
+        if ($topicId !== null) {
+            $bindings['topic_id'] = $topicId;
+            $topicSql = ' AND topic_id = :topic_id';
+        }
+
         return $this->db->fetch(
             'SELECT id FROM telegram_inbox_messages
              WHERE telegram_inbox_dialog_id = :dialog_id
-               AND telegram_message_id < :message_id
+               AND telegram_message_id < :message_id' . $topicSql . '
              LIMIT 1',
-            ['dialog_id' => $dialogId, 'message_id' => $oldestMessageId]
+            $bindings
         ) !== null;
     }
 }

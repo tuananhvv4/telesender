@@ -137,6 +137,12 @@ try {
                         'unread_count' => 0,
                         '_peer_identifier' => '-100303',
                     ],
+                    [
+                        'peer' => ['_' => 'peerChannel', 'channel_id' => 404],
+                        'top_message' => 40,
+                        'unread_count' => 0,
+                        '_peer_identifier' => '-100404',
+                    ],
                 ],
                 'messages' => [[
                     '_' => 'message',
@@ -156,15 +162,43 @@ try {
                 'chats' => [
                     ['_' => 'chat', 'id' => 202, 'title' => ''],
                     ['_' => 'channel', 'id' => 303, 'title' => 'Kenh thu nghiem', 'broadcast' => true],
+                    ['_' => 'channel', 'id' => 404, 'title' => 'Nhom forum', 'broadcast' => false, 'forum' => true],
+                ],
+            ];
+        }
+
+        public function getInboxForumTopics(array $account, string $peer, int $limit = 100): array
+        {
+            return [
+                [
+                    'topic_id' => 1,
+                    'title' => 'Chung',
+                    'icon_color' => 7322096,
+                    'icon_emoji_id' => null,
+                    'top_message_id' => 10,
+                    'unread_count' => 0,
+                ],
+                [
+                    'topic_id' => 900,
+                    'title' => 'Ban hang',
+                    'icon_color' => 16766590,
+                    'icon_emoji_id' => null,
+                    'top_message_id' => 9,
+                    'unread_count' => 2,
                 ],
             ];
         }
 
         public function resolveInboxPeerIdentities(array $account, array $peerIdentifiers): array
         {
-            return in_array('-202', $peerIdentifiers, true) ? [
-                '-202' => ['title' => 'Nhom da sua ten', 'username' => 'nhomdasua', 'peer_type' => 'group'],
-            ] : [];
+            $result = [];
+            if (in_array('-202', $peerIdentifiers, true)) {
+                $result['-202'] = ['title' => 'Nhom da sua ten', 'username' => 'nhomdasua', 'peer_type' => 'group'];
+            }
+            if (in_array('777', $peerIdentifiers, true)) {
+                $result['777'] = ['title' => 'Nguoi gui da sua ten', 'username' => 'nguoigui', 'peer_type' => 'private'];
+            }
+            return $result;
         }
 
         public function getHistoryPage(array $account, string $peer, int $offsetId = 0, int $limit = 40): array
@@ -176,12 +210,16 @@ try {
                 $messages[] = [
                     '_' => 'message',
                     'id' => $id,
-                    'peer_id' => ['_' => 'peerUser', 'user_id' => 101],
-                    'from_id' => ['_' => 'peerUser', 'user_id' => 101],
+                    'peer_id' => ['_' => 'peerChannel', 'channel_id' => 404],
+                    'from_id' => ['_' => 'peerUser', 'user_id' => $id === 9 ? 777 : 101],
                     'date' => time() - (20 - $id),
                     'message' => 'Tin nhắn #' . $id,
                     'edit_date' => $id === 9 ? time() - 5 : null,
-                    'reply_to' => $id === 9 ? ['reply_to_msg_id' => 10, 'quote_text' => 'Trích dẫn'] : null,
+                    'reply_to' => $id === 9 ? [
+                        'reply_to_msg_id' => 10,
+                        'reply_to_top_id' => 900,
+                        'quote_text' => 'Trích dẫn',
+                    ] : null,
                 ];
             }
 
@@ -197,6 +235,16 @@ try {
                 'chats' => [],
             ];
         }
+
+        public function getTopicHistoryPage(
+            array $account,
+            string $peer,
+            int $topicId,
+            int $offsetId = 0,
+            int $limit = 40
+        ): array {
+            return $this->getHistoryPage($account, $peer, $offsetId, $limit);
+        }
     };
 
     $inbox = new TelegramInboxService($db);
@@ -211,36 +259,52 @@ try {
     $dialogsRun = $sync->runJob($dialogsJob);
     $assert($dialogsRun['completed'] === 1, 'Dialog refresh job must complete.');
     $dialogs = $inbox->dialogs($accountId);
-    $assert(count($dialogs['items']) === 3, 'Private, group and channel dialogs must be cached.');
+    $assert(count($dialogs['items']) === 4, 'Private, group, supergroup and channel dialogs must be cached.');
     $dialogTypes = array_column($dialogs['items'], 'peer_type');
     $assert(in_array('private', $dialogTypes, true), 'Private dialogs must be normalized.');
     $assert(in_array('group', $dialogTypes, true), 'Group dialogs must be normalized.');
     $assert(in_array('channel', $dialogTypes, true), 'Channel dialogs must be normalized.');
+    $assert(in_array('supergroup', $dialogTypes, true), 'Supergroup dialogs must be normalized.');
     $repairedGroup = array_values(array_filter(
         $dialogs['items'],
         static fn (array $dialog): bool => $dialog['peer_type'] === 'group'
     ))[0];
     $assert($repairedGroup['title'] === 'Nhom da sua ten', 'Generic cached dialog names must be repaired through Telegram getInfo metadata.');
-    $privateDialog = array_values(array_filter(
+    $forumDialog = array_values(array_filter(
         $dialogs['items'],
-        static fn (array $dialog): bool => $dialog['peer_type'] === 'private'
+        static fn (array $dialog): bool => (bool) ($dialog['is_forum'] ?? false)
     ))[0];
-    $dialogId = (int) $privateDialog['id'];
+    $dialogId = (int) $forumDialog['id'];
 
     $historyJob = $inbox->enqueueDialogSync($dialogId);
     $historyRun = $sync->runJob($historyJob);
     $assert($historyRun['completed'] === 1, 'History refresh job must complete.');
+    $topics = $inbox->topics($dialogId);
+    $assert(count($topics['items']) === 2, 'Forum topics must be cached for the selector.');
+    $assert((int) $topics['items'][1]['topic_id'] === 900, 'Telegram topic IDs must be preserved.');
     $messages = $inbox->messages($dialogId);
     $assert(count($messages['items']) === 2, 'Two messages must be cached.');
     $assert((int) $messages['items'][0]['telegram_message_id'] === 9, 'Messages must be returned oldest first.');
     $assert((int) $messages['items'][0]['reply_to_message_id'] === 10, 'Reply metadata must be stored.');
     $assert($messages['items'][0]['edited_at'] !== null, 'Edited timestamp must be stored.');
+    $assert(
+        $messages['items'][0]['sender_name'] === 'Nguoi gui da sua ten',
+        'Generic group sender names must be repaired through Telegram metadata; got: '
+        . (string) $messages['items'][0]['sender_name']
+    );
 
-    $backfillJob = $inbox->enqueueOlder($dialogId, 9);
+    $topicJob = $inbox->enqueueDialogSync($dialogId, 900);
+    $topicRun = $sync->runJob($topicJob);
+    $assert($topicRun['completed'] === 1, 'Selected topic refresh job must complete.');
+    $topicMessages = $inbox->messages($dialogId, null, 40, 900);
+    $assert(count($topicMessages['items']) === 2, 'Selected topic must return only its cached messages.');
+    $assert((int) $topicMessages['items'][0]['topic_id'] === 900, 'Topic messages must retain their topic ID.');
+
+    $backfillJob = $inbox->enqueueOlder($dialogId, 9, 900);
     $assert($backfillJob !== null, 'Incomplete history must create a backfill job.');
     $backfillRun = $sync->runJob($backfillJob);
     $assert($backfillRun['completed'] === 1, 'History backfill job must complete.');
-    $olderMessages = $inbox->messages($dialogId, 9);
+    $olderMessages = $inbox->messages($dialogId, 9, 40, 900);
     $assert(count($olderMessages['items']) === 1, 'Older history must resume from the durable cursor.');
     $assert((int) $olderMessages['items'][0]['telegram_message_id'] === 8, 'Backfill must cache the older message.');
     $assert($olderMessages['history_complete'] === true, 'Short final page must mark history complete.');

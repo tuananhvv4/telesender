@@ -13,6 +13,7 @@
     data-csrf-token="<?= e(csrf_token()) ?>"
     data-accounts-url="<?= e(url('/admin/inbox/accounts')) ?>"
     data-dialogs-url="<?= e(url('/admin/inbox/dialogs')) ?>"
+    data-topics-url="<?= e(url('/admin/inbox/topics')) ?>"
     data-messages-url="<?= e(url('/admin/inbox/messages')) ?>"
     data-sync-account-url="<?= e(url('/admin/inbox/sync-account')) ?>"
     data-sync-dialog-url="<?= e(url('/admin/inbox/sync-dialog')) ?>"
@@ -37,22 +38,28 @@
                 <option value="">Chọn account</option>
             </select>
         </label>
-        <label class="inbox-search-field">
-            <span>Tìm hội thoại</span>
-            <input class="input" id="inbox_search" type="search" placeholder="Tên, username hoặc nội dung gần nhất" disabled>
-        </label>
+        <div class="inbox-readonly-badge">
+            <i class="fa-solid fa-lock"></i>
+            <span><strong>Chỉ đọc</strong><small>Không gửi hoặc đánh dấu đã đọc</small></span>
+        </div>
     </div>
 
     <div class="inbox-shell">
         <aside class="inbox-dialog-pane" id="inbox_dialog_pane">
             <div class="inbox-pane-head">
-                <div>
-                    <strong>Hội thoại</strong>
-                    <span class="small muted" id="inbox_dialog_count">0 cuộc trò chuyện</span>
+                <div class="inbox-dialog-titlebar">
+                    <div>
+                        <strong>Hội thoại</strong>
+                        <span class="small muted" id="inbox_dialog_count">0 cuộc trò chuyện</span>
+                    </div>
+                    <button class="inbox-icon-button" id="inbox_refresh_dialogs" type="button" disabled aria-label="Làm mới hội thoại" title="Làm mới hội thoại">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
                 </div>
-                <button class="button secondary sm" id="inbox_refresh_dialogs" type="button" disabled>
-                    <i class="fa-solid fa-rotate"></i>
-                </button>
+                <label class="inbox-dialog-search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input id="inbox_search" type="search" placeholder="Tìm kiếm" disabled>
+                </label>
             </div>
             <div class="inbox-dialog-list" id="inbox_dialog_list">
                 <div class="inbox-empty">Chưa chọn Telegram account.</div>
@@ -69,10 +76,21 @@
                     <strong id="inbox_conversation_title">Chọn một hội thoại</strong>
                     <span class="small muted" id="inbox_conversation_meta">Private chat, group hoặc channel</span>
                 </div>
-                <button class="button secondary sm inbox-conversation-refresh" id="inbox_refresh_messages" type="button" disabled>
-                    <i class="fa-solid fa-rotate"></i> Làm mới
+                <button class="inbox-icon-button inbox-conversation-refresh" id="inbox_refresh_messages" type="button" disabled aria-label="Làm mới tin nhắn" title="Làm mới tin nhắn">
+                    <i class="fa-solid fa-rotate"></i>
                 </button>
             </header>
+
+            <label class="inbox-topic-field" id="inbox_topic_field" hidden>
+                <span class="inbox-topic-icon"><i class="fa-solid fa-hashtag"></i></span>
+                <span class="inbox-topic-copy">
+                    <small>Topic đang xem</small>
+                    <select id="inbox_topic_select">
+                        <option value="">Tất cả topic</option>
+                    </select>
+                </span>
+                <i class="fa-solid fa-chevron-down"></i>
+            </label>
 
             <div class="inbox-message-scroll" id="inbox_message_scroll">
                 <button class="button secondary sm inbox-load-older" id="inbox_load_older" type="button" hidden>
@@ -85,6 +103,12 @@
                         <span>Chọn một cuộc trò chuyện ở cột bên trái.</span>
                     </div>
                 </div>
+            </div>
+
+            <div class="inbox-readonly-composer">
+                <i class="fa-solid fa-lock"></i>
+                <span>Chế độ chỉ đọc</span>
+                <small>Tin nhắn Telegram không bị đánh dấu đã đọc</small>
             </div>
         </section>
     </div>

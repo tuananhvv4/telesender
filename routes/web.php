@@ -98,6 +98,7 @@ $router->post('/admin/safety/mode', [SuperAdminController::class, 'changeAccount
 $router->get('/admin/inbox', [SuperAdminInboxController::class, 'index'], ['auth', 'super_admin']);
 $router->get('/admin/inbox/accounts', [SuperAdminInboxController::class, 'accounts'], ['auth', 'super_admin']);
 $router->get('/admin/inbox/dialogs', [SuperAdminInboxController::class, 'dialogs'], ['auth', 'super_admin']);
+$router->get('/admin/inbox/topics', [SuperAdminInboxController::class, 'topics'], ['auth', 'super_admin']);
 $router->get('/admin/inbox/messages', [SuperAdminInboxController::class, 'messages'], ['auth', 'super_admin']);
 $router->get('/admin/inbox/media', [SuperAdminInboxController::class, 'media'], ['auth', 'super_admin']);
 $router->post('/admin/inbox/sync-account', [SuperAdminInboxController::class, 'syncAccount'], ['auth', 'super_admin']);

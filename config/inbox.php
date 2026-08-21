@@ -7,6 +7,7 @@ return [
     'cron_shutdown_reserve_seconds' => 5,
     'jobs_per_run' => 8,
     'dialogs_page_size' => 100,
+    'topics_page_size' => 100,
     'history_page_size' => 40,
     'history_refresh_overlap' => 40,
     'identity_lookup_limit' => 120,

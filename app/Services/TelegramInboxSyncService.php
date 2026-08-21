@@ -256,16 +256,17 @@ class TelegramInboxSyncService
                 }
                 $db->query(
                     'INSERT INTO telegram_inbox_dialogs (
-                        user_id, telegram_account_id, peer_key, peer_identifier, peer_type,
+                        user_id, telegram_account_id, peer_key, peer_identifier, peer_type, is_forum,
                         title, username, top_message_id, last_message_text, last_message_at,
                         unread_count, history_complete, created_at, updated_at
                      ) VALUES (
-                        :user_id, :account_id, :peer_key, :peer_identifier, :peer_type,
+                        :user_id, :account_id, :peer_key, :peer_identifier, :peer_type, :is_forum,
                         :title, :username, :top_message_id, :last_message_text, :last_message_at,
                         :unread_count, 0, :created_at, :updated_at
                      )
                      ON DUPLICATE KEY UPDATE
                         peer_identifier = VALUES(peer_identifier), peer_type = VALUES(peer_type),
+                        is_forum = VALUES(is_forum),
                         title = VALUES(title), username = VALUES(username), top_message_id = VALUES(top_message_id),
                         last_message_text = VALUES(last_message_text), last_message_at = VALUES(last_message_at),
                         unread_count = VALUES(unread_count), updated_at = VALUES(updated_at)',
@@ -315,15 +316,147 @@ class TelegramInboxSyncService
         }
 
         $cursor = json_decode((string) ($job['cursor_json'] ?? ''), true);
+        $cursor = is_array($cursor) ? $cursor : [];
+        $topicId = max(0, (int) ($cursor['topic_id'] ?? 0));
+        $topic = null;
+        if ($topicId > 0) {
+            $topic = $this->db->fetch(
+                'SELECT * FROM telegram_inbox_topics
+                 WHERE telegram_inbox_dialog_id = :dialog_id AND topic_id = :topic_id
+                 LIMIT 1',
+                ['dialog_id' => (int) $dialog['id'], 'topic_id' => $topicId]
+            );
+            if ($topic === null) {
+                $this->failJob($job, 'topic_missing', 'Topic không còn tồn tại trong cache.');
+                return;
+            }
+        }
         $offsetId = (string) $job['job_type'] === 'history_backfill'
-            ? max(0, (int) ($cursor['before_message_id'] ?? $dialog['oldest_message_id'] ?? 0))
+            ? max(0, (int) ($cursor['before_message_id'] ?? $topic['oldest_message_id'] ?? $dialog['oldest_message_id'] ?? 0))
             : 0;
         $pageSize = max(1, (int) config('inbox.history_page_size', 40));
-        $response = $this->telegram->getHistoryPage($account, (string) $dialog['peer_identifier'], $offsetId, $pageSize);
+        $topics = (bool) ($dialog['is_forum'] ?? false)
+            ? $this->telegram->getInboxForumTopics(
+                $account,
+                (string) $dialog['peer_identifier'],
+                max(1, (int) config('inbox.topics_page_size', 100))
+            )
+            : [];
+        $response = $topicId > 0
+            ? $this->telegram->getTopicHistoryPage(
+                $account,
+                (string) $dialog['peer_identifier'],
+                $topicId,
+                $offsetId,
+                $pageSize
+            )
+            : $this->telegram->getHistoryPage(
+                $account,
+                (string) $dialog['peer_identifier'],
+                $offsetId,
+                $pageSize
+            );
         $messages = $this->normalizer->messages($response, $account);
+        if ($topicId > 0) {
+            foreach ($messages as &$topicMessage) {
+                $topicMessage['topic_id'] = $topicId;
+            }
+            unset($topicMessage);
+        }
         $now = gmdate('Y-m-d H:i:s');
+        $genericSenderNames = ['Telegram', 'Telegram user'];
+        $senderKeys = [];
+        foreach ($messages as $message) {
+            if (
+                in_array((string) ($message['sender_name'] ?? ''), $genericSenderNames, true)
+                && !empty($message['sender_peer_key'])
+                && !str_starts_with((string) $message['sender_peer_key'], 'self:')
+            ) {
+                $senderKeys[] = (string) $message['sender_peer_key'];
+            }
+        }
+        $cachedGenericSenders = $this->db->fetchAll(
+            'SELECT DISTINCT sender_peer_key
+             FROM telegram_inbox_messages
+             WHERE telegram_account_id = :account_id
+               AND sender_peer_key IS NOT NULL
+               AND sender_peer_key NOT LIKE \'self:%\'
+               AND sender_name IN (\'Telegram\', \'Telegram user\')
+             ORDER BY sender_peer_key ASC
+             LIMIT ' . max(1, (int) config('inbox.identity_lookup_limit', 120)),
+            ['account_id' => (int) $account['id']]
+        );
+        foreach ($cachedGenericSenders as $cachedSender) {
+            $senderKeys[] = (string) $cachedSender['sender_peer_key'];
+        }
+        $senderPeerMap = [];
+        foreach (array_values(array_unique($senderKeys)) as $senderKey) {
+            $identifier = $this->peerIdentifierFromKey($senderKey);
+            if ($identifier !== '') {
+                $senderPeerMap[$identifier] = $senderKey;
+            }
+        }
+        $senderIdentities = $senderPeerMap !== []
+            ? $this->telegram->resolveInboxPeerIdentities(
+                $account,
+                array_map(static fn (int|string $identifier): string => (string) $identifier, array_keys($senderPeerMap))
+            )
+            : [];
+        $senderNames = [];
+        foreach ($senderIdentities as $identifier => $identity) {
+            $senderKey = $senderPeerMap[(string) $identifier] ?? null;
+            if ($senderKey !== null && !empty($identity['title'])) {
+                $senderNames[$senderKey] = (string) $identity['title'];
+            }
+        }
+        foreach ($messages as &$message) {
+            $senderKey = (string) ($message['sender_peer_key'] ?? '');
+            if (
+                isset($senderNames[$senderKey])
+                && in_array((string) ($message['sender_name'] ?? ''), $genericSenderNames, true)
+            ) {
+                $message['sender_name'] = $senderNames[$senderKey];
+            }
+        }
+        unset($message);
 
-        $this->db->transaction(function (Database $db) use ($job, $dialog, $messages, $pageSize, $now): void {
+        $this->db->transaction(function (Database $db) use (
+            $job,
+            $account,
+            $dialog,
+            $topic,
+            $topicId,
+            $topics,
+            $messages,
+            $senderNames,
+            $pageSize,
+            $now
+        ): void {
+            foreach ($topics as $forumTopic) {
+                $db->query(
+                    'INSERT INTO telegram_inbox_topics (
+                        user_id, telegram_account_id, telegram_inbox_dialog_id, topic_id,
+                        title, icon_color, icon_emoji_id, top_message_id, unread_count,
+                        history_complete, created_at, updated_at
+                     ) VALUES (
+                        :user_id, :account_id, :dialog_id, :topic_id,
+                        :title, :icon_color, :icon_emoji_id, :top_message_id, :unread_count,
+                        0, :created_at, :updated_at
+                     )
+                     ON DUPLICATE KEY UPDATE
+                        title = VALUES(title), icon_color = VALUES(icon_color),
+                        icon_emoji_id = VALUES(icon_emoji_id), top_message_id = VALUES(top_message_id),
+                        unread_count = VALUES(unread_count), updated_at = VALUES(updated_at)',
+                    array_merge($forumTopic, [
+                        'user_id' => (int) $dialog['user_id'],
+                        'account_id' => (int) $dialog['telegram_account_id'],
+                        'dialog_id' => (int) $dialog['id'],
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ])
+                );
+            }
+
             $ids = [];
             foreach ($messages as $message) {
                 $ids[] = (int) $message['telegram_message_id'];
@@ -331,13 +464,13 @@ class TelegramInboxSyncService
                     'INSERT INTO telegram_inbox_messages (
                         user_id, telegram_account_id, telegram_inbox_dialog_id, telegram_message_id,
                         sender_peer_key, sender_name, is_outgoing, message_text, reply_to_message_id,
-                        reply_to_top_id, reply_quote_text, grouped_id, media_type, media_file_name,
+                        reply_to_top_id, topic_id, reply_quote_text, grouped_id, media_type, media_file_name,
                         media_mime_type, media_size, media_source_json, telegram_created_at,
                         edited_at, raw_type, created_at, updated_at
                      ) VALUES (
                         :user_id, :account_id, :dialog_id, :telegram_message_id,
                         :sender_peer_key, :sender_name, :is_outgoing, :message_text, :reply_to_message_id,
-                        :reply_to_top_id, :reply_quote_text, :grouped_id, :media_type, :media_file_name,
+                        :reply_to_top_id, :topic_id, :reply_quote_text, :grouped_id, :media_type, :media_file_name,
                         :media_mime_type, :media_size, :media_source_json, :telegram_created_at,
                         :edited_at, :raw_type, :created_at, :updated_at
                      )
@@ -345,6 +478,7 @@ class TelegramInboxSyncService
                         sender_peer_key = VALUES(sender_peer_key), sender_name = VALUES(sender_name),
                         is_outgoing = VALUES(is_outgoing), message_text = VALUES(message_text),
                         reply_to_message_id = VALUES(reply_to_message_id), reply_to_top_id = VALUES(reply_to_top_id),
+                        topic_id = COALESCE(VALUES(topic_id), topic_id),
                         reply_quote_text = VALUES(reply_quote_text), grouped_id = VALUES(grouped_id),
                         media_type = VALUES(media_type), media_file_name = VALUES(media_file_name),
                         media_mime_type = VALUES(media_mime_type), media_size = VALUES(media_size),
@@ -361,6 +495,37 @@ class TelegramInboxSyncService
                 );
             }
 
+            foreach ($topics as $forumTopic) {
+                $db->query(
+                    'UPDATE telegram_inbox_messages
+                     SET topic_id = :topic_id, updated_at = :updated_at
+                     WHERE telegram_inbox_dialog_id = :dialog_id
+                       AND telegram_message_id = :topic_id
+                       AND topic_id IS NULL',
+                    [
+                        'topic_id' => (int) $forumTopic['topic_id'],
+                        'updated_at' => $now,
+                        'dialog_id' => (int) $dialog['id'],
+                    ]
+                );
+            }
+
+            foreach ($senderNames as $senderKey => $senderName) {
+                $db->query(
+                    'UPDATE telegram_inbox_messages
+                     SET sender_name = :sender_name, updated_at = :updated_at
+                     WHERE telegram_account_id = :account_id
+                       AND sender_peer_key = :sender_peer_key
+                       AND sender_name IN (\'Telegram\', \'Telegram user\')',
+                    [
+                        'sender_name' => $senderName,
+                        'updated_at' => $now,
+                        'account_id' => (int) $account['id'],
+                        'sender_peer_key' => (string) $senderKey,
+                    ]
+                );
+            }
+
             $updates = [
                 'last_synced_at' => $now,
                 'updated_at' => $now,
@@ -373,12 +538,55 @@ class TelegramInboxSyncService
                     ? max($ids)
                     : max((int) $dialog['newest_message_id'], max($ids));
             }
-            if ((string) $job['job_type'] === 'history_backfill' && count($messages) < $pageSize) {
+            if ($topicId === 0 && (string) $job['job_type'] === 'history_backfill' && count($messages) < $pageSize) {
                 $updates['history_complete'] = 1;
             }
             $db->update('telegram_inbox_dialogs', $updates, 'id = :id', ['id' => (int) $dialog['id']]);
+
+            if ($topicId > 0 && $topic !== null) {
+                $topicUpdates = [
+                    'last_synced_at' => $now,
+                    'updated_at' => $now,
+                ];
+                if ($ids !== []) {
+                    $topicUpdates['oldest_message_id'] = $topic['oldest_message_id'] === null
+                        ? min($ids)
+                        : min((int) $topic['oldest_message_id'], min($ids));
+                    $topicUpdates['newest_message_id'] = $topic['newest_message_id'] === null
+                        ? max($ids)
+                        : max((int) $topic['newest_message_id'], max($ids));
+                }
+                if ((string) $job['job_type'] === 'history_backfill' && count($messages) < $pageSize) {
+                    $topicUpdates['history_complete'] = 1;
+                }
+                $db->update(
+                    'telegram_inbox_topics',
+                    $topicUpdates,
+                    'telegram_inbox_dialog_id = :dialog_id AND topic_id = :topic_id',
+                    ['dialog_id' => (int) $dialog['id'], 'topic_id' => $topicId]
+                );
+            }
             $this->completeJobWithDb($db, $job, $now);
         });
+    }
+
+    private function peerIdentifierFromKey(string $peerKey): string
+    {
+        if (!str_contains($peerKey, ':')) {
+            return '';
+        }
+        [$type, $id] = explode(':', $peerKey, 2);
+        $id = ltrim(trim($id), '-');
+        if ($id === '') {
+            return '';
+        }
+
+        return match ($type) {
+            'user' => $id,
+            'chat' => '-' . $id,
+            'channel' => '-100' . $id,
+            default => '',
+        };
     }
 
     private function loadAccount(int $accountId): ?array

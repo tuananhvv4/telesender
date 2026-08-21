@@ -49,6 +49,7 @@ class TelegramMessageNormalizer
                 'peer_key' => $peerKey,
                 'peer_identifier' => $peerIdentifier,
                 'peer_type' => $peerType,
+                'is_forum' => $this->isForumPeer($peerKey, $chats) ? 1 : 0,
                 'title' => $title,
                 'username' => $username,
                 'top_message_id' => $topMessageId,
@@ -95,6 +96,7 @@ class TelegramMessageNormalizer
                 'message_text' => $text !== '' ? $text : null,
                 'reply_to_message_id' => isset($reply['reply_to_msg_id']) ? (int) $reply['reply_to_msg_id'] : null,
                 'reply_to_top_id' => isset($reply['reply_to_top_id']) ? (int) $reply['reply_to_top_id'] : null,
+                'topic_id' => isset($reply['reply_to_top_id']) ? (int) $reply['reply_to_top_id'] : null,
                 'reply_quote_text' => isset($reply['quote_text']) ? trim((string) $reply['quote_text']) : null,
                 'grouped_id' => isset($message['grouped_id']) ? (string) $message['grouped_id'] : null,
                 'media_type' => $media['type'],
@@ -180,6 +182,15 @@ class TelegramMessageNormalizer
         return (bool) ($chat['broadcast'] ?? false) ? 'channel' : 'supergroup';
     }
 
+    private function isForumPeer(string $peerKey, array $chats): bool
+    {
+        if (!str_starts_with($peerKey, 'channel:')) {
+            return false;
+        }
+
+        return (bool) ($chats[substr($peerKey, 8)]['forum'] ?? false);
+    }
+
     private function dialogIdentity(mixed $peer, array $users, array $chats, string $peerIdentifier): array
     {
         $peerKey = $this->peerKey($peer);
@@ -236,16 +247,23 @@ class TelegramMessageNormalizer
             return ['self:' . (int) $account['id'], $username !== '' ? '@' . $username : (string) $account['name']];
         }
 
-        $from = (array) ($message['from_id'] ?? []);
+        $from = $message['from_id'] ?? $message['sender_id'] ?? [];
         $key = $this->peerKey($from);
-        if (($from['_'] ?? null) === 'peerUser') {
-            $user = $users[(string) ($from['user_id'] ?? '')] ?? [];
+        if ($key === '' && isset($message['peer_id'])) {
+            $candidateKey = $this->peerKey($message['peer_id']);
+            if (str_starts_with($candidateKey, 'user:')) {
+                $key = $candidateKey;
+            }
+        }
+
+        if (str_starts_with($key, 'user:')) {
+            $user = $users[substr($key, 5)] ?? [];
             $name = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? ''));
             $username = trim((string) ($user['username'] ?? ''));
             return [$key, $name !== '' ? $name : ($username !== '' ? '@' . $username : 'Telegram user')];
         }
 
-        $id = (string) ($from['chat_id'] ?? $from['channel_id'] ?? '');
+        $id = str_contains($key, ':') ? substr($key, strpos($key, ':') + 1) : '';
         $chat = $chats[$id] ?? [];
         $name = trim((string) ($message['post_author'] ?? $chat['title'] ?? ''));
         return [$key, $name !== '' ? $name : 'Telegram'];

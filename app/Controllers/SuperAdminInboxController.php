@@ -49,12 +49,21 @@ class SuperAdminInboxController extends Controller
     public function messages(Request $request): void
     {
         $before = (int) $request->query('before_message_id', 0);
+        $topicId = (int) $request->query('topic_id', 0);
         $payload = $this->inbox->messages(
             (int) $request->query('dialog_id', 0),
             $before > 0 ? $before : null,
-            (int) $request->query('limit', 40)
+            (int) $request->query('limit', 40),
+            $topicId > 0 ? $topicId : null
         );
         $this->jsonSuccess('Đã tải tin nhắn.', $payload);
+    }
+
+    public function topics(Request $request): void
+    {
+        $this->jsonSuccess('Đã tải danh sách topic.', $this->inbox->topics(
+            (int) $request->query('dialog_id', 0)
+        ));
     }
 
     public function syncAccount(Request $request): void
@@ -67,7 +76,11 @@ class SuperAdminInboxController extends Controller
 
     public function syncDialog(Request $request): void
     {
-        $jobKey = $this->inbox->enqueueDialogSync((int) $request->input('dialog_id'));
+        $topicId = (int) $request->input('topic_id', 0);
+        $jobKey = $this->inbox->enqueueDialogSync(
+            (int) $request->input('dialog_id'),
+            $topicId > 0 ? $topicId : null
+        );
         $result = $this->syncRunner()->runJob($jobKey);
         $job = $this->inbox->syncJobStatus($jobKey);
         $this->jsonSuccess($this->syncMessage($result, $job), ['sync' => $result, 'job' => $job]);
@@ -77,7 +90,8 @@ class SuperAdminInboxController extends Controller
     {
         $jobKey = $this->inbox->enqueueOlder(
             (int) $request->input('dialog_id'),
-            (int) $request->input('before_message_id')
+            (int) $request->input('before_message_id'),
+            (int) $request->input('topic_id', 0) ?: null
         );
         $result = $jobKey !== null ? $this->syncRunner()->runJob($jobKey) : ['processed' => 0, 'completed' => 0];
         $job = $jobKey !== null ? $this->inbox->syncJobStatus($jobKey) : ['status' => 'completed'];
