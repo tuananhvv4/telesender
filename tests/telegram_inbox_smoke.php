@@ -109,6 +109,8 @@ try {
     $assert($peerIdentifier->invoke($telegramService, ['_' => 'peerUser', 'user_id' => 101]) === '101', 'User peer IDs must have a direct fallback.');
     $assert($peerIdentifier->invoke($telegramService, ['_' => 'peerChat', 'chat_id' => 202]) === '-202', 'Group peer IDs must have a direct fallback.');
     $assert($peerIdentifier->invoke($telegramService, ['_' => 'peerChannel', 'channel_id' => 303]) === '-100303', 'Channel peer IDs must have a direct fallback.');
+    $assert($peerIdentifier->invoke($telegramService, ['_' => 'inputPeerChannel', 'channel_id' => 404]) === '-100404', 'Input peer constructors must be supported.');
+    $assert($peerIdentifier->invoke($telegramService, '-100505') === '-100505', 'Numeric peer identifiers must pass through unchanged.');
 
     $telegram = new class extends TelegramService {
         public array $historyOffsets = [];

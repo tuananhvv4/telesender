@@ -27,20 +27,27 @@ class TelegramMessageNormalizer
                 continue;
             }
 
-            $peer = (array) ($dialog['peer'] ?? []);
+            $peer = $dialog['peer'] ?? $dialog['peer_id'] ?? [];
+            $peerIdentifier = trim((string) ($dialog['_peer_identifier'] ?? ''));
             $peerKey = $this->peerKey($peer);
+            if ($peerKey === '') {
+                $peerKey = $this->peerKeyFromIdentifier($peerIdentifier);
+            }
             $peerType = $this->peerType($peer, $chats);
+            if ($peerType === 'unknown') {
+                $peerType = $this->peerTypeFromIdentifier($peerIdentifier, $chats);
+            }
             if ($peerKey === '' || !in_array($peerType, ['private', 'group', 'supergroup', 'channel'], true)) {
                 continue;
             }
 
             $topMessageId = isset($dialog['top_message']) ? (int) $dialog['top_message'] : null;
             $topMessage = $topMessageId !== null ? ($messages[$peerKey . ':' . $topMessageId] ?? null) : null;
-            [$title, $username] = $this->dialogIdentity($peer, $users, $chats);
+            [$title, $username] = $this->dialogIdentity($peer, $users, $chats, $peerIdentifier);
 
             $result[] = [
                 'peer_key' => $peerKey,
-                'peer_identifier' => trim((string) ($dialog['_peer_identifier'] ?? '')),
+                'peer_identifier' => $peerIdentifier,
                 'peer_type' => $peerType,
                 'title' => $title,
                 'username' => $username,
@@ -126,47 +133,100 @@ class TelegramMessageNormalizer
         return $map;
     }
 
-    private function peerKey(array $peer): string
+    private function peerKey(mixed $peer): string
     {
-        return match ((string) ($peer['_'] ?? '')) {
-            'peerUser' => 'user:' . (string) ($peer['user_id'] ?? ''),
-            'peerChat' => 'chat:' . (string) ($peer['chat_id'] ?? ''),
-            'peerChannel' => 'channel:' . (string) ($peer['channel_id'] ?? ''),
-            default => '',
-        };
+        if (is_int($peer) || is_string($peer)) {
+            return $this->peerKeyFromIdentifier(trim((string) $peer));
+        }
+        if (!is_array($peer)) {
+            return '';
+        }
+
+        $constructor = strtolower((string) ($peer['_'] ?? ''));
+        if (str_contains($constructor, 'user')) {
+            return 'user:' . (string) ($peer['user_id'] ?? $peer['id'] ?? '');
+        }
+        if (str_contains($constructor, 'channel')) {
+            return 'channel:' . (string) ($peer['channel_id'] ?? $peer['id'] ?? '');
+        }
+        if (str_contains($constructor, 'chat')) {
+            return 'chat:' . (string) ($peer['chat_id'] ?? $peer['id'] ?? '');
+        }
+
+        return '';
     }
 
-    private function peerType(array $peer, array $chats): string
+    private function peerType(mixed $peer, array $chats): string
     {
-        $constructor = (string) ($peer['_'] ?? '');
-        if ($constructor === 'peerUser') {
-            return 'private';
+        if (is_int($peer) || is_string($peer)) {
+            return $this->peerTypeFromIdentifier(trim((string) $peer), $chats);
         }
-        if ($constructor === 'peerChat') {
-            return 'group';
-        }
-        if ($constructor !== 'peerChannel') {
+        if (!is_array($peer)) {
             return 'unknown';
         }
 
-        $chat = $chats[(string) ($peer['channel_id'] ?? '')] ?? [];
+        $constructor = strtolower((string) ($peer['_'] ?? ''));
+        if (str_contains($constructor, 'user')) {
+            return 'private';
+        }
+        if (str_contains($constructor, 'chat') && !str_contains($constructor, 'channel')) {
+            return 'group';
+        }
+        if (!str_contains($constructor, 'channel')) {
+            return 'unknown';
+        }
+
+        $chat = $chats[(string) ($peer['channel_id'] ?? $peer['id'] ?? '')] ?? [];
         return (bool) ($chat['broadcast'] ?? false) ? 'channel' : 'supergroup';
     }
 
-    private function dialogIdentity(array $peer, array $users, array $chats): array
+    private function dialogIdentity(mixed $peer, array $users, array $chats, string $peerIdentifier): array
     {
-        if (($peer['_'] ?? null) === 'peerUser') {
-            $user = $users[(string) ($peer['user_id'] ?? '')] ?? [];
+        $peerKey = $this->peerKey($peer);
+        if ($peerKey === '') {
+            $peerKey = $this->peerKeyFromIdentifier($peerIdentifier);
+        }
+
+        if (str_starts_with($peerKey, 'user:')) {
+            $user = $users[substr($peerKey, 5)] ?? [];
             $name = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? ''));
             $username = trim((string) ($user['username'] ?? ''));
             return [$name !== '' ? $name : ($username !== '' ? '@' . $username : 'Telegram user'), $username ?: null];
         }
 
-        $id = (string) ($peer['chat_id'] ?? $peer['channel_id'] ?? '');
+        $id = str_contains($peerKey, ':') ? substr($peerKey, strpos($peerKey, ':') + 1) : '';
         $chat = $chats[$id] ?? [];
         $title = trim((string) ($chat['title'] ?? ''));
         $username = trim((string) ($chat['username'] ?? ''));
         return [$title !== '' ? $title : 'Telegram chat', $username ?: null];
+    }
+
+    private function peerKeyFromIdentifier(string $identifier): string
+    {
+        if ($identifier === '' || $identifier === '0') {
+            return '';
+        }
+        if (str_starts_with($identifier, '-100')) {
+            return 'channel:' . substr($identifier, 4);
+        }
+        if (str_starts_with($identifier, '-')) {
+            return 'chat:' . ltrim($identifier, '-');
+        }
+
+        return 'user:' . $identifier;
+    }
+
+    private function peerTypeFromIdentifier(string $identifier, array $chats): string
+    {
+        if ($identifier === '' || $identifier === '0') {
+            return 'unknown';
+        }
+        if (str_starts_with($identifier, '-100')) {
+            $chat = $chats[substr($identifier, 4)] ?? [];
+            return (bool) ($chat['broadcast'] ?? false) ? 'channel' : 'supergroup';
+        }
+
+        return str_starts_with($identifier, '-') ? 'group' : 'private';
     }
 
     private function sender(array $message, array $users, array $chats, array $account, bool $outgoing): array

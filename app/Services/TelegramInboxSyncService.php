@@ -194,7 +194,23 @@ class TelegramInboxSyncService
         $response = $this->telegram->getDialogsPage($account, (int) config('inbox.dialogs_page_size', 100));
         $dialogs = $this->normalizer->dialogs($response);
         if (($response['dialogs'] ?? []) !== [] && $dialogs === []) {
-            throw new \RuntimeException('Telegram có trả về hội thoại nhưng hệ thống không đọc được peer identifier.');
+            $shapes = array_slice(array_map(static function (mixed $dialog): array {
+                if (!is_array($dialog)) {
+                    return ['dialog_type' => get_debug_type($dialog)];
+                }
+                $peer = $dialog['peer'] ?? $dialog['peer_id'] ?? null;
+                return [
+                    'dialog_constructor' => (string) ($dialog['_'] ?? ''),
+                    'peer_type' => get_debug_type($peer),
+                    'peer_constructor' => is_array($peer) ? (string) ($peer['_'] ?? '') : '',
+                    'peer_keys' => is_array($peer) ? array_keys($peer) : [],
+                    'resolved_id' => (string) ($dialog['_peer_identifier'] ?? ''),
+                ];
+            }, (array) $response['dialogs']), 0, 5);
+            throw new \RuntimeException(
+                'Telegram có trả về hội thoại nhưng chưa đọc được cấu trúc peer: '
+                . json_encode($shapes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            );
         }
         $now = gmdate('Y-m-d H:i:s');
         $emptyResult = ($response['dialogs'] ?? []) === [];

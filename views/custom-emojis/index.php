@@ -133,7 +133,6 @@ foreach ($customEmojis as $emoji) {
             <div class="panel-header">
                 <div>
                     <h2 class="panel-title">Thư viện dùng chung</h2>
-                    <p class="panel-copy">Các emoji này thuộc super admin và có thể chọn trực tiếp khi soạn mẫu tin nhắn.</p>
                 </div>
                 <?php if (!empty($sharedEmojiSource['source_available'])): ?>
                     <span class="badge info"><?= e((string) ($sharedEmojiSource['source_count'] ?? 0)) ?> emoji</span>

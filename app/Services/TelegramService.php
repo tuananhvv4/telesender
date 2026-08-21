@@ -209,17 +209,20 @@ class TelegramService
         );
 
         foreach ($result['dialogs'] ?? [] as $index => $dialog) {
-            if (!is_array($dialog) || !isset($dialog['peer'])) {
+            if (!is_array($dialog)) {
                 continue;
             }
 
-            $peerIdentifier = $this->inboxPeerIdentifier((array) $dialog['peer']);
-            try {
-                $resolved = trim((string) $api->getId($dialog['peer']));
-                if ($resolved !== '' && $resolved !== '0') {
-                    $peerIdentifier = $resolved;
+            $peer = $dialog['peer'] ?? $dialog['peer_id'] ?? null;
+            $peerIdentifier = $this->inboxPeerIdentifier($peer);
+            if ($peer !== null) {
+                try {
+                    $resolved = trim((string) $api->getId($peer));
+                    if ($resolved !== '' && $resolved !== '0') {
+                        $peerIdentifier = $resolved;
+                    }
+                } catch (\Throwable) {
                 }
-            } catch (\Throwable) {
             }
             $result['dialogs'][$index]['_peer_identifier'] = $peerIdentifier;
         }
@@ -441,13 +444,29 @@ class TelegramService
         return $result;
     }
 
-    private function inboxPeerIdentifier(array $peer): string
+    private function inboxPeerIdentifier(mixed $peer): string
     {
-        return match ((string) ($peer['_'] ?? '')) {
-            'peerUser' => (string) ($peer['user_id'] ?? ''),
-            'peerChat' => isset($peer['chat_id']) ? '-' . (string) $peer['chat_id'] : '',
-            'peerChannel' => isset($peer['channel_id']) ? '-100' . (string) $peer['channel_id'] : '',
-            default => '',
-        };
+        if (is_int($peer) || is_string($peer)) {
+            $identifier = trim((string) $peer);
+            return $identifier !== '0' ? $identifier : '';
+        }
+        if (!is_array($peer)) {
+            return '';
+        }
+
+        $constructor = strtolower((string) ($peer['_'] ?? ''));
+        if (str_contains($constructor, 'user')) {
+            return (string) ($peer['user_id'] ?? $peer['id'] ?? '');
+        }
+        if (str_contains($constructor, 'channel')) {
+            $id = $peer['channel_id'] ?? $peer['id'] ?? null;
+            return $id !== null ? '-100' . ltrim((string) $id, '-') : '';
+        }
+        if (str_contains($constructor, 'chat')) {
+            $id = $peer['chat_id'] ?? $peer['id'] ?? null;
+            return $id !== null ? '-' . ltrim((string) $id, '-') : '';
+        }
+
+        return '';
     }
 }
