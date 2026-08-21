@@ -154,10 +154,17 @@ try {
                     'username' => 'nguyenvana',
                 ]],
                 'chats' => [
-                    ['_' => 'chat', 'id' => 202, 'title' => 'Nhom thu nghiem'],
+                    ['_' => 'chat', 'id' => 202, 'title' => ''],
                     ['_' => 'channel', 'id' => 303, 'title' => 'Kenh thu nghiem', 'broadcast' => true],
                 ],
             ];
+        }
+
+        public function resolveInboxPeerIdentities(array $account, array $peerIdentifiers): array
+        {
+            return in_array('-202', $peerIdentifiers, true) ? [
+                '-202' => ['title' => 'Nhom da sua ten', 'username' => 'nhomdasua', 'peer_type' => 'group'],
+            ] : [];
         }
 
         public function getHistoryPage(array $account, string $peer, int $offsetId = 0, int $limit = 40): array
@@ -209,6 +216,11 @@ try {
     $assert(in_array('private', $dialogTypes, true), 'Private dialogs must be normalized.');
     $assert(in_array('group', $dialogTypes, true), 'Group dialogs must be normalized.');
     $assert(in_array('channel', $dialogTypes, true), 'Channel dialogs must be normalized.');
+    $repairedGroup = array_values(array_filter(
+        $dialogs['items'],
+        static fn (array $dialog): bool => $dialog['peer_type'] === 'group'
+    ))[0];
+    $assert($repairedGroup['title'] === 'Nhom da sua ten', 'Generic cached dialog names must be repaired through Telegram getInfo metadata.');
     $privateDialog = array_values(array_filter(
         $dialogs['items'],
         static fn (array $dialog): bool => $dialog['peer_type'] === 'private'

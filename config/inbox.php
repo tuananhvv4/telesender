@@ -9,6 +9,7 @@ return [
     'dialogs_page_size' => 100,
     'history_page_size' => 40,
     'history_refresh_overlap' => 40,
+    'identity_lookup_limit' => 120,
     'flood_wait_limit_seconds' => 3,
     'sync_lock_seconds' => 60,
     'manual_sync_lock_seconds' => 60,

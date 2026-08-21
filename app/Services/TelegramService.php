@@ -6,6 +6,7 @@ namespace App\Services;
 
 use danog\MadelineProto\API as MadelineProtoApi;
 use danog\MadelineProto\ParseMode;
+use danog\MadelineProto\RPCError\RateLimitError;
 use RuntimeException;
 use danog\MadelineProto\Settings\AppInfo;
 
@@ -262,6 +263,63 @@ class TelegramService
         $api = $this->client($account);
         $api->start();
         $api->downloadToBrowser($fileId, null, $size, $fileName, $mimeType);
+    }
+
+    public function resolveInboxPeerIdentities(array $account, array $peerIdentifiers): array
+    {
+        $api = $this->client($account);
+        $api->start();
+        $limit = max(1, (int) config('inbox.identity_lookup_limit', 120));
+        $identities = [];
+
+        foreach (array_slice(array_values(array_unique($peerIdentifiers)), 0, $limit) as $peerIdentifier) {
+            $peerIdentifier = trim((string) $peerIdentifier);
+            if ($peerIdentifier === '') {
+                continue;
+            }
+
+            try {
+                $info = $api->getInfo($peerIdentifier);
+            } catch (RateLimitError) {
+                break;
+            } catch (\Throwable) {
+                continue;
+            }
+            if (!is_array($info)) {
+                continue;
+            }
+
+            $type = (string) ($info['type'] ?? '');
+            $user = is_array($info['User'] ?? null) ? $info['User'] : [];
+            $chat = is_array($info['Chat'] ?? null) ? $info['Chat'] : [];
+            $username = $this->normalizeUsername($user['username'] ?? $chat['username'] ?? null);
+            $title = '';
+            if (in_array($type, [MadelineProtoApi::PEER_TYPE_USER, MadelineProtoApi::PEER_TYPE_BOT], true)) {
+                $title = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? ''));
+            } else {
+                $title = trim((string) ($chat['title'] ?? ''));
+            }
+            if ($title === '' && $username !== null) {
+                $title = '@' . $username;
+            }
+            if ($title === '') {
+                continue;
+            }
+
+            $identities[$peerIdentifier] = [
+                'title' => $title,
+                'username' => $username,
+                'peer_type' => match ($type) {
+                    MadelineProtoApi::PEER_TYPE_USER, MadelineProtoApi::PEER_TYPE_BOT => 'private',
+                    MadelineProtoApi::PEER_TYPE_GROUP => 'group',
+                    MadelineProtoApi::PEER_TYPE_SUPERGROUP => 'supergroup',
+                    MadelineProtoApi::PEER_TYPE_CHANNEL => 'channel',
+                    default => null,
+                },
+            ];
+        }
+
+        return $identities;
     }
 
     public function downloadCustomEmojiPreview(array $account, string $emojiIdentifier, string $targetPath): array

@@ -214,8 +214,42 @@ class TelegramInboxSyncService
         }
         $now = gmdate('Y-m-d H:i:s');
         $emptyResult = ($response['dialogs'] ?? []) === [];
+        $genericTitles = ['Telegram chat', 'Telegram user'];
+        $repairPeers = [];
+        foreach ($dialogs as $dialog) {
+            if (in_array((string) $dialog['title'], $genericTitles, true)) {
+                $repairPeers[] = (string) $dialog['peer_identifier'];
+            }
+        }
+        $cachedGenericDialogs = $this->db->fetchAll(
+            'SELECT peer_identifier
+             FROM telegram_inbox_dialogs
+             WHERE telegram_account_id = :account_id
+               AND (title IN (\'Telegram chat\', \'Telegram user\') OR title = \'\')
+             ORDER BY last_message_at DESC, id DESC
+             LIMIT ' . max(1, (int) config('inbox.identity_lookup_limit', 120)),
+            ['account_id' => (int) $account['id']]
+        );
+        foreach ($cachedGenericDialogs as $cachedDialog) {
+            $repairPeers[] = (string) $cachedDialog['peer_identifier'];
+        }
+        $identities = $repairPeers !== []
+            ? $this->telegram->resolveInboxPeerIdentities($account, $repairPeers)
+            : [];
+        foreach ($dialogs as &$dialog) {
+            $identity = $identities[(string) $dialog['peer_identifier']] ?? null;
+            if ($identity === null || !in_array((string) $dialog['title'], $genericTitles, true)) {
+                continue;
+            }
+            $dialog['title'] = (string) $identity['title'];
+            $dialog['username'] = $identity['username'];
+            if (!empty($identity['peer_type'])) {
+                $dialog['peer_type'] = (string) $identity['peer_type'];
+            }
+        }
+        unset($dialog);
 
-        $this->db->transaction(function (Database $db) use ($job, $account, $dialogs, $now, $emptyResult): void {
+        $this->db->transaction(function (Database $db) use ($job, $account, $dialogs, $identities, $now, $emptyResult): void {
             foreach ($dialogs as $dialog) {
                 if ($dialog['peer_identifier'] === '') {
                     continue;
@@ -241,6 +275,22 @@ class TelegramInboxSyncService
                         'created_at' => $now,
                         'updated_at' => $now,
                     ])
+                );
+            }
+            foreach ($identities as $peerIdentifier => $identity) {
+                $updates = [
+                    'title' => (string) $identity['title'],
+                    'username' => $identity['username'],
+                    'updated_at' => $now,
+                ];
+                if (!empty($identity['peer_type'])) {
+                    $updates['peer_type'] = (string) $identity['peer_type'];
+                }
+                $db->update(
+                    'telegram_inbox_dialogs',
+                    $updates,
+                    'telegram_account_id = :account_id AND peer_identifier = :peer_identifier',
+                    ['account_id' => (int) $account['id'], 'peer_identifier' => (string) $peerIdentifier]
                 );
             }
             $this->completeJobWithDb(
