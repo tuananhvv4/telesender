@@ -162,7 +162,7 @@ try {
                 'chats' => [
                     ['_' => 'chat', 'id' => 202, 'title' => ''],
                     ['_' => 'channel', 'id' => 303, 'title' => 'Kenh thu nghiem', 'broadcast' => true],
-                    ['_' => 'channel', 'id' => 404, 'title' => 'Nhom forum', 'broadcast' => false, 'forum' => true],
+                    ['_' => 'channel', 'id' => 404, 'title' => 'Nhom forum', 'broadcast' => false],
                 ],
             ];
         }
@@ -272,8 +272,9 @@ try {
     $assert($repairedGroup['title'] === 'Nhom da sua ten', 'Generic cached dialog names must be repaired through Telegram getInfo metadata.');
     $forumDialog = array_values(array_filter(
         $dialogs['items'],
-        static fn (array $dialog): bool => (bool) ($dialog['is_forum'] ?? false)
+        static fn (array $dialog): bool => (string) $dialog['peer_identifier'] === '-100404'
     ))[0];
+    $assert(!(bool) $forumDialog['is_forum'], 'The fallback test requires Telegram to omit the forum flag.');
     $dialogId = (int) $forumDialog['id'];
 
     $historyJob = $inbox->enqueueDialogSync($dialogId);
@@ -281,6 +282,7 @@ try {
     $assert($historyRun['completed'] === 1, 'History refresh job must complete.');
     $topics = $inbox->topics($dialogId);
     $assert(count($topics['items']) === 2, 'Forum topics must be cached for the selector.');
+    $assert((bool) $topics['dialog']['is_forum'], 'A supergroup with returned topics must be repaired as a forum.');
     $assert((int) $topics['items'][1]['topic_id'] === 900, 'Telegram topic IDs must be preserved.');
     $messages = $inbox->messages($dialogId);
     $assert(count($messages['items']) === 2, 'Two messages must be cached.');

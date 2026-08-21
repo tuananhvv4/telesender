@@ -233,15 +233,22 @@
   }
 
   async function loadTopics() {
-    if (!state.dialogId || !Number(state.dialog?.is_forum)) {
+    if (!state.dialogId) {
       resetTopics(false);
       return;
     }
 
     const payload = await getJson(`${urls.topics}?dialog_id=${state.dialogId}`);
+    const topics = payload.items || [];
+    const isForum = Boolean(Number(payload.dialog?.is_forum)) || topics.length > 0;
+    state.dialog = {...state.dialog, is_forum: isForum ? 1 : 0};
+    if (!isForum) {
+      resetTopics(false);
+      return;
+    }
     const selected = state.topicId;
     topicSelect.innerHTML = '<option value="">Tất cả topic</option>';
-    (payload.items || []).forEach((topic) => {
+    topics.forEach((topic) => {
       const option = document.createElement('option');
       option.value = topic.topic_id;
       option.textContent = topic.title;
@@ -264,7 +271,7 @@
       state.historyComplete = Boolean(payload.history_complete);
       loadOlderButton.hidden = state.historyComplete || !state.oldestMessageId;
       statusTarget.textContent = syncLabel(payload.sync);
-      if (Number(state.dialog?.is_forum) && topicSelect.options.length <= 1) {
+      if (state.dialog?.peer_type === 'supergroup' && topicSelect.options.length <= 1) {
         await loadTopics();
       }
       clearPoll('messagePoll');

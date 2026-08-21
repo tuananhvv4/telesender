@@ -335,13 +335,20 @@ class TelegramInboxSyncService
             ? max(0, (int) ($cursor['before_message_id'] ?? $topic['oldest_message_id'] ?? $dialog['oldest_message_id'] ?? 0))
             : 0;
         $pageSize = max(1, (int) config('inbox.history_page_size', 40));
-        $topics = (bool) ($dialog['is_forum'] ?? false)
-            ? $this->telegram->getInboxForumTopics(
-                $account,
-                (string) $dialog['peer_identifier'],
-                max(1, (int) config('inbox.topics_page_size', 100))
-            )
-            : [];
+        $topics = [];
+        if ((bool) ($dialog['is_forum'] ?? false) || (string) $dialog['peer_type'] === 'supergroup') {
+            try {
+                $topics = $this->telegram->getInboxForumTopics(
+                    $account,
+                    (string) $dialog['peer_identifier'],
+                    max(1, (int) config('inbox.topics_page_size', 100))
+                );
+            } catch (RateLimitError|TimeoutError|TimeoutException $exception) {
+                throw $exception;
+            } catch (Throwable) {
+                // Telegram omits the forum flag on some dialogs; non-forum supergroups simply have no topics.
+            }
+        }
         $response = $topicId > 0
             ? $this->telegram->getTopicHistoryPage(
                 $account,
@@ -530,6 +537,9 @@ class TelegramInboxSyncService
                 'last_synced_at' => $now,
                 'updated_at' => $now,
             ];
+            if ($topics !== []) {
+                $updates['is_forum'] = 1;
+            }
             if ($ids !== []) {
                 $updates['oldest_message_id'] = $dialog['oldest_message_id'] === null
                     ? min($ids)
