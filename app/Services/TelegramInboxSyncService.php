@@ -23,15 +23,15 @@ class TelegramInboxSyncService
     public function run(): array
     {
         $this->seedDueAccountJobs();
-        return $this->runLoop(null, max(1, (int) config('inbox.jobs_per_run', 8)));
+        return $this->runLoop(null, max(1, (int) config('inbox.jobs_per_run', 8)), false);
     }
 
     public function runJob(string $jobKey): array
     {
-        return $this->runLoop($jobKey, 1);
+        return $this->runLoop($jobKey, 1, true);
     }
 
-    private function runLoop(?string $jobKey, int $limit): array
+    private function runLoop(?string $jobKey, int $limit, bool $manual): array
     {
         $started = microtime(true);
         $runtime = max(10, (int) config('inbox.cron_runtime_seconds', 40));
@@ -67,10 +67,16 @@ class TelegramInboxSyncService
                     continue;
                 }
 
+                $leaseSeconds = $manual
+                    ? max(30, (int) config('inbox.manual_sync_lock_seconds', 60))
+                    : max(30, (int) config('inbox.sync_lock_seconds', 60));
+                $lookaheadSeconds = $manual
+                    ? max(0, (int) config('inbox.manual_dispatch_lookahead_seconds', 0))
+                    : max(0, (int) config('inbox.dispatch_lookahead_seconds', 180));
                 $accountToken = $this->locks->acquireInbox(
                     (int) $account['id'],
-                    max(30, (int) config('inbox.sync_lock_seconds', 120)),
-                    max(1, (int) config('inbox.dispatch_lookahead_seconds', 180))
+                    $leaseSeconds,
+                    $lookaheadSeconds
                 );
                 if ($accountToken === null) {
                     $this->rescheduleBusy($job);
@@ -131,7 +137,7 @@ class TelegramInboxSyncService
             }
 
             $token = bin2hex(random_bytes(16));
-            $lease = max(30, (int) config('inbox.sync_lock_seconds', 120));
+            $lease = max(30, (int) config('inbox.sync_lock_seconds', 60));
             $until = gmdate('Y-m-d H:i:s', time() + $lease);
             $now = gmdate('Y-m-d H:i:s');
             $db->query(
@@ -162,7 +168,6 @@ class TelegramInboxSyncService
              INNER JOIN users u ON u.id = ta.user_id
              LEFT JOIN telegram_inbox_sync_jobs job ON job.job_key = CONCAT(\'dialogs:\', ta.id)
              WHERE u.role = \'admin\'
-               AND u.status = \'active\'
                AND ta.session_status = \'active\'
              ORDER BY ta.id ASC
              LIMIT 200'

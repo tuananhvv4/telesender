@@ -50,6 +50,59 @@ try {
         'created_at' => $now,
         'updated_at' => $now,
     ]);
+    $groupId = $db->insert('telegram_groups', [
+        'user_id' => $userId,
+        'telegram_account_id' => $accountId,
+        'title' => 'Expired admin lock test',
+        'peer_identifier' => '-100000000099',
+        'topic_id' => null,
+        'topic_title' => null,
+        'notes' => null,
+        'is_active' => 1,
+        'created_at' => $now,
+        'updated_at' => $now,
+    ]);
+    $templateId = $db->insert('message_templates', [
+        'user_id' => $userId,
+        'label_id' => null,
+        'name' => 'Expired admin lock test',
+        'body' => 'Test',
+        'parse_mode' => 'HTML',
+        'is_active' => 1,
+        'created_at' => $now,
+        'updated_at' => $now,
+    ]);
+    $scheduleId = $db->insert('schedule_jobs', [
+        'user_id' => $userId,
+        'telegram_account_id' => $accountId,
+        'telegram_group_id' => $groupId,
+        'message_template_id' => $templateId,
+        'timezone' => 'UTC',
+        'cron_expression' => '* * * * *',
+        'schedule_type' => 'advanced',
+        'schedule_config_json' => null,
+        'next_run_at' => gmdate('Y-m-d H:i:s', time() + 60),
+        'last_run_at' => null,
+        'last_error' => null,
+        'status' => 'active',
+        'dispatch_locked_until' => null,
+        'created_at' => $now,
+        'updated_at' => $now,
+    ]);
+    $db->insert('schedule_job_groups', [
+        'schedule_job_id' => $scheduleId,
+        'telegram_group_id' => $groupId,
+        'sort_order' => 0,
+        'created_at' => $now,
+    ]);
+    $db->update('users', [
+        'subscription_expires_at' => gmdate('Y-m-d H:i:s', time() - 60),
+    ], 'id = :id', ['id' => $userId]);
+
+    $expiredAdminLocks = new TelegramAccountLockService($db);
+    $expiredAdminToken = $expiredAdminLocks->acquireInbox($accountId, 60, 180);
+    $assert($expiredAdminToken !== null, 'An expired admin schedule must not block super-admin inbox sync.');
+    $expiredAdminLocks->release($accountId, (string) $expiredAdminToken);
 
     $telegram = new class extends TelegramService {
         public array $historyOffsets = [];

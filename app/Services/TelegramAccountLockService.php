@@ -183,12 +183,17 @@ class TelegramAccountLockService
     {
         $threshold = gmdate('Y-m-d H:i:s', time() + max(1, $lookaheadSeconds));
         $row = $this->db->fetch(
-            'SELECT id
-             FROM schedule_jobs
-             WHERE telegram_account_id = :account_id
-               AND status = \'active\'
-               AND next_run_at IS NOT NULL
-               AND next_run_at <= :threshold
+            'SELECT sj.id
+             FROM schedule_jobs sj
+             INNER JOIN users u ON u.id = sj.user_id
+             INNER JOIN telegram_accounts ta ON ta.id = sj.telegram_account_id
+             WHERE sj.telegram_account_id = :account_id
+               AND sj.status = \'active\'
+               AND u.status = \'active\'
+               AND (u.role = \'super_admin\' OR u.subscription_expires_at IS NULL OR u.subscription_expires_at >= UTC_TIMESTAMP())
+               AND ta.is_active = 1
+               AND sj.next_run_at IS NOT NULL
+               AND sj.next_run_at <= :threshold
              LIMIT 1',
             ['account_id' => $accountId, 'threshold' => $threshold]
         );

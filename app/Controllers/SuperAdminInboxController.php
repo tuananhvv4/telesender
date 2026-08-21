@@ -103,7 +103,7 @@ class SuperAdminInboxController extends Controller
     private function syncMessage(array $result): string
     {
         if ((int) ($result['completed'] ?? 0) > 0) {
-            return 'Đồng bộ Telegram hoàn tất.';
+            return 'Đồng bộ Telegram ưu tiên cao đã hoàn tất.';
         }
         if ((int) ($result['busy_accounts'] ?? 0) > 0) {
             return 'Account đang ưu tiên gửi tin; cron inbox sẽ tự thử lại.';

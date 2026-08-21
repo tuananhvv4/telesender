@@ -68,6 +68,7 @@ Hệ thống sẽ áp dụng tất cả migration chưa chạy với version nh�
 - Inbox không gọi API đánh dấu đã đọc và không có thao tác gửi, sửa, xóa hoặc forward.
 - Đồng bộ dùng hàng đợi bền vững và lock riêng trên Telegram account. Nút làm mới thử chạy ngay, còn cron tự tạo job định kỳ cho account đã đến hạn.
 - Cron gửi tin luôn được ưu tiên; inbox tự chuyển về hàng chờ khi account đang gửi hoặc sắp tới giờ gửi.
+- Đồng bộ thủ công từ trang super admin dùng lease 60 giây, bỏ lookahead lịch gửi nhưng vẫn không chiếm khóa của một lượt gửi đang thực thi. Admin con hết hạn gói vẫn được phép đọc qua inbox.
 - Job bị timeout giữ cursor và lease trong database, nên lần cron inbox kế tiếp có thể tiếp tục xử lý.
 
 ## Cấu trúc thư mục
