@@ -126,10 +126,16 @@
   grid-template-columns: minmax(300px, 34%) minmax(0, 1fr);
   height: min(720px, calc(100vh - 255px));
   min-height: 520px;
+  overflow: hidden;
 }
 
 .inbox-dialog-pane {
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
   border-right: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface) 94%, var(--surface-soft));
 }
@@ -158,9 +164,11 @@
 }
 
 .inbox-dialog-list {
-  height: calc(100% - 68px);
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
 }
 
 .inbox-dialog-item {
@@ -250,8 +258,11 @@
 
 .inbox-message-pane {
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
   background:
     linear-gradient(color-mix(in srgb, var(--surface-soft) 88%, transparent), color-mix(in srgb, var(--surface) 90%, transparent)),
     repeating-linear-gradient(45deg, transparent 0 18px, color-mix(in srgb, var(--border) 28%, transparent) 18px 19px);
@@ -272,8 +283,11 @@
 }
 
 .inbox-message-scroll {
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
   padding: 18px clamp(14px, 3vw, 42px) 28px;
 }
 
