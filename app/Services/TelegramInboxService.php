@@ -99,11 +99,12 @@ class TelegramInboxService
         ];
     }
 
-    public function enqueueAccountSync(int $accountId): void
+    public function enqueueAccountSync(int $accountId): string
     {
         $account = $this->accountOrFail($accountId);
+        $jobKey = 'dialogs:' . $accountId;
         $this->upsertJob(
-            'dialogs:' . $accountId,
+            $jobKey,
             (int) $account['user_id'],
             $accountId,
             null,
@@ -111,9 +112,11 @@ class TelegramInboxService
             50,
             null
         );
+
+        return $jobKey;
     }
 
-    public function enqueueDialogSync(int $dialogId): void
+    public function enqueueDialogSync(int $dialogId): string
     {
         $dialog = $this->dialogOrFail($dialogId);
         $this->db->update('telegram_inbox_dialogs', [
@@ -121,8 +124,9 @@ class TelegramInboxService
             'updated_at' => gmdate('Y-m-d H:i:s'),
         ], 'id = :id', ['id' => $dialogId]);
 
+        $jobKey = 'history-refresh:' . $dialogId;
         $this->upsertJob(
-            'history-refresh:' . $dialogId,
+            $jobKey,
             (int) $dialog['user_id'],
             (int) $dialog['telegram_account_id'],
             $dialogId,
@@ -130,18 +134,21 @@ class TelegramInboxService
             100,
             null
         );
+
+        return $jobKey;
     }
 
-    public function enqueueOlder(int $dialogId, int $beforeMessageId): void
+    public function enqueueOlder(int $dialogId, int $beforeMessageId): ?string
     {
         $dialog = $this->dialogOrFail($dialogId);
         if ((bool) ($dialog['history_complete'] ?? false)) {
-            return;
+            return null;
         }
 
         $beforeMessageId = max(0, $beforeMessageId);
+        $jobKey = 'history-backfill:' . $dialogId . ':' . $beforeMessageId;
         $this->upsertJob(
-            'history-backfill:' . $dialogId . ':' . $beforeMessageId,
+            $jobKey,
             (int) $dialog['user_id'],
             (int) $dialog['telegram_account_id'],
             $dialogId,
@@ -149,6 +156,8 @@ class TelegramInboxService
             80,
             ['before_message_id' => $beforeMessageId]
         );
+
+        return $jobKey;
     }
 
     public function mediaMessageOrFail(int $messageId): array

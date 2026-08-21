@@ -260,6 +260,8 @@ Them endpoint:
 GET /cron/inbox-sync?token=CRON_TOKEN
 ```
 
+Worker seeding job `dialogs_refresh` cho account active khi cache dialog đã cũ. Các thao tác làm mới trong UI vừa enqueue job bền vững vừa thử xử lý chính job đó ngay; nếu session lock đang thuộc luồng gửi tin thì job giữ trạng thái retry để cron tiếp tục.
+
 Khong nen dua inbox sync vao cuoi `/cron/run` vi:
 
 - Timeout cua inbox khong duoc lam response cron gui bi loi.

@@ -139,8 +139,8 @@ try {
         new TelegramAccountLockService($db)
     );
 
-    $inbox->enqueueAccountSync($accountId);
-    $dialogsRun = $sync->run();
+    $dialogsJob = $inbox->enqueueAccountSync($accountId);
+    $dialogsRun = $sync->runJob($dialogsJob);
     $assert($dialogsRun['completed'] === 1, 'Dialog refresh job must complete.');
     $dialogs = $inbox->dialogs($accountId);
     $assert(count($dialogs['items']) === 3, 'Private, group and channel dialogs must be cached.');
@@ -154,8 +154,8 @@ try {
     ))[0];
     $dialogId = (int) $privateDialog['id'];
 
-    $inbox->enqueueDialogSync($dialogId);
-    $historyRun = $sync->run();
+    $historyJob = $inbox->enqueueDialogSync($dialogId);
+    $historyRun = $sync->runJob($historyJob);
     $assert($historyRun['completed'] === 1, 'History refresh job must complete.');
     $messages = $inbox->messages($dialogId);
     $assert(count($messages['items']) === 2, 'Two messages must be cached.');
@@ -163,8 +163,9 @@ try {
     $assert((int) $messages['items'][0]['reply_to_message_id'] === 10, 'Reply metadata must be stored.');
     $assert($messages['items'][0]['edited_at'] !== null, 'Edited timestamp must be stored.');
 
-    $inbox->enqueueOlder($dialogId, 9);
-    $backfillRun = $sync->run();
+    $backfillJob = $inbox->enqueueOlder($dialogId, 9);
+    $assert($backfillJob !== null, 'Incomplete history must create a backfill job.');
+    $backfillRun = $sync->runJob($backfillJob);
     $assert($backfillRun['completed'] === 1, 'History backfill job must complete.');
     $olderMessages = $inbox->messages($dialogId, 9);
     $assert(count($olderMessages['items']) === 1, 'Older history must resume from the durable cursor.');
@@ -172,7 +173,7 @@ try {
     $assert($olderMessages['history_complete'] === true, 'Short final page must mark history complete.');
     $assert(in_array(9, $telegram->historyOffsets, true), 'Backfill must call Telegram with the requested offset.');
 
-    $inbox->enqueueAccountSync($accountId);
+    $resumableJob = $inbox->enqueueAccountSync($accountId);
     $db->query(
         'UPDATE telegram_inbox_sync_jobs
          SET status = \'running\', locked_until = :expired, lock_token = :token
@@ -183,7 +184,7 @@ try {
             'job_key' => 'dialogs:' . $accountId,
         ]
     );
-    $resumedRun = $sync->run();
+    $resumedRun = $sync->runJob($resumableJob);
     $assert($resumedRun['completed'] === 1, 'An expired running job must resume on the next cron run.');
 
     $source = file_get_contents(dirname(__DIR__) . '/app/Services/TelegramService.php');

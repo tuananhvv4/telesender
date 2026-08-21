@@ -150,8 +150,10 @@
     }
 
     resetDialogs('Đang đọc dữ liệu đã đồng bộ...');
+    statusTarget.textContent = 'Đang đồng bộ Telegram ngay...';
     try {
-      await postForm(urls.syncAccount, {account_id: state.accountId});
+      const sync = await postForm(urls.syncAccount, {account_id: state.accountId});
+      statusTarget.textContent = sync.message;
       await loadDialogs(true);
     } catch (error) {
       showError(error);
@@ -206,8 +208,10 @@
     messagePane.classList.add('mobile-open');
     dialogList.querySelectorAll('.inbox-dialog-item').forEach((item) => item.classList.toggle('active', Number(item.dataset.dialogId) === dialogId));
     messageList.innerHTML = '<div class="inbox-empty">Đang đọc tin nhắn đã đồng bộ...</div>';
+    statusTarget.textContent = 'Đang đồng bộ hội thoại ngay...';
     try {
-      await postForm(urls.syncDialog, {dialog_id: dialogId});
+      const sync = await postForm(urls.syncDialog, {dialog_id: dialogId});
+      statusTarget.textContent = sync.message;
       await loadMessages(false, true);
     } catch (error) {
       showError(error);
@@ -334,9 +338,10 @@
         prependMessages(payload.items);
         state.oldestMessageId = payload.oldest_message_id;
       } else if (!payload.history_complete) {
-        await postForm(urls.loadOlder, {dialog_id: state.dialogId, before_message_id: state.oldestMessageId});
-        statusTarget.textContent = 'Đang chờ cron tải lịch sử cũ...';
-        state.messagePoll = window.setTimeout(() => loadMessages(state.oldestMessageId, true), 5000);
+        const sync = await postForm(urls.loadOlder, {dialog_id: state.dialogId, before_message_id: state.oldestMessageId});
+        statusTarget.textContent = sync.message;
+        await loadMessages(state.oldestMessageId, true);
+        return;
       }
       state.historyComplete = Boolean(payload.history_complete);
       loadOlderButton.hidden = state.historyComplete;
@@ -374,13 +379,31 @@
   });
   refreshDialogsButton.addEventListener('click', async () => {
     if (!state.accountId) return;
-    await postForm(urls.syncAccount, {account_id: state.accountId});
-    await loadDialogs(true);
+    refreshDialogsButton.disabled = true;
+    statusTarget.textContent = 'Đang đồng bộ Telegram ngay...';
+    try {
+      const sync = await postForm(urls.syncAccount, {account_id: state.accountId});
+      statusTarget.textContent = sync.message;
+      await loadDialogs(true);
+    } catch (error) {
+      showError(error);
+    } finally {
+      refreshDialogsButton.disabled = !state.accountId;
+    }
   });
   refreshMessagesButton.addEventListener('click', async () => {
     if (!state.dialogId) return;
-    await postForm(urls.syncDialog, {dialog_id: state.dialogId});
-    await loadMessages(false, true);
+    refreshMessagesButton.disabled = true;
+    statusTarget.textContent = 'Đang đồng bộ hội thoại ngay...';
+    try {
+      const sync = await postForm(urls.syncDialog, {dialog_id: state.dialogId});
+      statusTarget.textContent = sync.message;
+      await loadMessages(false, true);
+    } catch (error) {
+      showError(error);
+    } finally {
+      refreshMessagesButton.disabled = !state.dialogId;
+    }
   });
   loadOlderButton.addEventListener('click', loadOlder);
   mobileBackButton.addEventListener('click', () => messagePane.classList.remove('mobile-open'));

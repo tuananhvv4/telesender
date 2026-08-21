@@ -22,10 +22,20 @@ class TelegramInboxSyncService
 
     public function run(): array
     {
+        $this->seedDueAccountJobs();
+        return $this->runLoop(null, max(1, (int) config('inbox.jobs_per_run', 8)));
+    }
+
+    public function runJob(string $jobKey): array
+    {
+        return $this->runLoop($jobKey, 1);
+    }
+
+    private function runLoop(?string $jobKey, int $limit): array
+    {
         $started = microtime(true);
         $runtime = max(10, (int) config('inbox.cron_runtime_seconds', 40));
         $reserve = max(1, (int) config('inbox.cron_shutdown_reserve_seconds', 5));
-        $limit = max(1, (int) config('inbox.jobs_per_run', 8));
         $result = [
             'processed' => 0,
             'completed' => 0,
@@ -42,7 +52,7 @@ class TelegramInboxSyncService
                 break;
             }
 
-            $job = $this->claimJob();
+            $job = $this->claimJob($jobKey);
             if ($job === null) {
                 break;
             }
@@ -96,18 +106,25 @@ class TelegramInboxSyncService
         return $result;
     }
 
-    private function claimJob(): ?array
+    private function claimJob(?string $jobKey = null): ?array
     {
-        return $this->db->transaction(function (Database $db): ?array {
+        return $this->db->transaction(function (Database $db) use ($jobKey): ?array {
+            $bindings = [];
+            $jobKeySql = '';
+            if ($jobKey !== null) {
+                $jobKeySql = ' AND job_key = :job_key';
+                $bindings['job_key'] = $jobKey;
+            }
             $job = $db->fetch(
                 'SELECT *
                  FROM telegram_inbox_sync_jobs
                  WHERE status IN (\'pending\', \'retry\', \'running\')
                    AND (next_attempt_at IS NULL OR next_attempt_at <= UTC_TIMESTAMP())
-                   AND (locked_until IS NULL OR locked_until < UTC_TIMESTAMP())
+                   AND (locked_until IS NULL OR locked_until < UTC_TIMESTAMP())' . $jobKeySql . '
                  ORDER BY priority DESC, created_at ASC, id ASC
                  LIMIT 1
-                 FOR UPDATE SKIP LOCKED'
+                 FOR UPDATE SKIP LOCKED',
+                $bindings
             );
             if ($job === null) {
                 return null;
@@ -133,6 +150,38 @@ class TelegramInboxSyncService
             $job['lock_token'] = $token;
             return $job;
         });
+    }
+
+    private function seedDueAccountJobs(): void
+    {
+        $freshSeconds = max(30, (int) config('inbox.fresh_dialog_seconds', 120));
+        $freshAfter = gmdate('Y-m-d H:i:s', time() - $freshSeconds);
+        $accounts = $this->db->fetchAll(
+            'SELECT ta.id, job.status AS sync_status, job.completed_at, job.updated_at AS job_updated_at
+             FROM telegram_accounts ta
+             INNER JOIN users u ON u.id = ta.user_id
+             LEFT JOIN telegram_inbox_sync_jobs job ON job.job_key = CONCAT(\'dialogs:\', ta.id)
+             WHERE u.role = \'admin\'
+               AND u.status = \'active\'
+               AND ta.session_status = \'active\'
+             ORDER BY ta.id ASC
+             LIMIT 200'
+        );
+        $inbox = new TelegramInboxService($this->db);
+
+        foreach ($accounts as $account) {
+            $status = (string) ($account['sync_status'] ?? '');
+            if (in_array($status, ['pending', 'retry', 'running'], true)) {
+                continue;
+            }
+
+            $freshness = (string) ($account['completed_at'] ?? $account['job_updated_at'] ?? '');
+            if ($freshness !== '' && $freshness > $freshAfter) {
+                continue;
+            }
+
+            $inbox->enqueueAccountSync((int) $account['id']);
+        }
     }
 
     private function syncDialogs(array $job, array $account): void

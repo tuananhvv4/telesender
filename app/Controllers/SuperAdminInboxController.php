@@ -9,6 +9,8 @@ use App\Core\Request;
 use App\Services\TelegramAccountLockService;
 use App\Services\TelegramInboxMediaService;
 use App\Services\TelegramInboxService;
+use App\Services\TelegramInboxSyncService;
+use App\Services\TelegramMessageNormalizer;
 use App\Services\TelegramService;
 
 class SuperAdminInboxController extends Controller
@@ -57,23 +59,26 @@ class SuperAdminInboxController extends Controller
 
     public function syncAccount(Request $request): void
     {
-        $this->inbox->enqueueAccountSync((int) $request->input('account_id'));
-        $this->jsonSuccess('Đã đưa account vào hàng chờ đồng bộ.');
+        $jobKey = $this->inbox->enqueueAccountSync((int) $request->input('account_id'));
+        $result = $this->syncRunner()->runJob($jobKey);
+        $this->jsonSuccess($this->syncMessage($result), ['sync' => $result]);
     }
 
     public function syncDialog(Request $request): void
     {
-        $this->inbox->enqueueDialogSync((int) $request->input('dialog_id'));
-        $this->jsonSuccess('Đã đưa hội thoại vào hàng chờ đồng bộ.');
+        $jobKey = $this->inbox->enqueueDialogSync((int) $request->input('dialog_id'));
+        $result = $this->syncRunner()->runJob($jobKey);
+        $this->jsonSuccess($this->syncMessage($result), ['sync' => $result]);
     }
 
     public function loadOlder(Request $request): void
     {
-        $this->inbox->enqueueOlder(
+        $jobKey = $this->inbox->enqueueOlder(
             (int) $request->input('dialog_id'),
             (int) $request->input('before_message_id')
         );
-        $this->jsonSuccess('Đã đưa lịch sử cũ vào hàng chờ đồng bộ.');
+        $result = $jobKey !== null ? $this->syncRunner()->runJob($jobKey) : ['processed' => 0, 'completed' => 0];
+        $this->jsonSuccess($this->syncMessage($result), ['sync' => $result]);
     }
 
     public function media(Request $request): void
@@ -83,5 +88,30 @@ class SuperAdminInboxController extends Controller
             new TelegramService(),
             new TelegramAccountLockService(app()->db())
         ))->stream((int) $request->query('message_id', 0));
+    }
+
+    private function syncRunner(): TelegramInboxSyncService
+    {
+        return new TelegramInboxSyncService(
+            app()->db(),
+            new TelegramService(),
+            new TelegramMessageNormalizer(),
+            new TelegramAccountLockService(app()->db())
+        );
+    }
+
+    private function syncMessage(array $result): string
+    {
+        if ((int) ($result['completed'] ?? 0) > 0) {
+            return 'Đồng bộ Telegram hoàn tất.';
+        }
+        if ((int) ($result['busy_accounts'] ?? 0) > 0) {
+            return 'Account đang ưu tiên gửi tin; cron inbox sẽ tự thử lại.';
+        }
+        if ((int) ($result['rescheduled'] ?? 0) > 0) {
+            return 'Chưa thể đồng bộ ngay; cron inbox sẽ tự thử lại.';
+        }
+
+        return 'Không có dữ liệu mới cần đồng bộ.';
     }
 }
