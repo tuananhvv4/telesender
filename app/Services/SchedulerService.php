@@ -16,6 +16,8 @@ class SchedulerService
     private ?CustomEmojiService $customEmojiService = null;
     private ?AccountSafetyPolicyService $safetyPolicyService = null;
     private ?NotificationService $notificationService = null;
+    private ?TelegramAccountLockService $accountLockService = null;
+    private array $accountLockTokens = [];
 
     public function __construct(
         private readonly Database $db,
@@ -88,7 +90,11 @@ class SchedulerService
                 continue;
             }
 
-            $results[] = $this->dispatchOne($job, $now);
+            try {
+                $results[] = $this->dispatchOne($job, $now);
+            } finally {
+                $this->releaseAccountLock((int) $job['telegram_account_id']);
+            }
         }
 
         return $results;
@@ -161,13 +167,17 @@ class SchedulerService
             ];
         }
 
-        return $this->dispatchOne(
-            $job,
-            new DateTimeImmutable('now', new DateTimeZone('UTC')),
-            true,
-            $force,
-            'manual_' . bin2hex(random_bytes(16))
-        );
+        try {
+            return $this->dispatchOne(
+                $job,
+                new DateTimeImmutable('now', new DateTimeZone('UTC')),
+                true,
+                $force,
+                'manual_' . bin2hex(random_bytes(16))
+            );
+        } finally {
+            $this->releaseAccountLock((int) $job['telegram_account_id']);
+        }
     }
 
     public function analyzeScheduleRisk(
@@ -423,23 +433,26 @@ class SchedulerService
 
     private function lockAccount(int $accountId): bool
     {
-        $lockMinutes = max(1, (int) config('safety.account_limits.dispatch_lock_minutes', 5));
-        $statement = $this->db->query(
-            'UPDATE telegram_accounts
-             SET dispatch_locked_until = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ' . $lockMinutes . ' MINUTE)
-             WHERE id = :id
-               AND (dispatch_locked_until IS NULL OR dispatch_locked_until < UTC_TIMESTAMP())',
-            ['id' => $accountId]
-        );
+        $leaseSeconds = max(60, (int) config('safety.account_limits.dispatch_lock_minutes', 5) * 60);
+        $token = $this->accountLocks()->acquireDispatch($accountId, $leaseSeconds);
 
-        return $statement->rowCount() === 1;
+        if ($token === null) {
+            return false;
+        }
+
+        $this->accountLockTokens[$accountId] = $token;
+        return true;
     }
 
     private function releaseAccountLock(int $accountId): void
     {
-        $this->db->update('telegram_accounts', [
-            'dispatch_locked_until' => null,
-        ], 'id = :id', ['id' => $accountId]);
+        $token = $this->accountLockTokens[$accountId] ?? null;
+        if ($token === null) {
+            return;
+        }
+
+        $this->accountLocks()->release($accountId, $token);
+        unset($this->accountLockTokens[$accountId]);
     }
 
     private function refreshJobLock(int $jobId): void
@@ -466,22 +479,10 @@ class SchedulerService
 
     private function refreshAccountLock(int $accountId): void
     {
-        $lockMinutes = max(1, (int) config('safety.account_limits.dispatch_lock_minutes', 5));
-        $this->db->query(
-            'UPDATE telegram_accounts
-             SET dispatch_locked_until = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ' . $lockMinutes . ' MINUTE)
-             WHERE id = :id
-               AND dispatch_locked_until >= UTC_TIMESTAMP()',
-            ['id' => $accountId]
-        );
+        $token = $this->accountLockTokens[$accountId] ?? null;
+        $leaseSeconds = max(60, (int) config('safety.account_limits.dispatch_lock_minutes', 5) * 60);
 
-        $lock = $this->db->fetch(
-            'SELECT dispatch_locked_until FROM telegram_accounts WHERE id = :id LIMIT 1',
-            ['id' => $accountId]
-        );
-        $lockedUntil = $this->nullableDate((string) ($lock['dispatch_locked_until'] ?? ''));
-
-        if ($lockedUntil === null || $lockedUntil < new DateTimeImmutable('now', new DateTimeZone('UTC'))) {
+        if ($token === null || !$this->accountLocks()->refresh($accountId, $token, $leaseSeconds)) {
             throw new RuntimeException('Telegram account đã mất khóa xử lý; dừng lượt gửi để tránh gửi chồng nhau.');
         }
     }
@@ -893,7 +894,6 @@ class SchedulerService
         }
 
         $accountUpdates['updated_at'] = $finishedAt->format('Y-m-d H:i:s');
-        $accountUpdates['dispatch_locked_until'] = null;
 
         $this->db->transaction(function (Database $db) use ($job, $error, $nextRunAt, $accountUpdates, $finishedAt, $retryGuard): void {
             $db->update('schedule_jobs', [
@@ -908,6 +908,7 @@ class SchedulerService
 
             $db->update('telegram_accounts', $accountUpdates, 'id = :id', ['id' => (int) $job['telegram_account_id']]);
         });
+        $this->releaseAccountLock((int) $job['telegram_account_id']);
 
         return [
             'schedule_id' => (int) $job['id'],
@@ -1168,11 +1169,8 @@ class SchedulerService
                 'updated_at' => $now->format('Y-m-d H:i:s'),
             ], 'id = :id', ['id' => (int) $job['id']]);
 
-            $db->update('telegram_accounts', [
-                'dispatch_locked_until' => null,
-                'updated_at' => $now->format('Y-m-d H:i:s'),
-            ], 'id = :id', ['id' => (int) $job['telegram_account_id']]);
         });
+        $this->releaseAccountLock((int) $job['telegram_account_id']);
 
         return [
             'schedule_id' => (int) $job['id'],
@@ -1268,13 +1266,11 @@ class SchedulerService
                 'updated_at' => $now->format('Y-m-d H:i:s'),
             ], 'id = :id', ['id' => (int) $job['id']]);
 
-            if ($releaseLocks) {
-                $db->update('telegram_accounts', [
-                    'dispatch_locked_until' => null,
-                    'updated_at' => $now->format('Y-m-d H:i:s'),
-                ], 'id = :id', ['id' => (int) $job['telegram_account_id']]);
-            }
         });
+
+        if ($releaseLocks) {
+            $this->releaseAccountLock((int) $job['telegram_account_id']);
+        }
 
         return [
             'schedule_id' => (int) $job['id'],
@@ -1384,5 +1380,10 @@ class SchedulerService
     private function notifications(): NotificationService
     {
         return $this->notificationService ??= new NotificationService($this->db);
+    }
+
+    private function accountLocks(): TelegramAccountLockService
+    {
+        return $this->accountLockService ??= new TelegramAccountLockService($this->db);
     }
 }

@@ -23,6 +23,8 @@ class TelegramAccount extends Model
         'cooldown_until',
         'cooldown_reason',
         'dispatch_locked_until',
+        'operation_lock_type',
+        'operation_lock_token',
         'safety_mode',
         'safety_mode_changed_at',
         'safety_mode_changed_by',

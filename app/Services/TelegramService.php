@@ -191,6 +191,72 @@ class TelegramService
         return $groups;
     }
 
+    public function getDialogsPage(array $account, int $limit = 100): array
+    {
+        $api = $this->client($account);
+        $api->start();
+
+        $result = $api->messages->getDialogs(
+            exclude_pinned: false,
+            folder_id: 0,
+            offset_date: 0,
+            offset_id: 0,
+            offset_peer: ['_' => 'inputPeerEmpty'],
+            limit: max(1, min(100, $limit)),
+            hash: [],
+            floodWaitLimit: max(0, (int) config('inbox.flood_wait_limit_seconds', 3)),
+            queueId: 'inbox_dialogs_' . (int) $account['id']
+        );
+
+        foreach ($result['dialogs'] ?? [] as $index => $dialog) {
+            if (!is_array($dialog) || !isset($dialog['peer'])) {
+                continue;
+            }
+
+            try {
+                $result['dialogs'][$index]['_peer_identifier'] = (string) $api->getId($dialog['peer']);
+            } catch (\Throwable) {
+                $result['dialogs'][$index]['_peer_identifier'] = '';
+            }
+        }
+
+        return $this->decorateInboxMessages($api, $result);
+    }
+
+    public function getHistoryPage(array $account, string $peer, int $offsetId = 0, int $limit = 40): array
+    {
+        $api = $this->client($account);
+        $api->start();
+
+        $result = $api->messages->getHistory(
+            peer: $peer,
+            offset_id: max(0, $offsetId),
+            offset_date: 0,
+            add_offset: 0,
+            limit: max(1, min(100, $limit)),
+            max_id: 0,
+            min_id: 0,
+            hash: [],
+            floodWaitLimit: max(0, (int) config('inbox.flood_wait_limit_seconds', 3)),
+            queueId: 'inbox_history_' . (int) $account['id']
+        );
+
+        return $this->decorateInboxMessages($api, $result);
+    }
+
+    public function downloadInboxMedia(
+        array $account,
+        string $fileId,
+        int $size,
+        string $fileName,
+        string $mimeType
+    ): void
+    {
+        $api = $this->client($account);
+        $api->start();
+        $api->downloadToBrowser($fileId, null, $size, $fileName, $mimeType);
+    }
+
     public function downloadCustomEmojiPreview(array $account, string $emojiIdentifier, string $targetPath): array
     {
         $api = $this->client($account);
@@ -340,5 +406,34 @@ class TelegramService
     {
         $link = trim((string) $value);
         return $link !== '' ? $link : null;
+    }
+
+    private function decorateInboxMessages(object $api, array $result): array
+    {
+        foreach ($result['messages'] ?? [] as $index => $message) {
+            if (!is_array($message)) {
+                continue;
+            }
+
+            if (isset($message['peer_id'])) {
+                try {
+                    $result['messages'][$index]['_peer_identifier'] = (string) $api->getId($message['peer_id']);
+                } catch (\Throwable) {
+                    $result['messages'][$index]['_peer_identifier'] = '';
+                }
+            }
+
+            if (!isset($message['media']) || !is_array($message['media'])) {
+                continue;
+            }
+
+            try {
+                $result['messages'][$index]['_media_bot_api'] = $api->MTProtoToBotAPI($message['media']);
+            } catch (\Throwable) {
+                $result['messages'][$index]['_media_bot_api'] = [];
+            }
+        }
+
+        return $result;
     }
 }

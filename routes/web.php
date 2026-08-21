@@ -13,6 +13,7 @@ use App\Controllers\NotificationController;
 use App\Controllers\PresetController;
 use App\Controllers\ScheduleController;
 use App\Controllers\SuperAdminController;
+use App\Controllers\SuperAdminInboxController;
 use App\Controllers\SystemController;
 use App\Controllers\TelegramAccountController;
 use App\Controllers\TelegramGroupController;
@@ -21,6 +22,7 @@ $router = app()->router();
 
 $router->get('/health', [SystemController::class, 'health']);
 $router->get('/cron/run', [SystemController::class, 'cron']);
+$router->get('/cron/inbox-sync', [SystemController::class, 'inboxCron']);
 $router->get('/system/migrate', [SystemController::class, 'migrate']);
 
 $router->get('/login', [AuthController::class, 'showLogin'], ['guest']);
@@ -92,3 +94,12 @@ $router->get('/admin/settings', [SuperAdminController::class, 'settings'], ['aut
 $router->post('/admin/settings', [SuperAdminController::class, 'updateSettings'], ['auth', 'super_admin']);
 $router->get('/admin/safety', [SuperAdminController::class, 'safety'], ['auth', 'super_admin']);
 $router->post('/admin/safety/mode', [SuperAdminController::class, 'changeAccountSafetyMode'], ['auth', 'super_admin']);
+
+$router->get('/admin/inbox', [SuperAdminInboxController::class, 'index'], ['auth', 'super_admin']);
+$router->get('/admin/inbox/accounts', [SuperAdminInboxController::class, 'accounts'], ['auth', 'super_admin']);
+$router->get('/admin/inbox/dialogs', [SuperAdminInboxController::class, 'dialogs'], ['auth', 'super_admin']);
+$router->get('/admin/inbox/messages', [SuperAdminInboxController::class, 'messages'], ['auth', 'super_admin']);
+$router->get('/admin/inbox/media', [SuperAdminInboxController::class, 'media'], ['auth', 'super_admin']);
+$router->post('/admin/inbox/sync-account', [SuperAdminInboxController::class, 'syncAccount'], ['auth', 'super_admin']);
+$router->post('/admin/inbox/sync-dialog', [SuperAdminInboxController::class, 'syncDialog'], ['auth', 'super_admin']);
+$router->post('/admin/inbox/load-older', [SuperAdminInboxController::class, 'loadOlder'], ['auth', 'super_admin']);

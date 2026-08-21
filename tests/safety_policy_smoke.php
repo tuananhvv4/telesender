@@ -288,6 +288,7 @@ try {
         ]
     );
     $dispatchOne = new ReflectionMethod(SchedulerService::class, 'dispatchOne');
+    $lockAccount = new ReflectionMethod(SchedulerService::class, 'lockAccount');
     $delayExceeded = new ReflectionMethod(SchedulerService::class, 'occurrenceDelayExceeded');
     $delayBoundary = new DateTimeImmutable('2026-01-01 00:00:00', new DateTimeZone('UTC'));
     $assert(
@@ -298,8 +299,13 @@ try {
         $delayExceeded->invoke($scheduler, $delayBoundary, $delayBoundary->modify('+60 minutes 1 second')),
         'An occurrence delayed by more than 60 minutes must expire.'
     );
+    $db->update('telegram_accounts', [
+        'dispatch_locked_until' => null,
+    ], 'id = :id', ['id' => $accountId]);
+    $automaticScheduler = new SchedulerService($db, $successfulTelegram, new CronExpression());
+    $assert($lockAccount->invoke($automaticScheduler, $accountId), 'Synthetic automatic dispatch must acquire the account lock.');
     $automaticResult = $dispatchOne->invoke(
-        new SchedulerService($db, $successfulTelegram, new CronExpression()),
+        $automaticScheduler,
         $dispatchJob,
         new DateTimeImmutable('now', new DateTimeZone('UTC')),
         false,
@@ -317,7 +323,7 @@ try {
         'last_sent_at' => null,
         'cooldown_until' => null,
         'cooldown_reason' => null,
-        'dispatch_locked_until' => $lockUntil,
+        'dispatch_locked_until' => null,
     ], 'id = :id', ['id' => $accountId]);
     $staleRunAt = gmdate('Y-m-d H:i:s', time() - 61 * 60);
     $db->update('schedule_jobs', [
@@ -327,8 +333,10 @@ try {
     ], 'id = :id', ['id' => $scheduleId]);
     $dispatchJob['next_run_at'] = $staleRunAt;
     $dispatchJob['occurrence_due_at'] = null;
+    $staleScheduler = new SchedulerService($db, $successfulTelegram, new CronExpression());
+    $assert($lockAccount->invoke($staleScheduler, $accountId), 'Synthetic stale dispatch must acquire the account lock.');
     $staleResult = $dispatchOne->invoke(
-        new SchedulerService($db, $successfulTelegram, new CronExpression()),
+        $staleScheduler,
         $dispatchJob,
         new DateTimeImmutable('now', new DateTimeZone('UTC')),
         false,

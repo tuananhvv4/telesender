@@ -144,6 +144,10 @@ if ($isSuperAdmin) {
             <?php if ($isSuperAdmin): ?>
                 <div class="sidebar-section-label">Quản trị</div>
                 <nav class="nav nav-admin">
+                    <a class="nav-link <?= is_active_path('/admin/inbox') ? 'active' : '' ?>" href="<?= e(url('/admin/inbox')) ?>" title="Hội thoại Telegram">
+                        <span class="nav-icon" aria-hidden="true"><i class="fa-regular fa-comments"></i></span>
+                        <span class="nav-text">Hội thoại Telegram</span>
+                    </a>
                     <a class="nav-link <?= is_active_path('/admin/users') ? 'active' : '' ?>" href="<?= e(url('/admin/users')) ?>" title="Admin con">
                         <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-user-shield"></i></span>
                         <span class="nav-text">Admin con</span>

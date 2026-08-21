@@ -61,6 +61,14 @@ Hệ thống sẽ áp dụng tất cả migration chưa chạy với version nh�
 - Cảnh báo Telegram xuất hiện trong `/notifications`; trang `/admin/safety` dùng để giám sát mode, usage, breaker và audit.
 - Audit và notification được cron tự dọn sau 30 ngày.
 
+### 5. Hộp thư Telegram chỉ đọc cho super admin
+
+- Chỉ role `super_admin` thấy menu và truy cập được `/admin/inbox`; admin con không có route, menu hoặc thông báo liên quan.
+- Dữ liệu text, sender, thời gian, reply, edited và metadata media được cache trong MySQL; media chỉ tải khi super admin bấm xem.
+- Inbox không gọi API đánh dấu đã đọc và không có thao tác gửi, sửa, xóa hoặc forward.
+- Đồng bộ dùng hàng đợi bền vững và lock riêng trên Telegram account. Cron gửi tin luôn được ưu tiên; inbox tự chờ khi account đang gửi hoặc sắp tới giờ gửi.
+- Job bị timeout giữ cursor và lease trong database, nên lần cron inbox kế tiếp có thể tiếp tục xử lý.
+
 ## Cấu trúc thư mục
 
 ```text
@@ -116,7 +124,7 @@ Tạo database MySQL trống, sau đó gọi:
 GET http://localhost:8000/system/migrate?token=YOUR_MIGRATE_TOKEN
 ```
 
-Khi nâng cấp bản có Safety Limit & Risk Override, cần bảo đảm migration hiện tại đạt version `17` trước khi mở lại cron production.
+Khi nâng cấp bản có Telegram inbox, chạy migration đến version `18` trước khi bật cron inbox. Cron gửi tin cũ vẫn có cơ chế lock tương thích trong khoảng rollout trước migration.
 
 Các migration hiện được đánh số tuần tự `1, 2, 3...` để dễ quản lý hơn.
 Nếu môi trường cũ từng chạy version dạng timestamp như `202607020002`, hệ thống vẫn tự nhận diện là đã migrate rồi.
@@ -150,10 +158,17 @@ Nếu `ALLOW_REGISTRATION=true`, truy cập:
 /cron/run?token=YOUR_CRON_TOKEN
 ```
 
+Nếu dùng hộp thư super admin, cấu hình thêm cron độc lập mỗi phút:
+
+```text
+/cron/inbox-sync?token=YOUR_CRON_TOKEN
+```
+
 ## Gợi ý cron ngoài hệ thống
 
 ```cron
 * * * * * curl -fsS "https://your-domain.com/cron/run?token=YOUR_CRON_TOKEN" >/dev/null
+* * * * * curl -fsS "https://your-domain.com/cron/inbox-sync?token=YOUR_CRON_TOKEN" >/dev/null
 ```
 
 ## Bảo mật

@@ -1,0 +1,333 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services;
+
+use Amp\TimeoutException;
+use App\Core\Database;
+use danog\MadelineProto\RPCError\RateLimitError;
+use danog\MadelineProto\RPCError\TimeoutError;
+use Throwable;
+
+class TelegramInboxSyncService
+{
+    public function __construct(
+        private readonly Database $db,
+        private readonly TelegramService $telegram,
+        private readonly TelegramMessageNormalizer $normalizer,
+        private readonly TelegramAccountLockService $locks
+    ) {
+    }
+
+    public function run(): array
+    {
+        $started = microtime(true);
+        $runtime = max(10, (int) config('inbox.cron_runtime_seconds', 40));
+        $reserve = max(1, (int) config('inbox.cron_shutdown_reserve_seconds', 5));
+        $limit = max(1, (int) config('inbox.jobs_per_run', 8));
+        $result = [
+            'processed' => 0,
+            'completed' => 0,
+            'rescheduled' => 0,
+            'rate_limited' => 0,
+            'busy_accounts' => 0,
+            'deadline_reached' => false,
+            'errors' => [],
+        ];
+
+        for ($index = 0; $index < $limit; $index++) {
+            if ((microtime(true) - $started) >= ($runtime - $reserve)) {
+                $result['deadline_reached'] = true;
+                break;
+            }
+
+            $job = $this->claimJob();
+            if ($job === null) {
+                break;
+            }
+            $result['processed']++;
+            $accountToken = null;
+
+            try {
+                $account = $this->loadAccount((int) $job['telegram_account_id']);
+                if ($account === null || (string) ($account['session_status'] ?? '') !== 'active') {
+                    $this->failJob($job, 'session_inactive', 'Telegram session không còn active.');
+                    $result['errors'][] = ['job_id' => (int) $job['id'], 'code' => 'session_inactive'];
+                    continue;
+                }
+
+                $accountToken = $this->locks->acquireInbox(
+                    (int) $account['id'],
+                    max(30, (int) config('inbox.sync_lock_seconds', 120)),
+                    max(1, (int) config('inbox.dispatch_lookahead_seconds', 180))
+                );
+                if ($accountToken === null) {
+                    $this->rescheduleBusy($job);
+                    $result['busy_accounts']++;
+                    $result['rescheduled']++;
+                    continue;
+                }
+
+                match ((string) $job['job_type']) {
+                    'dialogs_refresh' => $this->syncDialogs($job, $account),
+                    'history_refresh', 'history_backfill' => $this->syncHistory($job, $account),
+                    default => $this->failJob($job, 'unknown_job_type', 'Loại sync job không hợp lệ.'),
+                };
+                $result['completed']++;
+            } catch (RateLimitError $exception) {
+                $this->retryJobAt($job, 'rate_limited', $exception->getMessage(), $exception->expires);
+                $result['rate_limited']++;
+                $result['rescheduled']++;
+            } catch (TimeoutError|TimeoutException $exception) {
+                $this->retryTransient($job, 'timeout', $exception->getMessage());
+                $result['rescheduled']++;
+            } catch (Throwable $exception) {
+                $this->retryTransient($job, 'telegram_error', $exception->getMessage());
+                $result['errors'][] = ['job_id' => (int) $job['id'], 'code' => 'telegram_error'];
+                $result['rescheduled']++;
+            } finally {
+                if ($accountToken !== null) {
+                    $this->locks->release((int) $job['telegram_account_id'], $accountToken);
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    private function claimJob(): ?array
+    {
+        return $this->db->transaction(function (Database $db): ?array {
+            $job = $db->fetch(
+                'SELECT *
+                 FROM telegram_inbox_sync_jobs
+                 WHERE status IN (\'pending\', \'retry\', \'running\')
+                   AND (next_attempt_at IS NULL OR next_attempt_at <= UTC_TIMESTAMP())
+                   AND (locked_until IS NULL OR locked_until < UTC_TIMESTAMP())
+                 ORDER BY priority DESC, created_at ASC, id ASC
+                 LIMIT 1
+                 FOR UPDATE SKIP LOCKED'
+            );
+            if ($job === null) {
+                return null;
+            }
+
+            $token = bin2hex(random_bytes(16));
+            $lease = max(30, (int) config('inbox.sync_lock_seconds', 120));
+            $until = gmdate('Y-m-d H:i:s', time() + $lease);
+            $now = gmdate('Y-m-d H:i:s');
+            $db->query(
+                'UPDATE telegram_inbox_sync_jobs
+                 SET status = \'running\', lock_token = :token, locked_until = :locked_until,
+                     started_at = COALESCE(started_at, :started_at), updated_at = :updated_at
+                 WHERE id = :id',
+                [
+                    'token' => $token,
+                    'locked_until' => $until,
+                    'started_at' => $now,
+                    'updated_at' => $now,
+                    'id' => (int) $job['id'],
+                ]
+            );
+            $job['lock_token'] = $token;
+            return $job;
+        });
+    }
+
+    private function syncDialogs(array $job, array $account): void
+    {
+        $response = $this->telegram->getDialogsPage($account, (int) config('inbox.dialogs_page_size', 100));
+        $dialogs = $this->normalizer->dialogs($response);
+        $now = gmdate('Y-m-d H:i:s');
+
+        $this->db->transaction(function (Database $db) use ($job, $account, $dialogs, $now): void {
+            foreach ($dialogs as $dialog) {
+                if ($dialog['peer_identifier'] === '') {
+                    continue;
+                }
+                $db->query(
+                    'INSERT INTO telegram_inbox_dialogs (
+                        user_id, telegram_account_id, peer_key, peer_identifier, peer_type,
+                        title, username, top_message_id, last_message_text, last_message_at,
+                        unread_count, history_complete, created_at, updated_at
+                     ) VALUES (
+                        :user_id, :account_id, :peer_key, :peer_identifier, :peer_type,
+                        :title, :username, :top_message_id, :last_message_text, :last_message_at,
+                        :unread_count, 0, :created_at, :updated_at
+                     )
+                     ON DUPLICATE KEY UPDATE
+                        peer_identifier = VALUES(peer_identifier), peer_type = VALUES(peer_type),
+                        title = VALUES(title), username = VALUES(username), top_message_id = VALUES(top_message_id),
+                        last_message_text = VALUES(last_message_text), last_message_at = VALUES(last_message_at),
+                        unread_count = VALUES(unread_count), updated_at = VALUES(updated_at)',
+                    array_merge($dialog, [
+                        'user_id' => (int) $account['user_id'],
+                        'account_id' => (int) $account['id'],
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ])
+                );
+            }
+            $this->completeJobWithDb($db, $job, $now);
+        });
+    }
+
+    private function syncHistory(array $job, array $account): void
+    {
+        $dialog = $this->db->fetch(
+            'SELECT * FROM telegram_inbox_dialogs WHERE id = :id AND telegram_account_id = :account_id LIMIT 1',
+            ['id' => (int) $job['telegram_inbox_dialog_id'], 'account_id' => (int) $account['id']]
+        );
+        if ($dialog === null) {
+            $this->failJob($job, 'dialog_missing', 'Hội thoại không còn tồn tại.');
+            return;
+        }
+
+        $cursor = json_decode((string) ($job['cursor_json'] ?? ''), true);
+        $offsetId = (string) $job['job_type'] === 'history_backfill'
+            ? max(0, (int) ($cursor['before_message_id'] ?? $dialog['oldest_message_id'] ?? 0))
+            : 0;
+        $pageSize = max(1, (int) config('inbox.history_page_size', 40));
+        $response = $this->telegram->getHistoryPage($account, (string) $dialog['peer_identifier'], $offsetId, $pageSize);
+        $messages = $this->normalizer->messages($response, $account);
+        $now = gmdate('Y-m-d H:i:s');
+
+        $this->db->transaction(function (Database $db) use ($job, $dialog, $messages, $pageSize, $now): void {
+            $ids = [];
+            foreach ($messages as $message) {
+                $ids[] = (int) $message['telegram_message_id'];
+                $db->query(
+                    'INSERT INTO telegram_inbox_messages (
+                        user_id, telegram_account_id, telegram_inbox_dialog_id, telegram_message_id,
+                        sender_peer_key, sender_name, is_outgoing, message_text, reply_to_message_id,
+                        reply_to_top_id, reply_quote_text, grouped_id, media_type, media_file_name,
+                        media_mime_type, media_size, media_source_json, telegram_created_at,
+                        edited_at, raw_type, created_at, updated_at
+                     ) VALUES (
+                        :user_id, :account_id, :dialog_id, :telegram_message_id,
+                        :sender_peer_key, :sender_name, :is_outgoing, :message_text, :reply_to_message_id,
+                        :reply_to_top_id, :reply_quote_text, :grouped_id, :media_type, :media_file_name,
+                        :media_mime_type, :media_size, :media_source_json, :telegram_created_at,
+                        :edited_at, :raw_type, :created_at, :updated_at
+                     )
+                     ON DUPLICATE KEY UPDATE
+                        sender_peer_key = VALUES(sender_peer_key), sender_name = VALUES(sender_name),
+                        is_outgoing = VALUES(is_outgoing), message_text = VALUES(message_text),
+                        reply_to_message_id = VALUES(reply_to_message_id), reply_to_top_id = VALUES(reply_to_top_id),
+                        reply_quote_text = VALUES(reply_quote_text), grouped_id = VALUES(grouped_id),
+                        media_type = VALUES(media_type), media_file_name = VALUES(media_file_name),
+                        media_mime_type = VALUES(media_mime_type), media_size = VALUES(media_size),
+                        media_source_json = COALESCE(VALUES(media_source_json), media_source_json),
+                        telegram_created_at = VALUES(telegram_created_at), edited_at = VALUES(edited_at),
+                        raw_type = VALUES(raw_type), updated_at = VALUES(updated_at)',
+                    array_merge($message, [
+                        'user_id' => (int) $dialog['user_id'],
+                        'account_id' => (int) $dialog['telegram_account_id'],
+                        'dialog_id' => (int) $dialog['id'],
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ])
+                );
+            }
+
+            $updates = [
+                'last_synced_at' => $now,
+                'updated_at' => $now,
+            ];
+            if ($ids !== []) {
+                $updates['oldest_message_id'] = $dialog['oldest_message_id'] === null
+                    ? min($ids)
+                    : min((int) $dialog['oldest_message_id'], min($ids));
+                $updates['newest_message_id'] = $dialog['newest_message_id'] === null
+                    ? max($ids)
+                    : max((int) $dialog['newest_message_id'], max($ids));
+            }
+            if ((string) $job['job_type'] === 'history_backfill' && count($messages) < $pageSize) {
+                $updates['history_complete'] = 1;
+            }
+            $db->update('telegram_inbox_dialogs', $updates, 'id = :id', ['id' => (int) $dialog['id']]);
+            $this->completeJobWithDb($db, $job, $now);
+        });
+    }
+
+    private function loadAccount(int $accountId): ?array
+    {
+        return $this->db->fetch(
+            'SELECT ta.* FROM telegram_accounts ta
+             INNER JOIN users u ON u.id = ta.user_id
+             WHERE ta.id = :id AND u.role = \'admin\' LIMIT 1',
+            ['id' => $accountId]
+        );
+    }
+
+    private function completeJobWithDb(Database $db, array $job, string $now): void
+    {
+        $db->query(
+            'UPDATE telegram_inbox_sync_jobs
+             SET status = \'completed\', locked_until = NULL, lock_token = NULL,
+                 completed_at = :completed_at, last_error_code = NULL,
+                 last_error_message = NULL, updated_at = :updated_at
+             WHERE id = :id AND lock_token = :lock_token',
+            [
+                'completed_at' => $now,
+                'updated_at' => $now,
+                'id' => (int) $job['id'],
+                'lock_token' => (string) $job['lock_token'],
+            ]
+        );
+    }
+
+    private function rescheduleBusy(array $job): void
+    {
+        $this->retryJobAt($job, 'account_busy', 'Telegram account đang ưu tiên gửi tin.', time() + 30, false);
+    }
+
+    private function retryTransient(array $job, string $code, string $message): void
+    {
+        $attempts = (int) ($job['attempts'] ?? 0) + 1;
+        $delays = [30, 120, 300, 900];
+        $delay = $delays[min($attempts - 1, count($delays) - 1)];
+        $this->retryJobAt($job, $code, $message, time() + $delay, true);
+    }
+
+    private function retryJobAt(array $job, string $code, string $message, int $timestamp, bool $incrementAttempts = true): void
+    {
+        $this->db->query(
+            'UPDATE telegram_inbox_sync_jobs
+             SET status = \'retry\', attempts = attempts + :attempt_increment,
+                 next_attempt_at = :next_attempt_at, locked_until = NULL, lock_token = NULL,
+                 last_error_code = :error_code, last_error_message = :error_message,
+                 updated_at = :updated_at
+             WHERE id = :id AND lock_token = :lock_token',
+            [
+                'attempt_increment' => $incrementAttempts ? 1 : 0,
+                'next_attempt_at' => gmdate('Y-m-d H:i:s', max(time() + 1, $timestamp)),
+                'error_code' => $code,
+                'error_message' => mb_substr($message, 0, 1000),
+                'updated_at' => gmdate('Y-m-d H:i:s'),
+                'id' => (int) $job['id'],
+                'lock_token' => (string) $job['lock_token'],
+            ]
+        );
+    }
+
+    private function failJob(array $job, string $code, string $message): void
+    {
+        $this->db->query(
+            'UPDATE telegram_inbox_sync_jobs
+             SET status = \'failed\', locked_until = NULL, lock_token = NULL,
+                 last_error_code = :error_code, last_error_message = :error_message,
+                 completed_at = :completed_at, updated_at = :updated_at
+             WHERE id = :id AND lock_token = :lock_token',
+            [
+                'error_code' => $code,
+                'error_message' => mb_substr($message, 0, 1000),
+                'completed_at' => gmdate('Y-m-d H:i:s'),
+                'updated_at' => gmdate('Y-m-d H:i:s'),
+                'id' => (int) $job['id'],
+                'lock_token' => (string) $job['lock_token'],
+            ]
+        );
+    }
+}

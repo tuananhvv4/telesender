@@ -13,6 +13,9 @@ use App\Services\SchedulerService;
 use App\Services\TelegramService;
 use App\Services\AccountSafetyPolicyService;
 use App\Services\NotificationService;
+use App\Services\TelegramAccountLockService;
+use App\Services\TelegramInboxSyncService;
+use App\Services\TelegramMessageNormalizer;
 
 class SystemController extends Controller
 {
@@ -46,6 +49,28 @@ class SystemController extends Controller
             'ok' => true,
             'executed_at' => gmdate(DATE_ATOM),
             'migration' => $service->migrate($version ? (string) $version : null),
+        ]);
+    }
+
+    public function inboxCron(Request $request): void
+    {
+        $this->guardToken((string) $request->query('token'), (string) config('services.tokens.cron'));
+
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
+        }
+
+        $service = new TelegramInboxSyncService(
+            app()->db(),
+            new TelegramService(),
+            new TelegramMessageNormalizer(),
+            new TelegramAccountLockService(app()->db())
+        );
+
+        Response::json([
+            'ok' => true,
+            'executed_at' => gmdate(DATE_ATOM),
+            'results' => $service->run(),
         ]);
     }
 
