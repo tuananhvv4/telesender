@@ -61,14 +61,16 @@ class SuperAdminInboxController extends Controller
     {
         $jobKey = $this->inbox->enqueueAccountSync((int) $request->input('account_id'));
         $result = $this->syncRunner()->runJob($jobKey);
-        $this->jsonSuccess($this->syncMessage($result), ['sync' => $result]);
+        $job = $this->inbox->syncJobStatus($jobKey);
+        $this->jsonSuccess($this->syncMessage($result, $job), ['sync' => $result, 'job' => $job]);
     }
 
     public function syncDialog(Request $request): void
     {
         $jobKey = $this->inbox->enqueueDialogSync((int) $request->input('dialog_id'));
         $result = $this->syncRunner()->runJob($jobKey);
-        $this->jsonSuccess($this->syncMessage($result), ['sync' => $result]);
+        $job = $this->inbox->syncJobStatus($jobKey);
+        $this->jsonSuccess($this->syncMessage($result, $job), ['sync' => $result, 'job' => $job]);
     }
 
     public function loadOlder(Request $request): void
@@ -78,7 +80,8 @@ class SuperAdminInboxController extends Controller
             (int) $request->input('before_message_id')
         );
         $result = $jobKey !== null ? $this->syncRunner()->runJob($jobKey) : ['processed' => 0, 'completed' => 0];
-        $this->jsonSuccess($this->syncMessage($result), ['sync' => $result]);
+        $job = $jobKey !== null ? $this->inbox->syncJobStatus($jobKey) : ['status' => 'completed'];
+        $this->jsonSuccess($this->syncMessage($result, $job), ['sync' => $result, 'job' => $job]);
     }
 
     public function media(Request $request): void
@@ -100,16 +103,27 @@ class SuperAdminInboxController extends Controller
         );
     }
 
-    private function syncMessage(array $result): string
+    private function syncMessage(array $result, array $job): string
     {
         if ((int) ($result['completed'] ?? 0) > 0) {
+            if ((string) ($job['last_error_code'] ?? '') === 'empty_dialogs') {
+                return (string) ($job['last_error_message'] ?? 'Telegram trả về 0 hội thoại cho account này.');
+            }
             return 'Đồng bộ Telegram ưu tiên cao đã hoàn tất.';
         }
         if ((int) ($result['busy_accounts'] ?? 0) > 0) {
             return 'Account đang ưu tiên gửi tin; cron inbox sẽ tự thử lại.';
         }
         if ((int) ($result['rescheduled'] ?? 0) > 0) {
-            return 'Chưa thể đồng bộ ngay; cron inbox sẽ tự thử lại.';
+            $error = trim((string) ($job['last_error_message'] ?? ''));
+            return $error !== ''
+                ? 'Chưa thể đồng bộ: ' . $error
+                : 'Chưa thể đồng bộ ngay; cron inbox sẽ tự thử lại.';
+        }
+
+        $error = trim((string) ($job['last_error_message'] ?? ''));
+        if ($error !== '') {
+            return 'Đồng bộ lỗi: ' . $error;
         }
 
         return 'Không có dữ liệu mới cần đồng bộ.';

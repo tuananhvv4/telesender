@@ -213,11 +213,15 @@ class TelegramService
                 continue;
             }
 
+            $peerIdentifier = $this->inboxPeerIdentifier((array) $dialog['peer']);
             try {
-                $result['dialogs'][$index]['_peer_identifier'] = (string) $api->getId($dialog['peer']);
+                $resolved = trim((string) $api->getId($dialog['peer']));
+                if ($resolved !== '' && $resolved !== '0') {
+                    $peerIdentifier = $resolved;
+                }
             } catch (\Throwable) {
-                $result['dialogs'][$index]['_peer_identifier'] = '';
             }
+            $result['dialogs'][$index]['_peer_identifier'] = $peerIdentifier;
         }
 
         return $this->decorateInboxMessages($api, $result);
@@ -435,5 +439,15 @@ class TelegramService
         }
 
         return $result;
+    }
+
+    private function inboxPeerIdentifier(array $peer): string
+    {
+        return match ((string) ($peer['_'] ?? '')) {
+            'peerUser' => (string) ($peer['user_id'] ?? ''),
+            'peerChat' => isset($peer['chat_id']) ? '-' . (string) $peer['chat_id'] : '',
+            'peerChannel' => isset($peer['channel_id']) ? '-100' . (string) $peer['channel_id'] : '',
+            default => '',
+        };
     }
 }

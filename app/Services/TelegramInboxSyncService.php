@@ -193,9 +193,13 @@ class TelegramInboxSyncService
     {
         $response = $this->telegram->getDialogsPage($account, (int) config('inbox.dialogs_page_size', 100));
         $dialogs = $this->normalizer->dialogs($response);
+        if (($response['dialogs'] ?? []) !== [] && $dialogs === []) {
+            throw new \RuntimeException('Telegram có trả về hội thoại nhưng hệ thống không đọc được peer identifier.');
+        }
         $now = gmdate('Y-m-d H:i:s');
+        $emptyResult = ($response['dialogs'] ?? []) === [];
 
-        $this->db->transaction(function (Database $db) use ($job, $account, $dialogs, $now): void {
+        $this->db->transaction(function (Database $db) use ($job, $account, $dialogs, $now, $emptyResult): void {
             foreach ($dialogs as $dialog) {
                 if ($dialog['peer_identifier'] === '') {
                     continue;
@@ -223,7 +227,13 @@ class TelegramInboxSyncService
                     ])
                 );
             }
-            $this->completeJobWithDb($db, $job, $now);
+            $this->completeJobWithDb(
+                $db,
+                $job,
+                $now,
+                $emptyResult ? 'empty_dialogs' : null,
+                $emptyResult ? 'Telegram trả về 0 hội thoại cho account này.' : null
+            );
         });
     }
 
@@ -315,16 +325,24 @@ class TelegramInboxSyncService
         );
     }
 
-    private function completeJobWithDb(Database $db, array $job, string $now): void
+    private function completeJobWithDb(
+        Database $db,
+        array $job,
+        string $now,
+        ?string $resultCode = null,
+        ?string $resultMessage = null
+    ): void
     {
         $db->query(
             'UPDATE telegram_inbox_sync_jobs
              SET status = \'completed\', locked_until = NULL, lock_token = NULL,
-                 completed_at = :completed_at, last_error_code = NULL,
-                 last_error_message = NULL, updated_at = :updated_at
+                 completed_at = :completed_at, last_error_code = :result_code,
+                 last_error_message = :result_message, updated_at = :updated_at
              WHERE id = :id AND lock_token = :lock_token',
             [
                 'completed_at' => $now,
+                'result_code' => $resultCode,
+                'result_message' => $resultMessage,
                 'updated_at' => $now,
                 'id' => (int) $job['id'],
                 'lock_token' => (string) $job['lock_token'],

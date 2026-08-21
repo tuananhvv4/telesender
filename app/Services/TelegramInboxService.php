@@ -184,6 +184,18 @@ class TelegramInboxService
         return $row;
     }
 
+    public function syncJobStatus(string $jobKey): array
+    {
+        return $this->db->fetch(
+            'SELECT status, attempts, next_attempt_at, locked_until, last_error_code,
+                    last_error_message, completed_at, updated_at
+             FROM telegram_inbox_sync_jobs
+             WHERE job_key = :job_key
+             LIMIT 1',
+            ['job_key' => $jobKey]
+        ) ?? ['status' => 'not_found'];
+    }
+
     public function accountOrFail(int $accountId): array
     {
         $account = $this->db->fetch(

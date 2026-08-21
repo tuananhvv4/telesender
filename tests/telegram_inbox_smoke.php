@@ -104,6 +104,12 @@ try {
     $assert($expiredAdminToken !== null, 'An expired admin schedule must not block super-admin inbox sync.');
     $expiredAdminLocks->release($accountId, (string) $expiredAdminToken);
 
+    $peerIdentifier = new ReflectionMethod(TelegramService::class, 'inboxPeerIdentifier');
+    $telegramService = new TelegramService();
+    $assert($peerIdentifier->invoke($telegramService, ['_' => 'peerUser', 'user_id' => 101]) === '101', 'User peer IDs must have a direct fallback.');
+    $assert($peerIdentifier->invoke($telegramService, ['_' => 'peerChat', 'chat_id' => 202]) === '-202', 'Group peer IDs must have a direct fallback.');
+    $assert($peerIdentifier->invoke($telegramService, ['_' => 'peerChannel', 'channel_id' => 303]) === '-100303', 'Channel peer IDs must have a direct fallback.');
+
     $telegram = new class extends TelegramService {
         public array $historyOffsets = [];
 

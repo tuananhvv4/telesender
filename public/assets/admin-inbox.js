@@ -65,13 +65,16 @@
 
   function syncLabel(sync) {
     const status = sync?.status || 'not_synced';
+    const error = String(sync?.last_error_message || '').trim();
     if (status === 'running') return 'Đang đồng bộ...';
     if (status === 'pending') return 'Đang chờ cron đồng bộ...';
     if (status === 'retry') return sync.last_error_code === 'account_busy'
       ? 'Account đang ưu tiên gửi tin.'
-      : 'Đồng bộ sẽ tự thử lại.';
-    if (status === 'failed') return 'Không thể đồng bộ account này.';
-    if (status === 'completed') return 'Dữ liệu đã được cập nhật.';
+      : (error ? `Đồng bộ lỗi, sẽ thử lại: ${error}` : 'Đồng bộ sẽ tự thử lại.');
+    if (status === 'failed') return error ? `Không thể đồng bộ: ${error}` : 'Không thể đồng bộ account này.';
+    if (status === 'completed') return sync.last_error_code === 'empty_dialogs'
+      ? (error || 'Telegram trả về 0 hội thoại cho account này.')
+      : 'Dữ liệu đã được cập nhật.';
     return 'Chưa đồng bộ.';
   }
 
