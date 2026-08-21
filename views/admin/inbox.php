@@ -60,6 +60,12 @@
                     <i class="fa-solid fa-magnifying-glass"></i>
                     <input id="inbox_search" type="search" placeholder="Tìm kiếm" disabled>
                 </label>
+                <div class="inbox-dialog-filters" id="inbox_dialog_filters" aria-label="Lọc loại hội thoại">
+                    <button type="button" data-dialog-type="all" class="active" disabled>Tất cả</button>
+                    <button type="button" data-dialog-type="group" disabled>Nhóm</button>
+                    <button type="button" data-dialog-type="private" disabled>Tin nhắn riêng</button>
+                    <button type="button" data-dialog-type="bot" disabled>Bot</button>
+                </div>
             </div>
             <div class="inbox-dialog-list" id="inbox_dialog_list">
                 <div class="inbox-empty">Chưa chọn Telegram account.</div>

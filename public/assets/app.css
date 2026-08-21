@@ -678,6 +678,41 @@
 
 .inbox-dialog-search input::placeholder { color: var(--muted-2); }
 
+.inbox-dialog-filters {
+  display: grid;
+  grid-template-columns: 0.8fr 0.8fr 1.7fr 0.65fr;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--surface-muted-4);
+}
+
+.inbox-dialog-filters button {
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.inbox-dialog-filters button:hover:not(:disabled) { color: var(--foreground); }
+
+.inbox-dialog-filters button.active {
+  color: var(--accent);
+  background: var(--surface-strong);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+.inbox-dialog-filters button:disabled { opacity: 0.45; cursor: default; }
+
 .inbox-icon-button,
 .inbox-mobile-back {
   width: 38px;

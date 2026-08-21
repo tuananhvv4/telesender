@@ -41,7 +41,8 @@ class SuperAdminInboxController extends Controller
     {
         $payload = $this->inbox->dialogs(
             (int) $request->query('account_id', 0),
-            trim((string) $request->query('q', ''))
+            trim((string) $request->query('q', '')),
+            trim((string) $request->query('type', 'all'))
         );
         $this->jsonSuccess('Đã tải danh sách hội thoại.', $payload);
     }

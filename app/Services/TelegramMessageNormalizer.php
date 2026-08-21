@@ -50,6 +50,7 @@ class TelegramMessageNormalizer
                 'peer_identifier' => $peerIdentifier,
                 'peer_type' => $peerType,
                 'is_forum' => $this->isForumPeer($peerKey, $chats) ? 1 : 0,
+                'is_bot' => $this->isBotPeer($peerKey, $users) ? 1 : 0,
                 'title' => $title,
                 'username' => $username,
                 'top_message_id' => $topMessageId,
@@ -189,6 +190,15 @@ class TelegramMessageNormalizer
         }
 
         return (bool) ($chats[substr($peerKey, 8)]['forum'] ?? false);
+    }
+
+    private function isBotPeer(string $peerKey, array $users): bool
+    {
+        if (!str_starts_with($peerKey, 'user:')) {
+            return false;
+        }
+
+        return (bool) ($users[substr($peerKey, 5)]['bot'] ?? false);
     }
 
     private function dialogIdentity(mixed $peer, array $users, array $chats, string $peerIdentifier): array

@@ -126,6 +126,12 @@ try {
                         '_peer_identifier' => '101',
                     ],
                     [
+                        'peer' => ['_' => 'peerUser', 'user_id' => 102],
+                        'top_message' => 11,
+                        'unread_count' => 0,
+                        '_peer_identifier' => '102',
+                    ],
+                    [
                         'peer' => ['_' => 'peerChat', 'chat_id' => 202],
                         'top_message' => 20,
                         'unread_count' => 0,
@@ -158,6 +164,12 @@ try {
                     'first_name' => 'Nguyen',
                     'last_name' => 'Van A',
                     'username' => 'nguyenvana',
+                ], [
+                    '_' => 'user',
+                    'id' => 102,
+                    'first_name' => 'Test Bot',
+                    'username' => 'test_filter_bot',
+                    'bot' => true,
                 ]],
                 'chats' => [
                     ['_' => 'chat', 'id' => 202, 'title' => ''],
@@ -259,12 +271,16 @@ try {
     $dialogsRun = $sync->runJob($dialogsJob);
     $assert($dialogsRun['completed'] === 1, 'Dialog refresh job must complete.');
     $dialogs = $inbox->dialogs($accountId);
-    $assert(count($dialogs['items']) === 4, 'Private, group, supergroup and channel dialogs must be cached.');
+    $assert(count($dialogs['items']) === 5, 'Private, bot, group, supergroup and channel dialogs must be cached.');
     $dialogTypes = array_column($dialogs['items'], 'peer_type');
     $assert(in_array('private', $dialogTypes, true), 'Private dialogs must be normalized.');
     $assert(in_array('group', $dialogTypes, true), 'Group dialogs must be normalized.');
     $assert(in_array('channel', $dialogTypes, true), 'Channel dialogs must be normalized.');
     $assert(in_array('supergroup', $dialogTypes, true), 'Supergroup dialogs must be normalized.');
+    $assert(count($inbox->dialogs($accountId, '', 'group')['items']) === 3, 'Group filter must include groups, supergroups and channels.');
+    $assert(count($inbox->dialogs($accountId, '', 'private')['items']) === 1, 'Private filter must exclude bots.');
+    $botDialogs = $inbox->dialogs($accountId, '', 'bot')['items'];
+    $assert(count($botDialogs) === 1 && (bool) $botDialogs[0]['is_bot'], 'Bot filter must only include Telegram bots.');
     $repairedGroup = array_values(array_filter(
         $dialogs['items'],
         static fn (array $dialog): bool => $dialog['peer_type'] === 'group'

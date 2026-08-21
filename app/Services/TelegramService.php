@@ -373,6 +373,7 @@ class TelegramService
             $identities[$peerIdentifier] = [
                 'title' => $title,
                 'username' => $username,
+                'is_bot' => $type === MadelineProtoApi::PEER_TYPE_BOT ? 1 : 0,
                 'peer_type' => match ($type) {
                     MadelineProtoApi::PEER_TYPE_USER, MadelineProtoApi::PEER_TYPE_BOT => 'private',
                     MadelineProtoApi::PEER_TYPE_GROUP => 'group',

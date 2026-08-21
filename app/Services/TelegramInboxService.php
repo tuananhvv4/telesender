@@ -37,11 +37,17 @@ class TelegramInboxService
         );
     }
 
-    public function dialogs(int $accountId, string $query = ''): array
+    public function dialogs(int $accountId, string $query = '', string $type = 'all'): array
     {
         $account = $this->accountOrFail($accountId);
         $bindings = ['account_id' => $accountId];
         $searchSql = '';
+        $typeSql = match ($type) {
+            'group' => " AND peer_type IN ('group', 'supergroup', 'channel')",
+            'private' => " AND peer_type = 'private' AND is_bot = 0",
+            'bot' => ' AND is_bot = 1',
+            default => '',
+        };
         $query = trim($query);
         if ($query !== '') {
             $bindings['title_search'] = '%' . $query . '%';
@@ -53,7 +59,7 @@ class TelegramInboxService
         $items = $this->db->fetchAll(
             'SELECT *
              FROM telegram_inbox_dialogs
-             WHERE telegram_account_id = :account_id' . $searchSql . '
+             WHERE telegram_account_id = :account_id' . $typeSql . $searchSql . '
              ORDER BY last_message_at IS NULL ASC, last_message_at DESC, id DESC
              LIMIT 200',
             $bindings

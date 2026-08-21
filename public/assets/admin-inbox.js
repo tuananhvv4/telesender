@@ -7,6 +7,7 @@
   const adminSelect = document.getElementById('inbox_admin_select');
   const accountSelect = document.getElementById('inbox_account_select');
   const searchInput = document.getElementById('inbox_search');
+  const dialogFilters = document.getElementById('inbox_dialog_filters');
   const dialogList = document.getElementById('inbox_dialog_list');
   const dialogCount = document.getElementById('inbox_dialog_count');
   const messageList = document.getElementById('inbox_message_list');
@@ -38,6 +39,7 @@
     accountId: null,
     dialogId: null,
     dialog: null,
+    dialogType: 'all',
     topicId: null,
     oldestMessageId: null,
     historyComplete: false,
@@ -123,6 +125,7 @@
     accountSelect.innerHTML = '<option value="">Chọn account</option>';
     accountSelect.disabled = true;
     searchInput.disabled = true;
+    setDialogFiltersDisabled(true);
     refreshDialogsButton.disabled = true;
     resetDialogs('Đang tải Telegram account...');
     resetMessages();
@@ -153,6 +156,7 @@
     state.accountId = Number(accountSelect.value) || null;
     state.dialogId = null;
     searchInput.disabled = !state.accountId;
+    setDialogFiltersDisabled(!state.accountId);
     refreshDialogsButton.disabled = !state.accountId;
     resetMessages();
     if (!state.accountId) {
@@ -174,7 +178,7 @@
   async function loadDialogs(keepPolling) {
     if (!state.accountId) return;
     try {
-      const payload = await getJson(`${urls.dialogs}?account_id=${state.accountId}&q=${encodeURIComponent(searchInput.value.trim())}`);
+      const payload = await getJson(`${urls.dialogs}?account_id=${state.accountId}&q=${encodeURIComponent(searchInput.value.trim())}&type=${encodeURIComponent(state.dialogType)}`);
       renderDialogs(payload.items || []);
       statusTarget.classList.remove('error');
       statusTarget.textContent = syncLabel(payload.sync);
@@ -410,6 +414,12 @@
     dialogList.innerHTML = `<div class="inbox-empty">${escapeHtml(message)}</div>`;
   }
 
+  function setDialogFiltersDisabled(disabled) {
+    dialogFilters.querySelectorAll('[data-dialog-type]').forEach((button) => {
+      button.disabled = disabled;
+    });
+  }
+
   function resetMessages() {
     state.dialogId = null;
     state.dialog = null;
@@ -437,6 +447,15 @@
   searchInput.addEventListener('input', () => {
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => loadDialogs(false), 300);
+  });
+  dialogFilters.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-dialog-type]');
+    if (!button || button.disabled || button.dataset.dialogType === state.dialogType) return;
+    state.dialogType = button.dataset.dialogType;
+    dialogFilters.querySelectorAll('[data-dialog-type]').forEach((item) => {
+      item.classList.toggle('active', item === button);
+    });
+    loadDialogs(false);
   });
   refreshDialogsButton.addEventListener('click', async () => {
     if (!state.accountId) return;

@@ -256,17 +256,18 @@ class TelegramInboxSyncService
                 }
                 $db->query(
                     'INSERT INTO telegram_inbox_dialogs (
-                        user_id, telegram_account_id, peer_key, peer_identifier, peer_type, is_forum,
+                        user_id, telegram_account_id, peer_key, peer_identifier, peer_type, is_forum, is_bot,
                         title, username, top_message_id, last_message_text, last_message_at,
                         unread_count, history_complete, created_at, updated_at
                      ) VALUES (
-                        :user_id, :account_id, :peer_key, :peer_identifier, :peer_type, :is_forum,
+                        :user_id, :account_id, :peer_key, :peer_identifier, :peer_type, :is_forum, :is_bot,
                         :title, :username, :top_message_id, :last_message_text, :last_message_at,
                         :unread_count, 0, :created_at, :updated_at
                      )
                      ON DUPLICATE KEY UPDATE
                         peer_identifier = VALUES(peer_identifier), peer_type = VALUES(peer_type),
                         is_forum = VALUES(is_forum),
+                        is_bot = VALUES(is_bot),
                         title = VALUES(title), username = VALUES(username), top_message_id = VALUES(top_message_id),
                         last_message_text = VALUES(last_message_text), last_message_at = VALUES(last_message_at),
                         unread_count = VALUES(unread_count), updated_at = VALUES(updated_at)',
@@ -282,6 +283,7 @@ class TelegramInboxSyncService
                 $updates = [
                     'title' => (string) $identity['title'],
                     'username' => $identity['username'],
+                    'is_bot' => (int) ($identity['is_bot'] ?? 0),
                     'updated_at' => $now,
                 ];
                 if (!empty($identity['peer_type'])) {
